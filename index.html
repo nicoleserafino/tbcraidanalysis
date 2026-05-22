@@ -146006,8 +146006,10 @@
       state.boss = event.target.value;
       const pulls = getBossData().pulls || [];
       state.pullIndex = Math.max(0, pulls.length - 1);
-      state.player = '';
       state.mapMomentIndex = 0;
+      // Preserve player selection if they exist in new boss context
+      const availablePlayers = getPullPlayers();
+      if (!availablePlayers.includes(state.player)) state.player = '';
       populateSelectors();
       renderHero();
       renderContent();
@@ -146017,7 +146019,9 @@
       const val = event.target.value;
       state.pullIndex = val === 'summary' ? 'summary' : Number(val || 0);
       state.mapMomentIndex = 0;
-      state.player = '';
+      // Preserve player selection if they exist in new pull context
+      const availablePlayers = getPullPlayers();
+      if (!availablePlayers.includes(state.player)) state.player = '';
       populateSelectors();
       renderHero();
       renderContent();
