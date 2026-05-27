@@ -1156,13 +1156,13 @@
       if (totalDispels === 0 && pull.duration_sec > 30) {
         const bk = getBossKey();
         let dispelNote = '';
-        if (bk === BOSS_KEYS.KAEL) dispelNote = 'Kael fight has Magic debuffs from Mind Control (Priests: Dispel Magic, Paladins: Cleanse). Note: Remote Toy from Telonicus is NOT dispellable (Arcane type with no player dispel).';
-        else if (bk === BOSS_KEYS.HYDROSS) dispelNote = 'Vile Sludge is a Magic debuff — dispellable by Priests (Dispel Magic), Paladins (Cleanse), or Felhunter (Devour Magic). Must be removed ASAP or tank healing is halved for 24s.';
-        else if (bk === BOSS_KEYS.KARATHRESS) dispelNote = 'Caribdis applies Cyclone (Magic) — Priests/Paladins can dispel. Sharkkis applies a Poison — Paladins (Cleanse), Druids (Abolish Poison), Shamans (Cure Poison) handle this.';
-        else if (bk === BOSS_KEYS.LEO) dispelNote = 'Whirlwind applies a bleed (Physical — not dispellable). Chaos Blast stacking debuff is Fire damage taken increase (not dispellable). Insidious Whisper/Inner Demon is also not dispellable — player must kill their demon.';
+        if (bk === BOSS_KEYS.KAEL) dispelNote = 'Kael fight: Mind Control in P4 is NOT broken by dispels — you must damage the MC\'d player (use Infinity Blade). Remote Toy is also NOT dispellable. There are no dispellable debuffs on this fight; "dispels" in logs may come from self-buffs removed on MC targets.';
+        else if (bk === BOSS_KEYS.HYDROSS) dispelNote = 'Vile Sludge is NOT dispellable (no dispel type). It must simply be healed through for 24s. The marks (Hydross/Corruption) are also not dispellable — tank swaps before stacks get dangerous is the only counter.';
+        else if (bk === BOSS_KEYS.KARATHRESS) dispelNote = 'Caribdis Cyclone is a knockback (not dispellable). Sharkkis applies a Mortal Cleave healing debuff (Physical — not dispellable). There are limited dispellable effects on this fight — focus on interrupts (Healing Wave) instead.';
+        else if (bk === BOSS_KEYS.LEO) dispelNote = 'Whirlwind applies a bleed (Physical — not dispellable). Chaos Blast debuff is not dispellable. Insidious Whisper/Inner Demon is also not dispellable — player must kill their demon.';
         else if (bk === BOSS_KEYS.MOROGRIM) dispelNote = 'Watery Grave is not dispellable. Murloc Pierce Armor is a Physical debuff (not dispellable). There are limited dispel targets on this fight.';
-        else if (bk === BOSS_KEYS.VASHJ) dispelNote = 'Static Charge is a Nature debuff (Magic type) — Priests/Paladins can dispel. Entangle root is a Magic debuff — dispel to free the player. Poison on P2 adds requires Paladins/Druids/Shamans.';
-        else dispelNote = 'Check which debuffs are landing and assign dispels by type: Magic (Priest/Paladin), Curse (Mage/Druid), Poison (Paladin/Druid/Shaman), Disease (Priest/Paladin).';
+        else if (bk === BOSS_KEYS.VASHJ) dispelNote = 'Static Charge is NOT dispellable — the only counter is spreading 12+ yards apart. Entangle (root in P2/P3) is also NOT dispellable — affected players must be healed through the DoT. Focus on avoiding Shock Blast and passing Tainted Cores quickly instead.';
+        else dispelNote = 'Check which debuffs are landing — not all boss debuffs in TBC are dispellable. Verify on Wowhead before assigning dispel duties.';
         issues.push({
           title: 'No dispels used',
           body: `Zero dispels were cast this pull. ${dispelNote}`,
@@ -1205,9 +1205,9 @@
       }
       if (sludgeHits.length > 0) {
         issues.push({
-          title: 'Vile Sludge needs faster dispels',
-          body: `${sludgeHits.reduce((sum, entry) => sum + entry.hits, 0)} Vile Sludge hit(s) on ${sludgeHits.length} player(s); ${totalDispels} dispel(s) recorded. Vile Sludge is a MAGIC debuff (reduces healing received by 50% for 24s). Dispel with: Priest (Dispel Magic), Paladin (Cleanse), or Warlock pet (Devour Magic). Priority targets: tanks and healers.`,
-          severity: totalDispels < sludgeHits.length ? 'warning' : 'info'
+          title: 'Vile Sludge active on players',
+          body: `${sludgeHits.reduce((sum, entry) => sum + entry.hits, 0)} Vile Sludge hit(s) on ${sludgeHits.length} player(s). Vile Sludge is a Nature debuff (reduces damage and healing done by 50% for 24s). It is NOT dispellable — you must heal through it. The danger is when Sludge overlaps with high mark stacks or a transition. Swap Hydross before Sludge targets accumulate too much mark damage.`,
+          severity: sludgeHits.length >= 3 ? 'warning' : 'info'
         });
       }
       if (transitionDeaths.length > 0) {
@@ -1503,7 +1503,7 @@
         const tombHits = hitCount(/Water Tomb/i);
         const sludgeHits = hitCount(/Vile Sludge/i);
         if (tombHits > 2) findings.push({ title: `Water Tomb target ${tombHits} time(s)`, body: 'Water Tomb targets are random — you cannot avoid being selected. If you are a healer or tank getting tombed frequently, ensure the raid knows to cover your assignments during the 5s stun. Spread 6+ yards from others to avoid chaining the AoE.', severity: 'info' });
-        if (sludgeHits > 0) findings.push({ title: `Vile Sludge on you (${sludgeHits} hit(s))`, body: `Vile Sludge is a MAGIC debuff (halves healing received for 24s). ${['Priest', 'Paladin'].includes(playerClass) ? 'You can self-dispel with Dispel Magic/Cleanse, and should also be dispelling teammates.' : 'Call it out immediately so Priests (Dispel Magic) or Paladins (Cleanse) can remove it before a transition.'}`, severity: 'warning' });
+        if (sludgeHits > 0) findings.push({ title: `Vile Sludge on you (${sludgeHits} hit(s))`, body: `Vile Sludge is a Nature debuff that halves damage and healing done for 24s. It is NOT dispellable — it must be healed through. The key is to swap Hydross before Sludge overlaps with high mark stacks, as the reduced healing compounds lethally with ramp damage.`, severity: 'warning' });
       }
       if (bossKey === BOSS_KEYS.LURKER) {
         const spoutHits = hitCount(/Spout/i);
@@ -1537,7 +1537,7 @@
         const staticHits = hitCount(/Static Charge/i);
         const shockHits = hitCount(/Shock Blast/i);
         const sporeHits = hitCount(/Toxic Spore/i);
-        if (staticHits > 0) findings.push({ title: `Static Charge hit you ${staticHits} time(s)`, body: `Static Charge targets a random player and chains Nature damage to anyone within 10 yards every 2s. Being targeted is unavoidable, but chaining is not — maintain 12+ yard spread at all times. If you ARE the target, move away from the raid immediately. Static Charge is a Magic debuff — Priests (Dispel Magic) or Paladins (Cleanse) should remove it to stop the chain.`, severity: staticHits > 2 ? 'critical' : 'warning' });
+        if (staticHits > 0) findings.push({ title: `Static Charge hit you ${staticHits} time(s)`, body: `Static Charge targets a random player and chains Nature damage to anyone within 10 yards every 2s. Being targeted is unavoidable, but chaining is not — maintain 12+ yard spread at all times. If you ARE the target, move away from the raid immediately. Static Charge is NOT dispellable — spreading is the only counter.`, severity: staticHits > 2 ? 'critical' : 'warning' });
         if (shockHits > 0 && role !== 'Healer') findings.push({ title: `Shock Blast hit you ${shockHits} time(s)`, body: 'Shock Blast is a melee-range AoE stun + heavy damage. It has a cast time — when you see it, run out immediately. This is fully avoidable for melee. Ranged/healers should never be in range.', severity: 'critical' });
         if (sporeHits > 0) findings.push({ title: `Toxic Spore clipped you ${sporeHits} time(s)`, body: 'Spore Bats leave poison clouds on death. The clouds are avoidable — watch where bats are being kited/killed and stay out of those areas. Assign specific ranged DPS to kill bats away from the raid in P3.', severity: 'warning' });
       }
@@ -1681,24 +1681,14 @@
       if (role === 'Healer') {
         const canDispelMagic = ['Priest', 'Paladin'].includes(playerClass);
         if (dispels === 0 && canDispelMagic) {
-          // Only show dispel warning if this boss has dispellable mechanics
-          const dispelBosses = [BOSS_KEYS.KAEL, BOSS_KEYS.HYDROSS, BOSS_KEYS.KARATHRESS, BOSS_KEYS.VASHJ];
-          if (dispelBosses.includes(bossKey)) {
-            const dispelAdvice = bossKey === BOSS_KEYS.KAEL
-              ? (playerClass === 'Priest'
-                ? 'As a Priest, Dispel Magic removes Mind Control debuffs and other Magic effects. Note: Remote Toy from Telonicus is NOT dispellable (Arcane).'
-                : 'As a Paladin, Cleanse removes Magic debuffs. Note: Remote Toy from Telonicus is NOT dispellable (Arcane).')
-              : bossKey === BOSS_KEYS.HYDROSS
-              ? `Vile Sludge is a Magic debuff (halves healing received for 24s). ${playerClass === 'Priest' ? 'Use Dispel Magic' : 'Use Cleanse'} on affected tanks/healers immediately.`
-              : bossKey === BOSS_KEYS.KARATHRESS
-              ? `Caribdis applies Magic debuffs. ${playerClass === 'Priest' ? 'Use Dispel Magic' : 'Use Cleanse'} on affected players, especially during Cyclone overlaps.`
-              : `Static Charge is a Magic debuff — ${playerClass === 'Priest' ? 'Dispel Magic' : 'Cleanse'} it to stop the chain damage. Entangle root is also Magic-dispellable.`;
-            findings.push({
-              title: 'No dispels cast',
-              body: dispelAdvice,
-              severity: 'warning'
-            });
-          }
+          // Most SSC/TK boss debuffs are NOT dispellable per Wowhead spell data.
+          // Only show dispel advice where there are genuinely dispellable effects.
+          // Kael: MC is not standard-dispellable (only Mass Dispel works). Remote Toy undispellable.
+          // Hydross: Vile Sludge is Nature, n/a dispel. NOT dispellable.
+          // Karathress: No dispellable player debuffs exist.
+          // Vashj: Static Charge is Nature, n/a. Entangle is Nature root (BoF/shapeshift only, not dispel).
+          // The only confirmed dispellable debuff is Tainted Elemental Poison (Vashj P2) — but that's Poison, not Magic.
+          // Therefore: do NOT show "no dispels" warning for Magic dispellers on these fights.
         }
 
         // Healer class-specific
@@ -2835,7 +2825,7 @@
           <section class="card">
             <h2>Healers — All Pulls Summary</h2>
             <table class="data-table"><thead><tr><th>Player</th><th>Class</th><th>Total Heals</th><th>Dispels</th><th>Deaths</th></tr></thead><tbody>${rows}</tbody></table>
-            ${isKael && totalDispels < pulls.length * 3 ? '<div class="issue-card warning"><strong>Low dispels across all pulls.</strong> Priests and Paladins should watch for dispellable magic debuffs (Mind Control breaks, etc). Note: Remote Toy from Telonicus is NOT dispellable.</div>' : ''}
+            ${isKael && totalDispels < pulls.length * 3 ? '' : ''}
             <p class="mini-note">Heal counts reflect cast events. Classes with HoTs (Druid) or AoE heals (Priest CoH, Shaman Chain Heal) will differ in raw count vs throughput.</p>
           </section>
         `;
@@ -2969,7 +2959,8 @@
         findings.push({ severity: 'warning', text: `Zero interrupts across all ${pulls.length} pulls. As a ${pClass}, you have an interrupt ability. In Phase 4, interrupts on Kael's Fireballs and Pyroblast (after Shock Barrier) are critical.` });
       }
       if (isKael && ['Priest', 'Paladin'].includes(pClass) && role === 'Healer' && totalDispels === 0) {
-        findings.push({ severity: 'warning', text: `Zero dispels across all pulls. As a ${pClass}, you can dispel magic debuffs — watch for MC breaks and other dispellable effects. Note: Remote Toy is NOT dispellable.` });
+        // Note: Kael fight has no standard-dispellable debuffs. MC requires Mass Dispel (Priest only) or damage via Infinity Blade.
+        // Don't warn about zero dispels — it's expected.
       }
       if (pullsAlive > 0 && totalDeaths > 0) {
         findings.push({ severity: 'info', text: `Survived ${pullsAlive}/${pulls.length} pulls without dying. Focus on replicating what worked on those pulls.` });
@@ -3460,7 +3451,7 @@
         const transitionDeaths = deaths.filter(death => death.relative_time >= windowStart && /Mark of Hydross|Mark of Corruption|Hydross|Corruption|Spawn of Hydross/i.test(topDamageLabel(pull, death.player)));
         const sludgePlayers = playersHitByMechanic(pull, /Vile Sludge/i);
         if (transitionDeaths.length) pushEvent(transitionDeaths[0].relative_time - 2, 'trigger', 'Transition damage spikes before the wipe starts', transitionDeaths.some(death => getPlayerRole(death.player) === 'Tank') ? 'critical' : 'warning');
-        if (sludgePlayers.length && (pull.dispels || []).length < sludgePlayers.length) pushEvent(cascadeStart - 4, 'escalation', 'Vile Sludge dispels lag behind incoming debuffs', 'warning');
+        if (sludgePlayers.length && (pull.dispels || []).length < sludgePlayers.length) pushEvent(cascadeStart - 4, 'escalation', 'Vile Sludge active — reduced healing/damage on affected players compounds with mark stacks', 'warning');
       }
 
       if (bossKey === BOSS_KEYS.LURKER) {
@@ -3534,7 +3525,7 @@
           rootCause = 'Late Hydross transition → tank dies under mark pressure → swap collapses';
           confidence = 'High';
         } else if (playersHitByMechanic(pull, /Vile Sludge/i).length > 0 && (pull.dispels || []).length < playersHitByMechanic(pull, /Vile Sludge/i).length) {
-          rootCause = 'Vile Sludge cleanses lagged and raid damage carried into the next transition';
+          rootCause = 'Vile Sludge (undispellable -50% healing/damage debuff) overlapped with transition damage, overwhelming healers';
           confidence = 'Medium';
         }
       } else if (bossKey === BOSS_KEYS.LURKER) {
@@ -3831,7 +3822,7 @@
         const sludgeData = aggregateMechanic(/Vile Sludge/i);
         const transitionDeaths = aggregateDeathsBy(death => /Mark of Hydross|Mark of Corruption|Hydross|Corruption|Spawn of Hydross/i.test(death.topDamage || ''));
         if (tombData.totalHits > pulls.length * 2) actionItems.push({ severity: 'critical', priority: 1, title: 'Spread wider for Water Tomb', description: `${tombData.totalHits} Water Tomb hit(s) across ${pulls.length} pulls. Most clipped: ${tombData.worst.map(([name, count]) => `${name} (${count})`).join(', ') || 'multiple players'}.`, who: 'Entire raid', fix: 'Hold 10+ yards spacing before and during swaps so a single Water Tomb never removes multiple players from the fight.' });
-        if (sludgeData.totalHits > 0) actionItems.push({ severity: totalDispels < sludgeData.totalHits ? 'warning' : 'info', priority: 2, title: 'Cleanse Vile Sludge faster', description: `${sludgeData.totalHits} Vile Sludge hit(s) landed across the raid; only ${totalDispels} dispel(s) were recorded.`, who: 'Priests / Paladins + players calling their debuff', fix: 'Assign a cleanse order. Sludge targets should call immediately, and dispellers should clear it before the next swap damage ramps.' });
+        if (sludgeData.totalHits > 0) actionItems.push({ severity: sludgeData.totalHits >= 3 ? 'warning' : 'info', priority: 2, title: 'Manage Vile Sludge timing', description: `${sludgeData.totalHits} Vile Sludge hit(s) landed across the raid. Sludge is NOT dispellable — it reduces damage and healing done by 50% for 24s.`, who: 'Tanks (swap timing) + Healers (extra throughput on Sludge targets)', fix: 'Swap Hydross before Sludge overlaps with high mark stacks. Healers must compensate for 50% reduced healing on affected players. If Sludge lands on a tank near a swap, delay slightly or use cooldowns.' });
         if (transitionDeaths.length > 0) actionItems.push({ severity: 'critical', priority: 3, title: 'Stabilize transition windows', description: `${transitionDeaths.length} death(s) had Hydross/Corruption mark or swap damage as the primary source.`, who: 'Tanks, healers, and add pickups', fix: 'Swap earlier, keep resist tanks topped before each transition, and have add pickups pre-positioned so DoT damage never overlaps with loose adds.' });
       } else if (bossKey === BOSS_KEYS.LURKER) {
         const spoutData = aggregateMechanic(/Spout/i, entry => entry.role !== 'Tank');
@@ -3999,10 +3990,10 @@
         "Hydross the Unstable": {
           overview: `Hydross is an execution fight built around clean elemental transitions. If swaps are late, marks stack, tanks explode, and the raid gets buried under add damage and tomb/sludge overlap.`,
           phases: [
-            { name: 'Frost / Nature swap cycles', details: `Hydross alternates between Frost and Nature forms whenever he crosses the water line. Each form applies stacking marks that ramp raid damage over time and spawns elemental adds on every transition.<br><br><strong>Marks:</strong> Swap before stacks get dangerous — late swaps kill tanks and healers.<br><strong>Water Tomb:</strong> Hits multiple nearby players if the raid is clumped; maintain spread before every swap.<br><strong>Vile Sludge:</strong> Must be cleansed quickly or the DoT rolls into the next transition.` }
+            { name: 'Frost / Nature swap cycles', details: `Hydross alternates between Frost and Nature forms whenever he crosses the water line. Each form applies stacking marks that ramp raid damage over time and spawns elemental adds on every transition.<br><br><strong>Marks:</strong> Swap before stacks get dangerous — late swaps kill tanks and healers.<br><strong>Water Tomb:</strong> Hits multiple nearby players if the raid is clumped; maintain spread before every swap.<br><strong>Vile Sludge:</strong> NOT dispellable (Nature, 24s duration). Reduces damage and healing done by 50%. Healers must compensate — dangerous if it overlaps with high mark stacks.` }
           ],
           tankStrategy: `Use dedicated resist tanks for each side if available. The incoming tank stands on the correct side before the pull crosses, taunts instantly, and immediately gathers their spawned adds. Never drag Hydross deep into the next side — short, controlled swaps keep marks low.`,
-          healerStrategy: `Pre-cast on the incoming tank before every swap. Be ready for burst when adds spawn and for Water Tomb victims to be briefly out of action. Assign Priests/Paladins to cleanse Vile Sludge fast so DoT damage never overlaps with the next mark ramp.`,
+          healerStrategy: `Pre-cast on the incoming tank before every swap. Be ready for burst when adds spawn and for Water Tomb victims to be briefly out of action. Vile Sludge is NOT dispellable — when it lands on a tank or healer, other healers must compensate for the 50% healing reduction. Time swaps to avoid Sludge overlapping with high mark stacks.`,
           dpsStrategy: `Hold spread at all times, especially just before transitions. Swap to spawned adds instantly, then return to Hydross. Do not over-threat the new tank right after a transition — give them a beat to establish control.`,
           references: [
             { title: 'Wowhead TBC Hydross Guide', url: 'https://tbc.wowhead.com/guides/hydross-the-unstable-serpentshrine-cavern-raid-strategy' },
