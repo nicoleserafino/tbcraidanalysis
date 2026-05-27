@@ -210,12 +210,14 @@ def role_from_icon(player_class: str, icon: str | None) -> str | None:
         return "Healer"
     if "-Protection" in icon or "-Guardian" in icon:
         return "Tank"
+    dps_specs = ("-Shadow", "-Balance", "-Feral", "-Enhancement", "-Elemental", "-Retribution",
+                 "-Arms", "-Fury", "-Combat", "-Assassination", "-Subtlety", "-Frost", "-Fire",
+                 "-Arcane", "-Marksmanship", "-BeastMastery", "-Survival", "-Affliction",
+                 "-Demonology", "-Destruction")
+    if any(spec in icon for spec in dps_specs):
+        return "DPS"
     if player_class in {"Mage", "Warlock", "Rogue", "Hunter"}:
         return "DPS"
-    if "-Shadow" in icon:
-        return "DPS"
-    if player_class == "Priest" and icon == "Priest":
-        return "Healer"
     return None
 
 
@@ -226,11 +228,11 @@ def infer_role(player_class: str, icon: str | None, spell_counts: dict[str, int]
     tank_score = sum(count for spell, count in spell_counts.items() if spell in TANK_SPELLS)
     heal_score = sum(count for spell, count in spell_counts.items() if spell in HEAL_SPELLS)
     dps_score = sum(count for spell, count in spell_counts.items() if spell in DPS_SPELLS)
-    if player_class in {"Warrior", "Paladin", "Druid"} and tank_score >= max(5, dps_score // 3):
+    if player_class in {"Warrior", "Paladin", "Druid"} and tank_score > 20 and total_damage_taken > total_damage_done:
         return "Tank"
-    if player_class in {"Paladin", "Priest", "Shaman", "Druid"} and (heal_score > dps_score or total_healing > total_damage_done):
+    if player_class in {"Paladin", "Priest", "Shaman", "Druid"} and total_healing > total_damage_done * 3:
         return "Healer"
-    if player_class in {"Warrior", "Paladin", "Druid"} and total_damage_taken > max(total_damage_done * 2, 10000):
+    if player_class in {"Warrior", "Paladin", "Druid"} and total_damage_taken > total_damage_done * 3 and total_damage_taken > 50000:
         return "Tank"
     return "DPS"
 

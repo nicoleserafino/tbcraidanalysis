@@ -4297,6 +4297,7 @@
 
     const TANK_SPELLS = new Set(['Shield Slam','Devastate','Revenge','Shield Block','Taunt','Thunder Clap','Holy Shield','Righteous Defense',"Avenger's Shield",'Maul','Lacerate','Mangle (Bear)','Swipe','Growl','Challenging Roar']);
     const HEAL_SPELLS = new Set(['Flash of Light','Holy Light','Flash Heal','Greater Heal','Prayer of Healing','Prayer of Mending','Circle of Healing','Chain Heal','Healing Wave','Lesser Healing Wave','Rejuvenation','Lifebloom','Regrowth','Swiftmend','Earth Shield','Binding Heal','Renew']);
+    const DPS_SPELLS = new Set(['Fireball','Frostbolt','Arcane Blast','Arcane Missiles','Shadow Bolt','Incinerate','Seed of Corruption','Corruption','Mind Blast','Shadow Word: Pain','Mind Flay','Vampiric Touch','Sinister Strike','Backstab','Eviscerate','Steady Shot','Arcane Shot','Multi-Shot','Kill Command','Lightning Bolt','Chain Lightning','Earth Shock','Stormstrike','Wrath','Starfire','Moonfire','Mortal Strike','Bloodthirst','Whirlwind','Slam','Crusader Strike','Heroic Strike','Execute','Shred','Ferocious Bite','Rip','Mangle (Cat)']);
 
     function extractReportId(url) {
       const m = url.match(/\/reports\/([A-Za-z0-9]+)/);
@@ -4330,25 +4331,37 @@
 
     function roleFromIcon(playerClass, icon) {
       icon = icon || '';
+      // Explicit spec suffixes are authoritative
       if (icon.includes('-Holy') || icon.includes('-Restoration') || icon.includes('-Discipline')) return 'Healer';
       if (icon.includes('-Protection') || icon.includes('-Guardian')) return 'Tank';
-      if (['Mage','Warlock','Rogue','Hunter'].includes(playerClass)) return 'DPS';
-      if (icon.includes('-Shadow')) return 'DPS';
-      if (playerClass === 'Priest' && icon === 'Priest') return 'Healer';
+      if (icon.includes('-Shadow') || icon.includes('-Balance') || icon.includes('-Feral') ||
+          icon.includes('-Enhancement') || icon.includes('-Elemental') || icon.includes('-Retribution') ||
+          icon.includes('-Arms') || icon.includes('-Fury') || icon.includes('-Combat') ||
+          icon.includes('-Assassination') || icon.includes('-Subtlety') || icon.includes('-Frost') ||
+          icon.includes('-Fire') || icon.includes('-Arcane') || icon.includes('-Marksmanship') ||
+          icon.includes('-BeastMastery') || icon.includes('-Survival') ||
+          icon.includes('-Affliction') || icon.includes('-Demonology') || icon.includes('-Destruction')) return 'DPS';
+      // Pure DPS classes with no spec suffix are always DPS
+      if (['Mage','Rogue','Hunter','Warlock'].includes(playerClass)) return 'DPS';
       return null;
     }
 
     function inferRole(playerClass, icon, spellCounts, totalHealing, totalDamageTaken, totalDamageDone) {
       const iconRole = roleFromIcon(playerClass, icon);
       if (iconRole) return iconRole;
+      // No spec suffix — use actual combat data to determine role
       let tankScore = 0, healScore = 0, dpsScore = 0;
       for (const [spell, count] of Object.entries(spellCounts)) {
         if (TANK_SPELLS.has(spell)) tankScore += count;
         if (HEAL_SPELLS.has(spell)) healScore += count;
+        if (DPS_SPELLS.has(spell)) dpsScore += count;
       }
-      if (['Warrior','Paladin','Druid'].includes(playerClass) && tankScore >= Math.max(5, dpsScore / 3)) return 'Tank';
-      if (['Paladin','Priest','Shaman','Druid'].includes(playerClass) && (healScore > dpsScore || totalHealing > totalDamageDone)) return 'Healer';
-      if (['Warrior','Paladin','Druid'].includes(playerClass) && totalDamageTaken > Math.max(totalDamageDone * 2, 10000)) return 'Tank';
+      // Tank detection: significant tank spell usage AND taking much more damage than dealing
+      if (['Warrior','Paladin','Druid'].includes(playerClass) && tankScore > 20 && totalDamageTaken > totalDamageDone) return 'Tank';
+      // Healer detection: healing output significantly exceeds damage output (3x threshold avoids Shadow Priest/Feral misclassification)
+      if (['Paladin','Priest','Shaman','Druid'].includes(playerClass) && totalHealing > totalDamageDone * 3) return 'Healer';
+      // Secondary tank check: damage taken is overwhelmingly higher than damage done
+      if (['Warrior','Paladin','Druid'].includes(playerClass) && totalDamageTaken > totalDamageDone * 3 && totalDamageTaken > 50000) return 'Tank';
       return 'DPS';
     }
 
@@ -4386,7 +4399,7 @@
       const participants = friendlies.filter(f => PLAYER_CLASSES.has(f.type) && f.fights.some(fi => fi.id === fight.id)).sort((a, b) => a.name.localeCompare(b.name));
       const pullPlayerNames = participants.map(p => p.name);
 
-      const damageSources = {}, damageAbilities = {}, playerDamageTaken = {};
+      const damageSources = {}, damageAbilities = {}, playerDamageTaken = {}, playerDamageTakenAmounts = {};
       const healsByPlayer = {}, healDetails = {}, castsByPlayer = {}, castTimeline = {}, spellCasts = {}, damageDone = {};
       const deathsOut = [], creatureDeaths = [], interruptsOut = [], dispelsOut = [], conflagrations = [];
 
@@ -4409,6 +4422,7 @@
         playerDamageTaken[target] = playerDamageTaken[target] || {};
         const key = `${source}: ${ability}`;
         playerDamageTaken[target][key] = (playerDamageTaken[target][key] || 0) + 1;
+        playerDamageTakenAmounts[target] = (playerDamageTakenAmounts[target] || 0) + (ev.amount || 0);
       }
 
       // Conflagration dedup
@@ -4479,7 +4493,7 @@
           casts_by_player: castsByPlayer, cast_timeline: castTimeline,
           spell_casts: spellCasts, damage_done: damageDone, buff_events: {}, consumables: {}
         },
-        spellCasts, healDetails, damageDone, playerDamageTaken
+        spellCasts, healDetails, damageDone, playerDamageTakenAmounts
       };
     }
 
@@ -4508,7 +4522,7 @@
       for (let i = 0; i < bossFights.length; i++) {
         const fight = bossFights[i];
         const result = await analyzePull('', reportId, apiKey, reportStartMs, fight, actorsById, playersById, friendlies, statusEl);
-        const { pull, spellCasts: sc, healDetails: hd, damageDone: dd, playerDamageTaken: pdt } = result;
+        const { pull, spellCasts: sc, healDetails: hd, damageDone: dd, playerDamageTakenAmounts: pdta } = result;
 
         // Aggregate for role inference
         for (const [player, spells] of Object.entries(sc || {})) {
@@ -4521,8 +4535,8 @@
         for (const [player, spells] of Object.entries(dd || {})) {
           for (const total of Object.values(spells)) aggDamageDone[player] = (aggDamageDone[player] || 0) + total;
         }
-        for (const [player, sources] of Object.entries(pdt || {})) {
-          for (const count of Object.values(sources)) aggDamageTaken[player] = (aggDamageTaken[player] || 0) + count;
+        for (const [player, amount] of Object.entries(pdta || {})) {
+          aggDamageTaken[player] = (aggDamageTaken[player] || 0) + amount;
         }
 
         const entry = bosses[fight.name] = bosses[fight.name] || { total_pulls: 0, kills: 0, wipes: 0, pulls: [] };
