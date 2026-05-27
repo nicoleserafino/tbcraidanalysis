@@ -1153,10 +1153,19 @@
 
       // --- Dispel check ---
       const totalDispels = (pull.dispels || []).length;
-      if (totalDispels === 0) {
+      if (totalDispels === 0 && pull.duration_sec > 30) {
+        const bk = getBossKey();
+        let dispelNote = '';
+        if (bk === BOSS_KEYS.KAEL) dispelNote = 'Kael fight has Magic debuffs from Mind Control (Priests: Dispel Magic, Paladins: Cleanse). Note: Remote Toy from Telonicus is NOT dispellable (Arcane type with no player dispel).';
+        else if (bk === BOSS_KEYS.HYDROSS) dispelNote = 'Vile Sludge is a Magic debuff — dispellable by Priests (Dispel Magic), Paladins (Cleanse), or Felhunter (Devour Magic). Must be removed ASAP or tank healing is halved for 24s.';
+        else if (bk === BOSS_KEYS.KARATHRESS) dispelNote = 'Caribdis applies Cyclone (Magic) — Priests/Paladins can dispel. Sharkkis applies a Poison — Paladins (Cleanse), Druids (Abolish Poison), Shamans (Cure Poison) handle this.';
+        else if (bk === BOSS_KEYS.LEO) dispelNote = 'Whirlwind applies a bleed (Physical — not dispellable). Chaos Blast stacking debuff is Fire damage taken increase (not dispellable). Insidious Whisper/Inner Demon is also not dispellable — player must kill their demon.';
+        else if (bk === BOSS_KEYS.MOROGRIM) dispelNote = 'Watery Grave is not dispellable. Murloc Pierce Armor is a Physical debuff (not dispellable). There are limited dispel targets on this fight.';
+        else if (bk === BOSS_KEYS.VASHJ) dispelNote = 'Static Charge is a Nature debuff (Magic type) — Priests/Paladins can dispel. Entangle root is a Magic debuff — dispel to free the player. Poison on P2 adds requires Paladins/Druids/Shamans.';
+        else dispelNote = 'Check which debuffs are landing and assign dispels by type: Magic (Priest/Paladin), Curse (Mage/Druid), Poison (Paladin/Druid/Shaman), Disease (Priest/Paladin).';
         issues.push({
           title: 'No dispels used',
-          body: `Zero dispels were cast this pull. If any magic debuffs from Mind Control or other sources went undispelled, assign dispel duty to Priests/Paladins. Note: Remote Toy from Telonicus is NOT dispellable.`,
+          body: `Zero dispels were cast this pull. ${dispelNote}`,
           severity: 'warning'
         });
       }
@@ -1189,15 +1198,15 @@
 
       if (waterTombHits.length >= 3) {
         issues.push({
-          title: 'Water Tomb is clipping multiple players',
-          body: `${waterTombHits.length} players were hit by Water Tomb. Hydross punishes loose spread discipline — if multiple people are getting tombed, collapse points are too tight during swaps.`,
+          title: 'Water Tomb hitting clusters',
+          body: `${waterTombHits.length} players took Water Tomb damage. Water Tomb targets random players and stuns them for 5s — this is unavoidable for the target. However, if multiple people are getting tombed simultaneously, it suggests the raid is too tightly grouped. Spread to 6+ yards during frost phase to avoid losing too many people at once.`,
           severity: waterTombHits.length >= 5 ? 'critical' : 'warning'
         });
       }
       if (sludgeHits.length > 0) {
         issues.push({
-          title: 'Vile Sludge cleanse load detected',
-          body: `${sludgeHits.reduce((sum, entry) => sum + entry.hits, 0)} Vile Sludge hit(s) landed on ${sludgeHits.length} player(s); only ${totalDispels} dispel(s) were recorded. Cleanse assignments need to be faster after each tomb/sludge overlap.`,
+          title: 'Vile Sludge needs faster dispels',
+          body: `${sludgeHits.reduce((sum, entry) => sum + entry.hits, 0)} Vile Sludge hit(s) on ${sludgeHits.length} player(s); ${totalDispels} dispel(s) recorded. Vile Sludge is a MAGIC debuff (reduces healing received by 50% for 24s). Dispel with: Priest (Dispel Magic), Paladin (Cleanse), or Warlock pet (Devour Magic). Priority targets: tanks and healers.`,
           severity: totalDispels < sludgeHits.length ? 'warning' : 'info'
         });
       }
@@ -1345,9 +1354,9 @@
       }
       if (wateryGraveVictims.length >= 4) {
         issues.push({
-          title: 'Watery Grave healing response is under strain',
-          body: `${wateryGraveVictims.length} player(s) were hit by Watery Grave. Grave targets need instant HoTs/shields while the raid stabilizes for the next murloc wave.`,
-          severity: 'warning'
+          title: 'Watery Grave overlapping with murlocs',
+          body: `${wateryGraveVictims.length} player(s) were hit by Watery Grave. Grave targets are random and unavoidable — the danger is when it overlaps with Earthquake. Assign 2 Resto Shamans to instantly heal Grave targets. Grave is NOT dispellable.`,
+          severity: 'info'
         });
       }
       return issues;
@@ -1493,43 +1502,44 @@
       if (bossKey === BOSS_KEYS.HYDROSS) {
         const tombHits = hitCount(/Water Tomb/i);
         const sludgeHits = hitCount(/Vile Sludge/i);
-        if (tombHits > 0) findings.push({ title: `Hit by Water Tomb ${tombHits} time(s)`, body: 'Hydross punishes spread failures hard. Keep 10+ yards from other players during swaps so a single tomb does not remove multiple healers or ranged from the fight.', severity: 'warning' });
-        if (sludgeHits > 0 && role !== 'Tank') findings.push({ title: `Vile Sludge uptime on you (${sludgeHits} hit(s))`, body: ['Priest', 'Paladin'].includes(playerClass) ? 'You can help the raid here: call your own Sludge and cleanse teammates quickly after Water Tombs.' : 'Call Vile Sludge immediately so dispellers can cleanse you before the next transition.', severity: 'warning' });
+        if (tombHits > 2) findings.push({ title: `Water Tomb target ${tombHits} time(s)`, body: 'Water Tomb targets are random — you cannot avoid being selected. If you are a healer or tank getting tombed frequently, ensure the raid knows to cover your assignments during the 5s stun. Spread 6+ yards from others to avoid chaining the AoE.', severity: 'info' });
+        if (sludgeHits > 0) findings.push({ title: `Vile Sludge on you (${sludgeHits} hit(s))`, body: `Vile Sludge is a MAGIC debuff (halves healing received for 24s). ${['Priest', 'Paladin'].includes(playerClass) ? 'You can self-dispel with Dispel Magic/Cleanse, and should also be dispelling teammates.' : 'Call it out immediately so Priests (Dispel Magic) or Paladins (Cleanse) can remove it before a transition.'}`, severity: 'warning' });
       }
       if (bossKey === BOSS_KEYS.LURKER) {
         const spoutHits = hitCount(/Spout/i);
         const waterHits = hitCount(/Scalding Water|Geyser/i);
-        if (spoutHits > 0) findings.push({ title: `Hit by Spout ${spoutHits} time(s)`, body: 'Spout is a personal awareness mechanic. Pre-move as soon as the cast begins and rotate with the beam instead of trying to finish casts.', severity: 'critical' });
-        if (waterHits > 0) findings.push({ title: `Took ${waterHits} water damage hit(s)`, body: 'The water is not safe during submerge cycles. Get onto the platform and be ready for adds before Water Bolts or Scalding Water stack up.', severity: 'warning' });
+        if (spoutHits > 0) findings.push({ title: `Hit by Spout ${spoutHits} time(s)`, body: 'Spout is fully avoidable. It rotates 360° with a visible animation and audio cue. Ranged: dive underwater before it reaches you. Melee: rotate around the boss following the beam direction. Never greed a cast — pre-move when the Spout cast begins.', severity: 'critical' });
+        if (waterHits > 0) findings.push({ title: `Scalding Water/Geyser damage (${waterHits} hit(s))`, body: 'Scalding Water damage spikes hard during the Submerge phase. Get onto platforms before he dives. Geyser targets random players on platforms — spread slightly to avoid chain knockbacks. Geyser targeting is unavoidable but you can minimize splash.', severity: 'warning' });
       }
       if (bossKey === BOSS_KEYS.LEO) {
         const whirlwindHits = hitCount(/Whirlwind/i);
         const demonHits = hitCount(/Inner Demon|Insidious Whisper/i);
-        if (whirlwindHits > 0 && role !== 'Tank') findings.push({ title: `Stayed in Whirlwind (${whirlwindHits} hit(s))`, body: 'Melee must disengage the instant Whirlwind starts. Treat it like hard downtime — staying in is never worth the damage.', severity: 'critical' });
-        if (demonHits > 0) findings.push({ title: 'Inner Demon pressure detected', body: 'You took Inner Demon / Insidious Whisper damage. Save cooldowns and swap instantly to your demon so you do not feed a Mind Control.', severity: 'warning' });
+        if (whirlwindHits > 0 && role !== 'Tank') findings.push({ title: `Stayed in Whirlwind (${whirlwindHits} hit(s))`, body: 'Whirlwind deals 3-5k Physical/sec and is fully avoidable. Run out to 15+ yards the instant it starts — no exceptions. Do NOT try to finish a cast. Treat it as hard downtime for melee.', severity: 'critical' });
+        if (demonHits > 0) findings.push({ title: 'Inner Demon spawned on you', body: `Inner Demon targets 5 random players during Demon Form — being targeted is unavoidable. However, you MUST kill your demon within 30s or you get permanently Mind Controlled. Drop everything and kill it immediately. ${role === 'Healer' ? 'As a healer this is harder — use wand, SW:P, instant casts. Practice the rotation.' : 'Use your strongest instant/burst abilities.'} Inner Demon is NOT dispellable.`, severity: 'warning' });
       }
       if (bossKey === BOSS_KEYS.KARATHRESS) {
         const boltHits = hitCount(/Cataclysmic Bolt/i);
         const spitfireHits = hitCount(/Spitfire Totem/i);
-        if (boltHits > 0 && role === 'Tank') findings.push({ title: `Cataclysmic Bolt hit you ${boltHits} time(s)`, body: 'Keep yourself topped before each bolt. Call externals early when you dip below 50% — Karathress bolts are designed to punish low-health tanks.', severity: 'critical' });
-        if (interrupts === 0 && ['Rogue', 'Shaman', 'Mage', 'Warrior'].includes(playerClass) && role !== 'Healer') findings.push({ title: 'No council interrupts recorded', body: 'Karathress wipes often start with a free Healing Wave. If you can kick, you should be in the interrupt rotation on council targets.', severity: 'warning' });
-        if (spitfireHits > 0) findings.push({ title: `Spitfire Totem hit you ${spitfireHits} time(s)`, body: 'Swap to Spitfire Totem instantly. Every extra cast means the totem lived too long and ranged swaps were slow.', severity: 'warning' });
+        if (boltHits > 0 && role === 'Tank') findings.push({ title: `Cataclysmic Bolt hit you ${boltHits} time(s)`, body: 'Cataclysmic Bolt deals 50% of your max HP — unavoidable on the Karathress tank. Keep yourself above 60% HP at all times. Call for external cooldowns (Pain Suppression, Blessing of Sacrifice) when health dips. Healers must never let you sit below 50%.', severity: 'critical' });
+        if (interrupts === 0 && ['Rogue', 'Shaman', 'Mage', 'Warrior'].includes(playerClass) && role !== 'Healer') findings.push({ title: 'No interrupts on Healing Wave', body: `Caribdis casts Healing Wave (heals for 30-50k) — every cast MUST be interrupted or you lose minutes of DPS. Interrupt rotation: Rogues (Kick, 10s CD), Shamans (Earth Shock, 6s CD), Mages (Counterspell, 24s CD), Warriors (Pummel/Shield Bash). As a ${playerClass}, you should be in this rotation.`, severity: 'warning' });
+        if (spitfireHits > 0) findings.push({ title: `Spitfire Totem hit you ${spitfireHits} time(s)`, body: 'Spitfire Totem fires rapid bolts at random targets — avoidable by killing the totem instantly. Use a /target Spitfire Totem macro and swap to it the moment it drops. Every second it lives means more raid damage.', severity: 'warning' });
       }
       if (bossKey === BOSS_KEYS.MOROGRIM) {
         const tidalHits = hitCount(/Tidal Wave/i);
         const graveHits = hitCount(/Watery Grave/i);
         const murlocHits = hitCount(/Murloc|Earthquake|Water Globule/i);
-        if (tidalHits > 0 && role !== 'Tank') findings.push({ title: `Hit by Tidal Wave ${tidalHits} time(s)`, body: 'Morogrim only wants his tank in front. Stand behind or to the side at all times — frontal hits are fully avoidable.', severity: 'critical' });
-        if (graveHits > 0) findings.push({ title: 'Watery Grave target', body: role === 'Healer' ? 'Call when you are graved so your assignment is covered immediately.' : 'Use personals and healthstones the moment you are graved if murlocs are about to spawn.', severity: 'info' });
-        if (murlocHits > 0 && role === 'Healer') findings.push({ title: `Murloc pressure reached you (${murlocHits} hit(s))`, body: 'This usually means pickup failed or healing threat spiked. Drop threat early and move toward the designated slow/AoE stack point during Earthquake.', severity: 'warning' });
+        if (tidalHits > 0 && role !== 'Tank') findings.push({ title: `Hit by Tidal Wave ${tidalHits} time(s)`, body: 'Tidal Wave is a frontal cone — fully avoidable by standing behind or beside Morogrim. Only the tank should be in front. Reposition immediately after each Whirl knockback.', severity: 'critical' });
+        if (tidalHits > 0 && role === 'Tank') findings.push({ title: `Tidal Wave hits: ${tidalHits}`, body: 'Tidal Wave on the tank is expected and unavoidable. Ensure healers pre-shield (PW:Shield) before each cast and that you have mitigation up.', severity: 'info' });
+        if (graveHits > 0 && role === 'Healer') findings.push({ title: 'Watery Grave target (healer)', body: 'Watery Grave targets are random and unavoidable. As a healer, communicate when you are graved so other healers cover your tank assignments during the 5s stun. Grave is NOT dispellable.', severity: 'info' });
+        if (murlocHits > 0 && role === 'Healer') findings.push({ title: `Murloc pressure reached you (${murlocHits} hit(s))`, body: 'Murlocs hitting healers means the Prot Paladin pickup failed or you generated too much healing threat. Use Fade (Priest) or stop healing for 3-4s after Earthquake while the Prot Paladin gathers. Tranquil Air Totem (Shaman) helps reduce healing threat by 20%.', severity: 'warning' });
       }
       if (bossKey === BOSS_KEYS.VASHJ) {
         const staticHits = hitCount(/Static Charge/i);
         const shockHits = hitCount(/Shock Blast/i);
         const sporeHits = hitCount(/Toxic Spore/i);
-        if (staticHits > 0) findings.push({ title: `Static Charge chained to you ${staticHits} time(s)`, body: 'Stay 12+ yards from other players unless you are in a planned core handoff. Static Charge spreading is pure positioning discipline.', severity: staticHits > 2 ? 'critical' : 'warning' });
-        if (shockHits > 0 && role !== 'Healer') findings.push({ title: `Shock Blast hit you ${shockHits} time(s)`, body: 'Shock Blast is the melee check on Vashj. When she starts it, get out immediately and let ranged finish the window.', severity: 'critical' });
-        if (sporeHits > 0) findings.push({ title: `Toxic Spore clipped you ${sporeHits} time(s)`, body: 'Watch the bat kite path and never let spores cut through your lane. P3 is won by clean movement, not greed.', severity: 'warning' });
+        if (staticHits > 0) findings.push({ title: `Static Charge hit you ${staticHits} time(s)`, body: `Static Charge targets a random player and chains Nature damage to anyone within 10 yards every 2s. Being targeted is unavoidable, but chaining is not — maintain 12+ yard spread at all times. If you ARE the target, move away from the raid immediately. Static Charge is a Magic debuff — Priests (Dispel Magic) or Paladins (Cleanse) should remove it to stop the chain.`, severity: staticHits > 2 ? 'critical' : 'warning' });
+        if (shockHits > 0 && role !== 'Healer') findings.push({ title: `Shock Blast hit you ${shockHits} time(s)`, body: 'Shock Blast is a melee-range AoE stun + heavy damage. It has a cast time — when you see it, run out immediately. This is fully avoidable for melee. Ranged/healers should never be in range.', severity: 'critical' });
+        if (sporeHits > 0) findings.push({ title: `Toxic Spore clipped you ${sporeHits} time(s)`, body: 'Spore Bats leave poison clouds on death. The clouds are avoidable — watch where bats are being kited/killed and stay out of those areas. Assign specific ranged DPS to kill bats away from the raid in P3.', severity: 'warning' });
       }
     }
 
