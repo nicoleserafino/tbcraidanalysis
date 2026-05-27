@@ -764,6 +764,97 @@
       return groups;
     }
 
+    const BOSS_KEYS = Object.freeze({
+      KAEL: 'kael',
+      HYDROSS: 'hydross',
+      LURKER: 'lurker',
+      LEO: 'leo',
+      KARATHRESS: 'karathress',
+      MOROGRIM: 'morogrim',
+      VASHJ: 'vashj'
+    });
+
+    function getBossKey(name = state.boss || '') {
+      if (/Kael/i.test(name)) return BOSS_KEYS.KAEL;
+      if (/Hydross/i.test(name)) return BOSS_KEYS.HYDROSS;
+      if (/Lurker/i.test(name)) return BOSS_KEYS.LURKER;
+      if (/Leotheras/i.test(name)) return BOSS_KEYS.LEO;
+      if (/Karathress/i.test(name)) return BOSS_KEYS.KARATHRESS;
+      if (/Morogrim/i.test(name)) return BOSS_KEYS.MOROGRIM;
+      if (/Lady Vashj/i.test(name)) return BOSS_KEYS.VASHJ;
+      return '';
+    }
+
+    function pullPlayersList(pull) {
+      if (!pull) return [];
+      const listed = Array.isArray(pull.players) && pull.players.length ? pull.players : Object.keys(pull.player_damage_taken || {});
+      return listed.filter(Boolean);
+    }
+
+    function asRegex(pattern) {
+      if (pattern instanceof RegExp) return new RegExp(pattern.source, pattern.flags.replace(/g/g, ''));
+      return new RegExp(pattern, 'i');
+    }
+
+    function countMechanicHitsForPlayer(pull, player, pattern) {
+      const regex = asRegex(pattern);
+      return safeEntries(pull?.player_damage_taken?.[player] || {}).reduce((sum, [label, count]) => (
+        regex.test(label) ? sum + Number(count || 0) : sum
+      ), 0);
+    }
+
+    function playersHitByMechanic(pull, pattern, predicate = () => true) {
+      const regex = asRegex(pattern);
+      return pullPlayersList(pull).map(player => {
+        const hits = safeEntries(pull?.player_damage_taken?.[player] || {}).reduce((sum, [label, count]) => (
+          regex.test(label) ? sum + Number(count || 0) : sum
+        ), 0);
+        return {
+          player,
+          role: getPlayerRole(player),
+          className: getAllPlayers()[player]?.class || 'Unknown',
+          hits
+        };
+      }).filter(entry => entry.hits > 0 && predicate(entry));
+    }
+
+    function totalMechanicHits(pull, pattern, predicate = () => true) {
+      return playersHitByMechanic(pull, pattern, predicate).reduce((sum, entry) => sum + entry.hits, 0);
+    }
+
+    function topDamageLabel(pull, player) {
+      const items = safeEntries(pull?.player_damage_taken?.[player] || {}).sort((a, b) => Number(b[1] || 0) - Number(a[1] || 0));
+      return items[0]?.[0] || '';
+    }
+
+    function deathsFromMechanic(pull, pattern, predicate = () => true) {
+      return (pull?.deaths || []).filter(death => predicate(death) && countMechanicHitsForPlayer(pull, death.player, pattern) > 0);
+    }
+
+    function isLurkerSubmergeTime(time) {
+      if (!Number.isFinite(time) || time < 85) return false;
+      return ((time - 85) % 120) <= 35;
+    }
+
+    function groupTimedTargets(entries, windowSec = 2) {
+      const sorted = [...(entries || [])].sort((a, b) => (a.relative_time || 0) - (b.relative_time || 0));
+      const groups = [];
+      sorted.forEach(entry => {
+        const last = groups[groups.length - 1];
+        if (last && Math.abs((entry.relative_time || 0) - last.time) <= windowSec) {
+          last.entries.push(entry);
+          if (entry.target) last.targets.add(entry.target);
+        } else {
+          groups.push({
+            time: entry.relative_time || 0,
+            entries: [entry],
+            targets: new Set(entry.target ? [entry.target] : [])
+          });
+        }
+      });
+      return groups.map(group => ({ ...group, targets: [...group.targets] }));
+    }
+
     function getClosestPosition(points, time) {
       if (!Array.isArray(points) || !points.length || !Number.isFinite(time)) return null;
       let best = null;
@@ -846,7 +937,8 @@
     function getPhaseLabel(time) {
       const pull = getPull();
       if (!pull || !Number.isFinite(time)) return 'Unknown';
-      if (/Kael'thas/i.test(state.boss)) {
+      const bossKey = getBossKey();
+      if (bossKey === BOSS_KEYS.KAEL) {
         const weaponDeaths = (pull.creature_deaths || [])
           .filter(entry => KNOWN_WEAPONS.includes(entry.name))
           .map(entry => entry.relative_time)
@@ -857,6 +949,32 @@
         if (time < weaponEnd) return 'Weapons';
         if (time < 320) return 'Kael Phase';
         return 'Late phase';
+      }
+      if (bossKey === BOSS_KEYS.HYDROSS) {
+        const ratio = time / Math.max(1, pull.duration_sec || 1);
+        if (ratio < 0.25) return 'Opening swaps';
+        if (ratio < 0.65) return 'Mid transitions';
+        return 'Late transition pressure';
+      }
+      if (bossKey === BOSS_KEYS.LURKER) {
+        return isLurkerSubmergeTime(time) ? 'Submerge' : 'Surface';
+      }
+      if (bossKey === BOSS_KEYS.LEO) {
+        return time < Math.max(1, pull.duration_sec || 1) * 0.5 ? 'Humanoid pressure' : 'Demon pressure';
+      }
+      if (bossKey === BOSS_KEYS.KARATHRESS) {
+        return time < Math.max(1, pull.duration_sec || 1) * 0.5 ? 'Council setup' : 'Burn phase';
+      }
+      if (bossKey === BOSS_KEYS.MOROGRIM) {
+        const ratio = time / Math.max(1, pull.duration_sec || 1);
+        if (ratio < 0.75) return 'Murloc waves';
+        return 'Globule burn';
+      }
+      if (bossKey === BOSS_KEYS.VASHJ) {
+        const ratio = time / Math.max(1, pull.duration_sec || 1);
+        if (ratio < 0.35) return 'P1';
+        if (ratio < 0.8) return 'P2';
+        return 'P3';
       }
       const ratio = time / Math.max(1, pull.duration_sec || 1);
       if (ratio < 0.33) return 'Early';
@@ -1058,6 +1176,237 @@
       return issues;
     }
 
+    function hydrossSpecificIssues() {
+      if (getBossKey() !== BOSS_KEYS.HYDROSS) return [];
+      const pull = getPull();
+      if (!pull) return [];
+      const issues = [];
+      const waterTombHits = playersHitByMechanic(pull, /Water Tomb/i);
+      const sludgeHits = playersHitByMechanic(pull, /Vile Sludge/i);
+      const transitionDeaths = (pull.deaths || []).filter(death => /Mark of Hydross|Mark of Corruption|Hydross • Melee|Corruption • Melee|Hydross the Unstable|Pure Spawn of Hydross|Tainted Spawn of Hydross/i.test(topDamageLabel(pull, death.player)));
+      const tankDeaths = transitionDeaths.filter(death => getPlayerRole(death.player) === 'Tank');
+      const totalDispels = (pull.dispels || []).length;
+
+      if (waterTombHits.length >= 3) {
+        issues.push({
+          title: 'Water Tomb is clipping multiple players',
+          body: `${waterTombHits.length} players were hit by Water Tomb. Hydross punishes loose spread discipline — if multiple people are getting tombed, collapse points are too tight during swaps.`,
+          severity: waterTombHits.length >= 5 ? 'critical' : 'warning'
+        });
+      }
+      if (sludgeHits.length > 0) {
+        issues.push({
+          title: 'Vile Sludge cleanse load detected',
+          body: `${sludgeHits.reduce((sum, entry) => sum + entry.hits, 0)} Vile Sludge hit(s) landed on ${sludgeHits.length} player(s); only ${totalDispels} dispel(s) were recorded. Cleanse assignments need to be faster after each tomb/sludge overlap.`,
+          severity: totalDispels < sludgeHits.length ? 'warning' : 'info'
+        });
+      }
+      if (transitionDeaths.length > 0) {
+        issues.push({
+          title: 'Deaths line up with transition pressure',
+          body: `${transitionDeaths.length} death(s) had Mark/transition damage as a leading source. Late swaps or loose adds are overwhelming people during resistance transitions.`,
+          severity: tankDeaths.length > 0 ? 'critical' : 'warning'
+        });
+      }
+      if (tankDeaths.length > 0) {
+        issues.push({
+          title: 'Tank deaths during swap windows',
+          body: `${tankDeaths.map(death => `${death.player} (${death.relative_time.toFixed(0)}s)`).join(', ')} died during Hydross/Corruption pressure. This usually means resist gear, healer swaps, or add pickup broke down.`,
+          severity: 'critical'
+        });
+      }
+      return issues;
+    }
+
+    function lurkerSpecificIssues() {
+      if (getBossKey() !== BOSS_KEYS.LURKER) return [];
+      const pull = getPull();
+      if (!pull) return [];
+      const issues = [];
+      const spoutVictims = playersHitByMechanic(pull, /Spout/i, entry => entry.role !== 'Tank');
+      const spoutDeaths = deathsFromMechanic(pull, /Spout/i);
+      const submergeDeaths = (pull.deaths || []).filter(death => isLurkerSubmergeTime(death.relative_time) || countMechanicHitsForPlayer(pull, death.player, /Scalding Water|Geyser/i) > 0);
+      const tankBoltDeaths = (pull.deaths || []).filter(death => getPlayerRole(death.player) === 'Tank' && /Water Bolt/i.test(topDamageLabel(pull, death.player)));
+
+      if (spoutVictims.length > 0) {
+        issues.push({
+          title: 'Spout awareness failure',
+          body: `${spoutVictims.length} non-tank player(s) were hit by Spout${spoutDeaths.length ? ` and ${spoutDeaths.length} died` : ''}. Spout is avoidable — rotate with the beam and never greed casts.`,
+          severity: spoutDeaths.length > 0 ? 'critical' : 'warning'
+        });
+      }
+      if (submergeDeaths.length > 0) {
+        issues.push({
+          title: 'Deaths during submerge/water pressure',
+          body: `${submergeDeaths.length} player(s) died in submerge windows or to Scalding Water/Geyser damage. Players are staying in water too long or not regrouping fast enough for adds.`,
+          severity: submergeDeaths.length >= 3 ? 'critical' : 'warning'
+        });
+      }
+      if (tankBoltDeaths.length > 0) {
+        issues.push({
+          title: 'Tank died to Water Bolt spam',
+          body: `${tankBoltDeaths.map(death => `${death.player} at ${death.relative_time.toFixed(0)}s`).join(', ')} died with Water Bolt as the top damage source. After Whirl/submerge, tanks must reconnect immediately or ranged bolts take over.`,
+          severity: 'critical'
+        });
+      }
+      return issues;
+    }
+
+    function leotherasSpecificIssues() {
+      if (getBossKey() !== BOSS_KEYS.LEO) return [];
+      const pull = getPull();
+      if (!pull) return [];
+      const issues = [];
+      const whirlwindHits = playersHitByMechanic(pull, /Whirlwind/i, entry => entry.role !== 'Tank');
+      const demonFailures = playersHitByMechanic(pull, /Inner Demon|Insidious Whisper/i);
+      const chaosBlastDeaths = (pull.deaths || []).filter(death => /Chaos Blast/i.test(topDamageLabel(pull, death.player)));
+
+      if (whirlwindHits.length > 0) {
+        issues.push({
+          title: 'Non-tanks are staying in Whirlwind',
+          body: `${whirlwindHits.length} player(s) took Whirlwind damage. Melee need to disengage instantly — every Whirlwind tick is avoidable and often lethal.`,
+          severity: whirlwindHits.length >= 3 ? 'critical' : 'warning'
+        });
+      }
+      if (demonFailures.length > 0) {
+        issues.push({
+          title: 'Inner Demon control is failing',
+          body: `${demonFailures.length} player(s) took damage from Inner Demon/Insidious Whisper sources. Players must kill their demon immediately or they risk Mind Control and raid damage.`,
+          severity: demonFailures.length >= 2 ? 'critical' : 'warning'
+        });
+      }
+      if (chaosBlastDeaths.length > 0) {
+        issues.push({
+          title: 'Chaos Blast is killing the demon tank',
+          body: `${chaosBlastDeaths.map(death => `${death.player} at ${death.relative_time.toFixed(0)}s`).join(', ')} died with Chaos Blast as the top damage source. Tighten Warlock tank healing and threat handoff into demon form.`,
+          severity: 'critical'
+        });
+      }
+      return issues;
+    }
+
+    function karathressSpecificIssues() {
+      if (getBossKey() !== BOSS_KEYS.KARATHRESS) return [];
+      const pull = getPull();
+      if (!pull) return [];
+      const issues = [];
+      const relevantInterrupts = (pull.interrupts || []).filter(entry => /Karathress|Tidalvess|Caribdis|Sharkkis/i.test(entry.target || ''));
+      const spitfireTotemDeaths = (pull.creature_deaths || []).filter(death => /Spitfire Totem/i.test(death.name || ''));
+      const spitfireHits = totalMechanicHits(pull, /Spitfire Totem|Fireball/i);
+      const boltTankDeaths = (pull.deaths || []).filter(death => getPlayerRole(death.player) === 'Tank' && /Cataclysmic Bolt/i.test(topDamageLabel(pull, death.player)));
+
+      if (pull.duration_sec > 90 && relevantInterrupts.length === 0) {
+        issues.push({
+          title: 'No Healing Wave interrupts recorded',
+          body: 'Karathress council requires a clean interrupt rotation on Healing Wave. Zero interrupts on council targets strongly suggests the cast is being allowed through.',
+          severity: 'critical'
+        });
+      }
+      if (spitfireHits > 0 || (pull.duration_sec > 60 && spitfireTotemDeaths.length === 0)) {
+        issues.push({
+          title: 'Spitfire Totem is living too long',
+          body: `${spitfireHits} hit(s) were attributed to Spitfire Totem sources and only ${spitfireTotemDeaths.length} totem death(s) were logged. Totems must be called and deleted instantly.`,
+          severity: spitfireHits > 6 ? 'critical' : 'warning'
+        });
+      }
+      if (boltTankDeaths.length > 0) {
+        issues.push({
+          title: 'Karathress tank died to Cataclysmic Bolt',
+          body: `${boltTankDeaths.map(death => `${death.player} at ${death.relative_time.toFixed(0)}s`).join(', ')} died to Cataclysmic Bolt pressure. Keep the Karathress tank comfortably above 50% HP before each bolt.`,
+          severity: 'critical'
+        });
+      }
+      return issues;
+    }
+
+    function morogrimSpecificIssues() {
+      if (getBossKey() !== BOSS_KEYS.MOROGRIM) return [];
+      const pull = getPull();
+      if (!pull) return [];
+      const issues = [];
+      const tidalWaveHits = playersHitByMechanic(pull, /Tidal Wave/i, entry => entry.role !== 'Tank');
+      const murlocDeaths = (pull.deaths || []).filter(death => /Murloc|Water Globule|Earthquake/i.test(topDamageLabel(pull, death.player)));
+      const healerMurlocDeaths = murlocDeaths.filter(death => getPlayerRole(death.player) === 'Healer');
+      const wateryGraveVictims = playersHitByMechanic(pull, /Watery Grave/i);
+
+      if (tidalWaveHits.length > 0) {
+        issues.push({
+          title: 'Non-tanks are getting hit by Tidal Wave',
+          body: `${tidalWaveHits.length} non-tank player(s) were clipped by Morogrim's frontal cone. Everyone except the active tank should stay out of the boss's face.`,
+          severity: tidalWaveHits.length >= 3 ? 'critical' : 'warning'
+        });
+      }
+      if (murlocDeaths.length > 0) {
+        issues.push({
+          title: 'Earthquake / murloc waves are causing the wipe',
+          body: `${murlocDeaths.length} death(s) had murloc or Earthquake pressure as a top source${healerMurlocDeaths.length ? `, including ${healerMurlocDeaths.length} healer death(s)` : ''}. This is classic pickup/threat breakdown during murloc waves.`,
+          severity: healerMurlocDeaths.length > 0 ? 'critical' : 'warning'
+        });
+      }
+      if (wateryGraveVictims.length >= 4) {
+        issues.push({
+          title: 'Watery Grave healing response is under strain',
+          body: `${wateryGraveVictims.length} player(s) were hit by Watery Grave. Grave targets need instant HoTs/shields while the raid stabilizes for the next murloc wave.`,
+          severity: 'warning'
+        });
+      }
+      return issues;
+    }
+
+    function vashjSpecificIssues() {
+      if (getBossKey() !== BOSS_KEYS.VASHJ) return [];
+      const pull = getPull();
+      if (!pull) return [];
+      const issues = [];
+      const staticChargeHits = playersHitByMechanic(pull, /Static Charge/i);
+      const shockBlastDeaths = (pull.deaths || []).filter(death => /Shock Blast/i.test(topDamageLabel(pull, death.player)));
+      const toxicSporeHits = playersHitByMechanic(pull, /Toxic Spore/i);
+      const p2Deaths = (pull.deaths || []).filter(death => getPhaseLabel(death.relative_time) === 'P2');
+
+      if (staticChargeHits.length >= 3) {
+        issues.push({
+          title: 'Static Charge is chaining through the raid',
+          body: `${staticChargeHits.length} player(s) took Static Charge damage. Vashj requires 12-yard spread at all times unless you are intentionally stacking for assigned tasks.`,
+          severity: staticChargeHits.length >= 5 ? 'critical' : 'warning'
+        });
+      }
+      if (shockBlastDeaths.length > 0) {
+        issues.push({
+          title: 'Melee are dying to Shock Blast',
+          body: `${shockBlastDeaths.map(death => `${death.player} at ${death.relative_time.toFixed(0)}s`).join(', ')} died with Shock Blast as the leading damage source. Call the cast and evacuate immediately.`,
+          severity: 'critical'
+        });
+      }
+      if (!pull.kill && pull.duration_sec > 360 && p2Deaths.length >= 3) {
+        issues.push({
+          title: 'Phase 2 is dragging into add overflow',
+          body: `${p2Deaths.length} death(s) landed in the estimated P2 window and the pull lasted ${pull.duration_sec.toFixed(0)}s. Core handoffs and add control need to be faster before healers run dry.`,
+          severity: 'warning'
+        });
+      }
+      if (toxicSporeHits.length > 0) {
+        issues.push({
+          title: 'Spore Bat positioning is clipping the raid',
+          body: `${toxicSporeHits.length} player(s) took Toxic Spore damage. Kite bats cleanly around the outer ring in P3 so spores never cut through the raid stack.`,
+          severity: toxicSporeHits.length >= 4 ? 'warning' : 'info'
+        });
+      }
+      return issues;
+    }
+
+    function bossSpecificIssues() {
+      switch (getBossKey()) {
+        case BOSS_KEYS.KAEL: return kaelSpecificIssues();
+        case BOSS_KEYS.HYDROSS: return hydrossSpecificIssues();
+        case BOSS_KEYS.LURKER: return lurkerSpecificIssues();
+        case BOSS_KEYS.LEO: return leotherasSpecificIssues();
+        case BOSS_KEYS.KARATHRESS: return karathressSpecificIssues();
+        case BOSS_KEYS.MOROGRIM: return morogrimSpecificIssues();
+        case BOSS_KEYS.VASHJ: return vashjSpecificIssues();
+        default: return [];
+      }
+    }
+
     function generalIssues() {
       const pull = getPull();
       if (!pull) return [];
@@ -1093,15 +1442,37 @@
       return issues;
     }
 
+    function bossSpecificIssueSummary(player) {
+      const pull = getPull();
+      if (!pull) return '';
+      const bossKey = getBossKey();
+      if (bossKey === BOSS_KEYS.KAEL) {
+        const conflags = countByPlayer(getPull()?.conflagrations, 'target', player);
+        return conflags ? `${conflags} Conflag hit${conflags > 1 ? 's' : ''}` : '';
+      }
+      const summaries = {
+        [BOSS_KEYS.HYDROSS]: [/Water Tomb|Vile Sludge/i, 'Hydross mechanic hits'],
+        [BOSS_KEYS.LURKER]: [/Spout|Scalding Water/i, 'Lurker mechanic hits'],
+        [BOSS_KEYS.LEO]: [/Whirlwind|Inner Demon|Insidious Whisper/i, 'Leo mechanic hits'],
+        [BOSS_KEYS.KARATHRESS]: [/Cataclysmic Bolt|Spitfire Totem/i, 'Council mechanic hits'],
+        [BOSS_KEYS.MOROGRIM]: [/Tidal Wave|Watery Grave|Murloc|Earthquake/i, 'Morogrim mechanic hits'],
+        [BOSS_KEYS.VASHJ]: [/Static Charge|Shock Blast|Toxic Spore/i, 'Vashj mechanic hits']
+      };
+      const config = summaries[bossKey];
+      if (!config) return '';
+      const hits = countMechanicHitsForPlayer(pull, player, config[0]);
+      return hits ? `${hits} ${config[1]}` : '';
+    }
+
     function playerIssues(player, role) {
       const issues = [];
       const pull = getPull();
       if (!pull) return 'No data';
       const top = topDamageForPlayer(player);
       const deathCount = deathsForPlayer(player).length;
-      const conflags = countByPlayer(getPull()?.conflagrations, 'target', player);
+      const mechanicSummary = bossSpecificIssueSummary(player);
       if (deathCount) issues.push(`${deathCount} death${deathCount > 1 ? 's' : ''}`);
-      if (conflags) issues.push(`${conflags} Conflag hit${conflags > 1 ? 's' : ''}`);
+      if (mechanicSummary) issues.push(mechanicSummary);
       if (top) issues.push(`Most hits: ${top.label} (${top.count})`);
       if (role === 'Tank') {
         const mob = primaryTankMob(player);
@@ -1115,6 +1486,51 @@
         else if (canDispelMagic) issues.push('0 dispels');
       }
       return issues.length ? issues.join(' • ') : 'No obvious issues from recorded events.';
+    }
+
+    function addBossSpecificIndividualFindings({ findings, pull, player, role, playerClass, deaths, dispels, interrupts, dmgTaken, bossKey }) {
+      const hitCount = pattern => countMechanicHitsForPlayer(pull, player, pattern);
+      if (bossKey === BOSS_KEYS.HYDROSS) {
+        const tombHits = hitCount(/Water Tomb/i);
+        const sludgeHits = hitCount(/Vile Sludge/i);
+        if (tombHits > 0) findings.push({ title: `Hit by Water Tomb ${tombHits} time(s)`, body: 'Hydross punishes spread failures hard. Keep 10+ yards from other players during swaps so a single tomb does not remove multiple healers or ranged from the fight.', severity: 'warning' });
+        if (sludgeHits > 0 && role !== 'Tank') findings.push({ title: `Vile Sludge uptime on you (${sludgeHits} hit(s))`, body: ['Priest', 'Paladin'].includes(playerClass) ? 'You can help the raid here: call your own Sludge and cleanse teammates quickly after Water Tombs.' : 'Call Vile Sludge immediately so dispellers can cleanse you before the next transition.', severity: 'warning' });
+      }
+      if (bossKey === BOSS_KEYS.LURKER) {
+        const spoutHits = hitCount(/Spout/i);
+        const waterHits = hitCount(/Scalding Water|Geyser/i);
+        if (spoutHits > 0) findings.push({ title: `Hit by Spout ${spoutHits} time(s)`, body: 'Spout is a personal awareness mechanic. Pre-move as soon as the cast begins and rotate with the beam instead of trying to finish casts.', severity: 'critical' });
+        if (waterHits > 0) findings.push({ title: `Took ${waterHits} water damage hit(s)`, body: 'The water is not safe during submerge cycles. Get onto the platform and be ready for adds before Water Bolts or Scalding Water stack up.', severity: 'warning' });
+      }
+      if (bossKey === BOSS_KEYS.LEO) {
+        const whirlwindHits = hitCount(/Whirlwind/i);
+        const demonHits = hitCount(/Inner Demon|Insidious Whisper/i);
+        if (whirlwindHits > 0 && role !== 'Tank') findings.push({ title: `Stayed in Whirlwind (${whirlwindHits} hit(s))`, body: 'Melee must disengage the instant Whirlwind starts. Treat it like hard downtime — staying in is never worth the damage.', severity: 'critical' });
+        if (demonHits > 0) findings.push({ title: 'Inner Demon pressure detected', body: 'You took Inner Demon / Insidious Whisper damage. Save cooldowns and swap instantly to your demon so you do not feed a Mind Control.', severity: 'warning' });
+      }
+      if (bossKey === BOSS_KEYS.KARATHRESS) {
+        const boltHits = hitCount(/Cataclysmic Bolt/i);
+        const spitfireHits = hitCount(/Spitfire Totem/i);
+        if (boltHits > 0 && role === 'Tank') findings.push({ title: `Cataclysmic Bolt hit you ${boltHits} time(s)`, body: 'Keep yourself topped before each bolt. Call externals early when you dip below 50% — Karathress bolts are designed to punish low-health tanks.', severity: 'critical' });
+        if (interrupts === 0 && ['Rogue', 'Shaman', 'Mage', 'Warrior'].includes(playerClass) && role !== 'Healer') findings.push({ title: 'No council interrupts recorded', body: 'Karathress wipes often start with a free Healing Wave. If you can kick, you should be in the interrupt rotation on council targets.', severity: 'warning' });
+        if (spitfireHits > 0) findings.push({ title: `Spitfire Totem hit you ${spitfireHits} time(s)`, body: 'Swap to Spitfire Totem instantly. Every extra cast means the totem lived too long and ranged swaps were slow.', severity: 'warning' });
+      }
+      if (bossKey === BOSS_KEYS.MOROGRIM) {
+        const tidalHits = hitCount(/Tidal Wave/i);
+        const graveHits = hitCount(/Watery Grave/i);
+        const murlocHits = hitCount(/Murloc|Earthquake|Water Globule/i);
+        if (tidalHits > 0 && role !== 'Tank') findings.push({ title: `Hit by Tidal Wave ${tidalHits} time(s)`, body: 'Morogrim only wants his tank in front. Stand behind or to the side at all times — frontal hits are fully avoidable.', severity: 'critical' });
+        if (graveHits > 0) findings.push({ title: 'Watery Grave target', body: role === 'Healer' ? 'Call when you are graved so your assignment is covered immediately.' : 'Use personals and healthstones the moment you are graved if murlocs are about to spawn.', severity: 'info' });
+        if (murlocHits > 0 && role === 'Healer') findings.push({ title: `Murloc pressure reached you (${murlocHits} hit(s))`, body: 'This usually means pickup failed or healing threat spiked. Drop threat early and move toward the designated slow/AoE stack point during Earthquake.', severity: 'warning' });
+      }
+      if (bossKey === BOSS_KEYS.VASHJ) {
+        const staticHits = hitCount(/Static Charge/i);
+        const shockHits = hitCount(/Shock Blast/i);
+        const sporeHits = hitCount(/Toxic Spore/i);
+        if (staticHits > 0) findings.push({ title: `Static Charge chained to you ${staticHits} time(s)`, body: 'Stay 12+ yards from other players unless you are in a planned core handoff. Static Charge spreading is pure positioning discipline.', severity: staticHits > 2 ? 'critical' : 'warning' });
+        if (shockHits > 0 && role !== 'Healer') findings.push({ title: `Shock Blast hit you ${shockHits} time(s)`, body: 'Shock Blast is the melee check on Vashj. When she starts it, get out immediately and let ranged finish the window.', severity: 'critical' });
+        if (sporeHits > 0) findings.push({ title: `Toxic Spore clipped you ${sporeHits} time(s)`, body: 'Watch the bat kite path and never let spores cut through your lane. P3 is won by clean movement, not greed.', severity: 'warning' });
+      }
     }
 
     function individualAnalysis(player) {
@@ -1131,7 +1547,8 @@
       const heals = Number(pull.heals_by_player?.[player] || 0);
       const casts = Number(pull.casts_by_player?.[player] || 0);
       const dmgTaken = safeEntries(pull.player_damage_taken?.[player] || {}).sort((a,b) => b[1] - a[1]);
-      const isKael = /Kael'thas/i.test(state.boss);
+      const bossKey = getBossKey();
+      const isKael = bossKey === BOSS_KEYS.KAEL;
 
       // --- DEATH ANALYSIS (class/role-aware with attribution) ---
       if (deaths.length > 0) {
@@ -1768,6 +2185,8 @@
         }
       }
 
+      addBossSpecificIndividualFindings({ findings, pull, player, role, playerClass, deaths, dispels, interrupts, dmgTaken, bossKey });
+
       // --- CAST GAP ANALYSIS (class-aware: skip for melee who don't "cast") ---
       const isMeleeDPS = role === 'DPS' && ['Warrior', 'Rogue'].includes(playerClass);
       const isFeral = playerClass === 'Druid' && role === 'DPS';
@@ -2154,7 +2573,7 @@
     function renderSummary() {
       const pull = getPull();
       if (!pull) return '<div class="card empty">No pull data available.</div>';
-      const issues = [...kaelSpecificIssues(), ...generalIssues()];
+      const issues = [...bossSpecificIssues(), ...generalIssues()];
       const topSources = aggregateDamageSources(pull).slice(0, 8);
 
       return `
@@ -2900,11 +3319,10 @@
     function renderWipeCauseChain() {
       const pull = getPull();
       if (!pull || pull.kill) return '';
-      const isKael = /Kael/i.test(state.boss);
       const deaths = [...(pull.deaths || [])].sort((a, b) => (a.relative_time || 0) - (b.relative_time || 0));
       if (deaths.length === 0) return '';
+      const bossKey = getBossKey();
 
-      // Find cascade start: first cluster of 2+ deaths within 10 seconds
       let cascadeStart = deaths[deaths.length - 1].relative_time;
       for (let i = 0; i < deaths.length - 1; i++) {
         if (deaths[i + 1].relative_time - deaths[i].relative_time < 10) {
@@ -2913,65 +3331,80 @@
         }
       }
 
-      // Look back 30-45s from cascade start for trigger events
       const windowStart = Math.max(0, cascadeStart - 45);
       const events = [];
+      const pushEvent = (time, type, text, severity) => {
+        events.push({ time: Math.max(windowStart, time), type, text, severity });
+      };
 
-      // Conflagration events (uninterruptible — caused by positioning failure)
-      if (isKael) {
+      if (bossKey === BOSS_KEYS.KAEL) {
         const conflags = (pull.conflagrations || []).filter(c => c.relative_time >= windowStart && c.relative_time <= cascadeStart + 15);
-
-        conflags.forEach(conflag => {
-          events.push({
-            time: conflag.relative_time,
-            type: 'trigger',
-            text: `Conflagration hits ${conflag.target} (uninterruptible — positioning is only counter)`,
-            severity: 'warning'
-          });
+        conflags.forEach(conflag => pushEvent(conflag.relative_time, 'trigger', `Conflagration hits ${conflag.target} (uninterruptible — positioning is only counter)`, 'warning'));
+        groupTimedTargets(conflags).forEach(group => {
+          if (group.targets.length >= 3) pushEvent(group.time, 'escalation', `Conflagration spreads to ${group.targets.length} players`, 'critical');
         });
-
-        // Conflag spread (multiple people hit within 2s)
-        const conflagTimes = conflags.map(c => c.relative_time);
-        for (let i = 0; i < conflagTimes.length; i++) {
-          const cluster = conflags.filter(c => Math.abs(c.relative_time - conflagTimes[i]) < 2);
-          if (cluster.length >= 3) {
-            events.push({
-              time: conflagTimes[i],
-              type: 'escalation',
-              text: `Conflagration hits ${cluster.length} players (too many within 30 yards of Capernian)`,
-              severity: 'critical'
-            });
-            break;
-          }
-        }
       }
 
-      // Deaths within the window (role-aware significance)
-      deaths.filter(d => d.relative_time >= windowStart).forEach(death => {
+      if (bossKey === BOSS_KEYS.HYDROSS) {
+        const transitionDeaths = deaths.filter(death => death.relative_time >= windowStart && /Mark of Hydross|Mark of Corruption|Hydross|Corruption|Spawn of Hydross/i.test(topDamageLabel(pull, death.player)));
+        const sludgePlayers = playersHitByMechanic(pull, /Vile Sludge/i);
+        if (transitionDeaths.length) pushEvent(transitionDeaths[0].relative_time - 2, 'trigger', 'Transition damage spikes before the wipe starts', transitionDeaths.some(death => getPlayerRole(death.player) === 'Tank') ? 'critical' : 'warning');
+        if (sludgePlayers.length && (pull.dispels || []).length < sludgePlayers.length) pushEvent(cascadeStart - 4, 'escalation', 'Vile Sludge dispels lag behind incoming debuffs', 'warning');
+      }
+
+      if (bossKey === BOSS_KEYS.LURKER) {
+        const spoutDeaths = deaths.filter(death => death.relative_time >= windowStart && countMechanicHitsForPlayer(pull, death.player, /Spout/i) > 0);
+        const submergeDeaths = deaths.filter(death => death.relative_time >= windowStart && (isLurkerSubmergeTime(death.relative_time) || countMechanicHitsForPlayer(pull, death.player, /Scalding Water|Geyser/i) > 0));
+        if (spoutDeaths.length) pushEvent(spoutDeaths[0].relative_time - 1, 'trigger', `Spout clips ${spoutDeaths.map(death => death.player).join(', ')}`, 'critical');
+        if (submergeDeaths.length) pushEvent(submergeDeaths[0].relative_time - 1, 'escalation', 'Deaths continue during submerge/water pressure', 'warning');
+      }
+
+      if (bossKey === BOSS_KEYS.LEO) {
+        const whirlwindDeaths = deaths.filter(death => death.relative_time >= windowStart && countMechanicHitsForPlayer(pull, death.player, /Whirlwind/i) > 0 && getPlayerRole(death.player) !== 'Tank');
+        const demonFailures = deaths.filter(death => death.relative_time >= windowStart && countMechanicHitsForPlayer(pull, death.player, /Inner Demon|Insidious Whisper/i) > 0);
+        if (whirlwindDeaths.length) pushEvent(whirlwindDeaths[0].relative_time - 1, 'trigger', 'Melee are dying inside Whirlwind', 'critical');
+        if (demonFailures.length) pushEvent(demonFailures[0].relative_time - 1, 'escalation', 'Inner Demon failures add MC pressure to the collapse', 'warning');
+      }
+
+      if (bossKey === BOSS_KEYS.KARATHRESS) {
+        const councilInterrupts = (pull.interrupts || []).filter(entry => entry.relative_time >= windowStart && /Karathress|Tidalvess|Caribdis|Sharkkis/i.test(entry.target || ''));
+        const boltTankDeaths = deaths.filter(death => death.relative_time >= windowStart && getPlayerRole(death.player) === 'Tank' && countMechanicHitsForPlayer(pull, death.player, /Cataclysmic Bolt/i) > 0);
+        if (councilInterrupts.length === 0 && pull.duration_sec > 90) pushEvent(cascadeStart - 6, 'trigger', 'No council interrupts recorded before the wipe', 'critical');
+        if (boltTankDeaths.length) pushEvent(boltTankDeaths[0].relative_time - 1, 'escalation', 'Karathress tank drops to Cataclysmic Bolt damage', 'critical');
+      }
+
+      if (bossKey === BOSS_KEYS.MOROGRIM) {
+        const tidalDeaths = deaths.filter(death => death.relative_time >= windowStart && countMechanicHitsForPlayer(pull, death.player, /Tidal Wave/i) > 0 && getPlayerRole(death.player) !== 'Tank');
+        const murlocDeaths = deaths.filter(death => death.relative_time >= windowStart && countMechanicHitsForPlayer(pull, death.player, /Murloc|Earthquake|Water Globule/i) > 0);
+        if (tidalDeaths.length) pushEvent(tidalDeaths[0].relative_time - 1, 'trigger', 'A non-tank gets clipped by Tidal Wave', 'warning');
+        if (murlocDeaths.length) pushEvent(murlocDeaths[0].relative_time - 1, 'escalation', 'Earthquake / murloc pressure takes over the raid', 'critical');
+      }
+
+      if (bossKey === BOSS_KEYS.VASHJ) {
+        const staticDeaths = deaths.filter(death => death.relative_time >= windowStart && countMechanicHitsForPlayer(pull, death.player, /Static Charge/i) > 0);
+        const shockDeaths = deaths.filter(death => death.relative_time >= windowStart && countMechanicHitsForPlayer(pull, death.player, /Shock Blast/i) > 0);
+        if (staticDeaths.length) pushEvent(staticDeaths[0].relative_time - 1, 'trigger', 'Static Charge chains through nearby players', 'critical');
+        if (shockDeaths.length) pushEvent(shockDeaths[0].relative_time - 1, 'escalation', 'Melee stay in for Shock Blast and collapse the healing plan', 'critical');
+        if (!pull.kill && pull.duration_sec > 360) pushEvent(cascadeStart - 8, 'trigger', 'Estimated P2 ran long, so add pressure snowballed', 'warning');
+      }
+
+      deaths.filter(death => death.relative_time >= windowStart).forEach(death => {
         const role = getPlayerRole(death.player);
-        const significance = role === 'Healer' ? 'critical' : role === 'Tank' ? 'critical' : 'warning';
-        const impact = role === 'Healer' ? ' — healing capacity reduced, remaining healers stressed'
-          : role === 'Tank' ? ' — mob goes loose, hits random targets'
+        const impact = role === 'Healer' ? ' — healing capacity reduced'
+          : role === 'Tank' ? ' — mobs or boss pressure go loose'
           : '';
-        events.push({
-          time: death.relative_time,
-          type: 'death',
-          text: `${death.player} (${role}) dies${impact}`,
-          severity: significance
-        });
+        pushEvent(death.relative_time, 'death', `${death.player} (${role}) dies${impact}`, role === 'DPS' ? 'warning' : 'critical');
       });
 
-      // Sort by time
       events.sort((a, b) => a.time - b.time);
 
-      // Determine probable root cause
       let rootCause = 'Unknown — insufficient evidence';
       let confidence = 'Low';
-      const triggers = events.filter(e => e.type === 'trigger');
-      const healerDeaths = deaths.filter(d => getPlayerRole(d.player) === 'Healer' && d.relative_time <= cascadeStart + 5);
-      const tankDeaths = deaths.filter(d => getPlayerRole(d.player) === 'Tank' && d.relative_time <= cascadeStart + 5);
+      const healerDeaths = deaths.filter(death => getPlayerRole(death.player) === 'Healer' && death.relative_time <= cascadeStart + 5);
+      const tankDeaths = deaths.filter(death => getPlayerRole(death.player) === 'Tank' && death.relative_time <= cascadeStart + 5);
 
-      if (isKael) {
+      if (bossKey === BOSS_KEYS.KAEL) {
+        const triggers = events.filter(event => event.type === 'trigger');
         if (triggers.length > 2 && healerDeaths.length > 0) {
           rootCause = 'Conflagration spread (positioning failure) → healer death → healing collapse';
           confidence = 'High';
@@ -2984,9 +3417,57 @@
         } else if (healerDeaths.length > 0) {
           rootCause = 'Healer death early in the chain — remaining healers could not sustain';
           confidence = 'Medium';
-        } else if (deaths.length > 5) {
-          rootCause = 'Sustained damage exceeded healing capacity — likely a combination of mechanics';
-          confidence = 'Low';
+        }
+      } else if (bossKey === BOSS_KEYS.HYDROSS) {
+        if (tankDeaths.some(death => countMechanicHitsForPlayer(pull, death.player, /Mark of Hydross|Mark of Corruption|Hydross|Corruption/i) > 0)) {
+          rootCause = 'Late Hydross transition → tank dies under mark pressure → swap collapses';
+          confidence = 'High';
+        } else if (playersHitByMechanic(pull, /Vile Sludge/i).length > 0 && (pull.dispels || []).length < playersHitByMechanic(pull, /Vile Sludge/i).length) {
+          rootCause = 'Vile Sludge cleanses lagged and raid damage carried into the next transition';
+          confidence = 'Medium';
+        }
+      } else if (bossKey === BOSS_KEYS.LURKER) {
+        if (deaths.some(death => countMechanicHitsForPlayer(pull, death.player, /Spout/i) > 0)) {
+          rootCause = 'Players were hit by Spout — avoidable deaths started the cascade';
+          confidence = 'High';
+        } else if (deaths.some(death => isLurkerSubmergeTime(death.relative_time) || countMechanicHitsForPlayer(pull, death.player, /Scalding Water|Geyser/i) > 0)) {
+          rootCause = 'Submerge / water positioning failed and the raid bled out during add pressure';
+          confidence = 'Medium';
+        }
+      } else if (bossKey === BOSS_KEYS.LEO) {
+        if (deaths.some(death => countMechanicHitsForPlayer(pull, death.player, /Whirlwind/i) > 0 && getPlayerRole(death.player) !== 'Tank')) {
+          rootCause = 'Melee stayed in Whirlwind and forced a fast collapse';
+          confidence = 'High';
+        } else if (deaths.some(death => countMechanicHitsForPlayer(pull, death.player, /Inner Demon|Insidious Whisper/i) > 0)) {
+          rootCause = 'Inner Demon failures created MC/raid damage pressure the healers could not stabilize';
+          confidence = 'Medium';
+        }
+      } else if (bossKey === BOSS_KEYS.KARATHRESS) {
+        if (tankDeaths.some(death => countMechanicHitsForPlayer(pull, death.player, /Cataclysmic Bolt/i) > 0)) {
+          rootCause = 'Karathress tank fell below 50% and died to Cataclysmic Bolt';
+          confidence = 'High';
+        } else if ((pull.interrupts || []).filter(entry => /Karathress|Tidalvess|Caribdis|Sharkkis/i.test(entry.target || '')).length === 0) {
+          rootCause = 'Missed Healing Wave interrupts extended the fight until healing fell behind';
+          confidence = 'Medium';
+        }
+      } else if (bossKey === BOSS_KEYS.MOROGRIM) {
+        if (healerDeaths.some(death => countMechanicHitsForPlayer(pull, death.player, /Murloc|Earthquake|Water Globule/i) > 0)) {
+          rootCause = 'Murloc wave reached healers after Earthquake and the raid lost control';
+          confidence = 'High';
+        } else if (deaths.some(death => countMechanicHitsForPlayer(pull, death.player, /Tidal Wave/i) > 0 && getPlayerRole(death.player) !== 'Tank')) {
+          rootCause = 'Avoidable Tidal Wave hits started the death chain before murloc recovery';
+          confidence = 'Medium';
+        }
+      } else if (bossKey === BOSS_KEYS.VASHJ) {
+        if (deaths.some(death => countMechanicHitsForPlayer(pull, death.player, /Static Charge/i) > 0)) {
+          rootCause = 'Static Charge spread through nearby players and overwhelmed raid healing';
+          confidence = 'High';
+        } else if (deaths.some(death => countMechanicHitsForPlayer(pull, death.player, /Shock Blast/i) > 0)) {
+          rootCause = 'Shock Blast killed melee during a key damage window';
+          confidence = 'High';
+        } else if (!pull.kill && pull.duration_sec > 360) {
+          rootCause = 'Phase 2 add control/core handoffs took too long, leading to add overflow';
+          confidence = 'Medium';
         }
       }
 
@@ -3000,10 +3481,10 @@
           <div style="margin-top:12px;">
             <h4 style="font-size:0.85rem;color:var(--muted);margin-bottom:8px;">Event Timeline (${windowStart.toFixed(0)}s – end)</h4>
             <div style="border-left:2px solid var(--border);padding-left:14px;">
-              ${events.slice(0, 15).map(e => `
+              ${events.slice(0, 15).map(event => `
                 <div style="margin-bottom:6px;font-size:0.82rem;">
-                  <span style="color:${e.severity === 'critical' ? '#ff6b6b' : e.severity === 'warning' ? '#ffd166' : '#57a6ff'};font-weight:600;">${e.time.toFixed(1)}s</span>
-                  <span style="margin-left:8px;color:${e.type === 'trigger' ? '#ff6b6b' : e.type === 'death' ? '#ffd166' : 'var(--muted)'};">${escapeHtml(e.text)}</span>
+                  <span style="color:${event.severity === 'critical' ? '#ff6b6b' : event.severity === 'warning' ? '#ffd166' : '#57a6ff'};font-weight:600;">${event.time.toFixed(1)}s</span>
+                  <span style="margin-left:8px;color:${event.type === 'trigger' ? '#ff6b6b' : event.type === 'death' ? '#ffd166' : 'var(--muted)'};">${escapeHtml(event.text)}</span>
                 </div>
               `).join('')}
             </div>
@@ -3013,6 +3494,7 @@
     }
 
     function renderConsumableAudit() {
+
       return '';
     }
 
@@ -3109,46 +3591,41 @@
       const bossData = state.report?.bosses?.[state.boss];
       if (!bossData) return '<div class="card empty">No data available.</div>';
       const pulls = bossData.pulls || [];
-      const isKael = /Kael/i.test(state.boss);
+      const bossKey = getBossKey(state.boss);
+      const isKael = bossKey === BOSS_KEYS.KAEL;
       const actionItems = [];
 
-      // Aggregate data across all pulls
       const allInterrupts = [];
       const allConflags = [];
       const allDeaths = [];
       const playerInterrupts = {};
       const playerConflags = {};
-      const playerDeaths = {};
 
       pulls.forEach((pull, pullIdx) => {
-        (pull.interrupts || []).forEach(i => {
-          allInterrupts.push(i);
-          playerInterrupts[i.source] = (playerInterrupts[i.source] || 0) + 1;
+        (pull.interrupts || []).forEach(entry => {
+          allInterrupts.push(entry);
+          playerInterrupts[entry.source] = (playerInterrupts[entry.source] || 0) + 1;
         });
-        (pull.conflagrations || []).forEach(c => {
-          allConflags.push(c);
-          playerConflags[c.target] = (playerConflags[c.target] || 0) + 1;
+        (pull.conflagrations || []).forEach(entry => {
+          allConflags.push(entry);
+          playerConflags[entry.target] = (playerConflags[entry.target] || 0) + 1;
         });
-        (pull.deaths || []).forEach(d => {
-          allDeaths.push({ ...d, pullNum: pullIdx + 1 });
-          playerDeaths[d.player] = (playerDeaths[d.player] || 0) + 1;
+        (pull.deaths || []).forEach(entry => {
+          allDeaths.push({ ...entry, pullNum: pullIdx + 1, topDamage: topDamageLabel(pull, entry.player) });
         });
       });
 
-      const avgInterruptsPerPull = allInterrupts.length / Math.max(pulls.length, 1);
       const avgConflagsPerPull = allConflags.length / Math.max(pulls.length, 1);
-
-      // Find who CAN interrupt (exclude healers - they need to focus on healing)
       const allPlayers = getAllPlayers();
       const interruptCapable = Object.entries(allPlayers)
-        .filter(([name, meta]) => ['Rogue', 'Shaman', 'Mage', 'Warrior'].includes(meta.class) && meta.role !== 'Healer')
+        .filter(([, meta]) => ['Rogue', 'Shaman', 'Mage', 'Warrior'].includes(meta.class) && meta.role !== 'Healer')
         .map(([name, meta]) => ({
           name,
           class: meta.class,
           role: meta.role,
           interrupts: playerInterrupts[name] || 0,
           ability: meta.class === 'Rogue' ? 'Kick (10s CD)' :
-                   meta.class === 'Shaman' ? 'Earth Shock (6s CD, costs mana)' :
+                   meta.class === 'Shaman' ? 'Earth Shock (6s CD)' :
                    meta.class === 'Mage' ? 'Counterspell (24s CD, 8s lockout)' :
                    'Pummel (10s CD, Berserker Stance)'
         }))
@@ -3157,13 +3634,42 @@
           return (priority[a.class] || 9) - (priority[b.class] || 9);
         });
 
-      // --- ACTION ITEM #1: CAPERNIAN POSITIONING (not interrupts) ---
+      const aggregateMechanic = (pattern, predicate = () => true) => {
+        const totals = {};
+        let totalHits = 0;
+        pulls.forEach(pull => {
+          playersHitByMechanic(pull, pattern, predicate).forEach(entry => {
+            totals[entry.player] = (totals[entry.player] || 0) + entry.hits;
+            totalHits += entry.hits;
+          });
+        });
+        return {
+          totalHits,
+          totals,
+          worst: Object.entries(totals).sort((a, b) => b[1] - a[1]).slice(0, 5)
+        };
+      };
+
+      const aggregateDeathsBy = matcher => allDeaths.filter(death => matcher(death));
+      const totalDispels = pulls.reduce((sum, pull) => sum + (pull.dispels || []).length, 0);
+      const healerDeaths = allDeaths.filter(death => getPlayerRole(death.player) === 'Healer');
+      if (healerDeaths.length > pulls.length) {
+        const healerDeathNames = {};
+        healerDeaths.forEach(death => { healerDeathNames[death.player] = (healerDeathNames[death.player] || 0) + 1; });
+        const worstHealer = Object.entries(healerDeathNames).sort((a, b) => b[1] - a[1])[0];
+        actionItems.push({
+          severity: 'critical',
+          priority: 90,
+          title: 'Healers are dying too often',
+          description: `${healerDeaths.length} healer deaths across ${pulls.length} pulls. ${worstHealer ? worstHealer[0] + ' died ' + worstHealer[1] + ' times.' : ''} Every healer death cascades — the remaining healers cannot sustain the raid.`,
+          who: 'Healers + anyone assigned to peel for them',
+          fix: 'Keep healers at max effective range, use personals early, and have tanks or control classes immediately pick up anything that leaves the plan.'
+        });
+      }
+
       if (isKael && avgConflagsPerPull > 3) {
         const worstTargets = Object.entries(playerConflags).sort((a, b) => b[1] - a[1]).slice(0, 5);
-        // Check if the Warlock tank is getting most of them (expected) vs other players
-        const warlockHits = playerConflags['Kamiguruu-Dreamscythe-US'] || playerConflags['Kamiguruu'] || 0;
-        const otherHits = Object.entries(playerConflags).filter(([name]) => !/Kamiguruu/i.test(name)).reduce((s, [,c]) => s + c, 0);
-
+        const otherHits = Object.entries(playerConflags).filter(([name]) => !/Kamiguruu/i.test(name)).reduce((sum, [, count]) => sum + count, 0);
         if (otherHits > pulls.length * 2) {
           actionItems.push({
             severity: 'critical',
@@ -3171,163 +3677,149 @@
             title: 'Fix positioning: too many players within 30 yards of Capernian',
             description: `Averaging ${avgConflagsPerPull.toFixed(0)} Conflagrations per pull. Players other than the Warlock tank are being hit ${otherHits} times total. Most hit: ${worstTargets.map(([name, count]) => name + ' (' + count + 'x)').join(', ')}.`,
             who: 'Everyone except Kamiguruu (Warlock ranged-tank)',
-            fix: 'Per guide strategy: ONLY Kamiguruu (Warlock) should be within 30 yards of Capernian (at 31-35 yards to avoid Conflag while maintaining Fireball range for threat). ALL other players must stay >30 yards from Capernian at all times. Conflag is uninterruptible and undispellable — positioning is the only counter. If you are getting hit, you are too close.'
+            fix: 'ONLY the Warlock ranged-tank should be within 30 yards of Capernian. Everyone else stays >30 yards away at all times.'
           });
         }
-      }
-
-      // --- ACTION ITEM #2: KAEL PHASE 4 INTERRUPTS ---
-      if (isKael) {
         actionItems.push({
           severity: 'warning',
           priority: 2,
           title: 'Assign Phase 4 Kael interrupt rotation',
-          description: `Kael's Fireballs target random raid members and are interruptible. After Shock Barrier breaks, Pyroblast must be interrupted immediately or use Phaseshift Bulwark to absorb. Assign 2-3 interrupters for Phase 4.`,
-          who: `Assign: ${interruptCapable.slice(0, 3).map(p => p.name + ' (' + p.class + ')').join(', ')}`,
-          fix: 'In Phase 4: Counterspell Kael\'s first Fireball immediately. Assign Rogues/Warriors to interrupt Pyroblast after Shock Barrier breaks. Mage Counterspell is strongest (8s lockout on Fire school). Reminder: do NOT waste interrupts on Capernian — she is handled by Warlock positioning.'
+          description: `Kael's Fireballs target random raid members and Pyroblast must be stopped after Shock Barrier breaks. Assign 2-3 interrupters for Phase 4.`,
+          who: `Assign: ${interruptCapable.slice(0, 3).map(player => player.name + ' (' + player.class + ')').join(', ')}`,
+          fix: 'Counterspell Kael\'s first Fireball, then rotate Kick/Pummel/Earth Shock. After Shock Barrier breaks, the first available interrupter stops Pyroblast immediately.'
         });
-      }
-
-      // --- ACTION ITEM #3: PHASE 2 COSMIC INFUSER INTERRUPTS ---
-      if (isKael) {
         actionItems.push({
           severity: 'info',
           priority: 4,
           title: 'Interrupt Cosmic Infuser Heal in Phase 2',
-          description: 'The Cosmic Infuser weapon casts Heal on other weapons. Assign 1-2 melee interrupters to kick its Heal casts during the weapon phase.',
+          description: 'The Cosmic Infuser weapon casts Heal on other weapons. Assign 1-2 melee interrupters to kick it during the weapon phase.',
           who: 'Any melee near Cosmic Infuser',
-          fix: 'Have a tank or melee DPS interrupt the Cosmic Infuser\'s Heal cast (2.5s cast time). This speeds up the weapon phase significantly.'
+          fix: 'Treat Cosmic Infuser as a mini-priority target: interrupt every Heal and burn it early so P2 ends quickly.'
         });
-      }
 
-      // --- ACTION ITEM #3: HEALER DEATHS ---
-      const healerDeaths = allDeaths.filter(d => getPlayerRole(d.player) === 'Healer');
-      if (healerDeaths.length > pulls.length) {
-        const healerDeathNames = {};
-        healerDeaths.forEach(d => { healerDeathNames[d.player] = (healerDeathNames[d.player] || 0) + 1; });
-        const worstHealer = Object.entries(healerDeathNames).sort((a, b) => b[1] - a[1])[0];
-        actionItems.push({
-          severity: 'critical',
-          priority: 3,
-          title: 'Healers are dying too often',
-          description: `${healerDeaths.length} healer deaths across ${pulls.length} pulls. ${worstHealer ? worstHealer[0] + ' died ' + worstHealer[1] + ' times.' : ''} Every healer death cascades — the remaining healers can\'t sustain the raid.`,
-          who: 'Healers + anyone assigned to protect them',
-          fix: 'Healers must stay at MAX range (30-40 yards). If a healer gets aggro on a loose add, tanks must pick it up immediately. Healers should use defensives proactively (Fade, Barkskin, etc.).'
-        });
-      }
-
-      // --- ACTION ITEM #4: TANK DEATHS IN P3 ---
-      if (isKael) {
-        const tankDeathsP3 = allDeaths.filter(d => {
-          if (getPlayerRole(d.player) !== 'Tank') return false;
-          const pull = pulls.find((_, i) => i === (d.pullNum - 1));
+        const tankDeathsP3 = allDeaths.filter(death => {
+          if (getPlayerRole(death.player) !== 'Tank') return false;
+          const pull = pulls[death.pullNum - 1];
           if (!pull) return false;
-          const advisorDeaths = (pull.creature_deaths || []).filter(c =>
-            ['Thaladred the Darkener', 'Lord Sanguinar', 'Grand Astromancer Capernian', 'Master Engineer Telonicus'].includes(c.name)
-          );
+          const advisorDeaths = (pull.creature_deaths || []).filter(entry => ['Thaladred the Darkener', 'Lord Sanguinar', 'Grand Astromancer Capernian', 'Master Engineer Telonicus'].includes(entry.name));
           const p1End = advisorDeaths.length >= 4 ? advisorDeaths[3].relative_time : null;
-          return p1End && d.relative_time > p1End + 60;
+          return p1End && death.relative_time > p1End + 60;
         });
         if (tankDeathsP3.length > 1) {
           actionItems.push({
             severity: 'critical',
-            priority: 4,
+            priority: 5,
             title: 'Tanks are dying in Phase 3',
             description: `${tankDeathsP3.length} tank deaths after P1 across all pulls. When a tank dies in P3, their advisor goes loose and kills healers.`,
-            who: 'Tanks + healer assignments on each tank',
-            fix: 'Pre-assign healer pairs to each P3 tank. Tanks must use defensive CDs immediately when advisors revive (Shield Wall, Barkskin, etc.). Consider having a Paladin use BoP on a tank taking too much initial burst.'
+            who: 'Tanks + assigned healer pairs',
+            fix: 'Pre-assign healers per advisor tank and front-load defensives when the advisors revive.'
           });
         }
+      } else if (bossKey === BOSS_KEYS.HYDROSS) {
+        const tombData = aggregateMechanic(/Water Tomb/i);
+        const sludgeData = aggregateMechanic(/Vile Sludge/i);
+        const transitionDeaths = aggregateDeathsBy(death => /Mark of Hydross|Mark of Corruption|Hydross|Corruption|Spawn of Hydross/i.test(death.topDamage || ''));
+        if (tombData.totalHits > pulls.length * 2) actionItems.push({ severity: 'critical', priority: 1, title: 'Spread wider for Water Tomb', description: `${tombData.totalHits} Water Tomb hit(s) across ${pulls.length} pulls. Most clipped: ${tombData.worst.map(([name, count]) => `${name} (${count})`).join(', ') || 'multiple players'}.`, who: 'Entire raid', fix: 'Hold 10+ yards spacing before and during swaps so a single Water Tomb never removes multiple players from the fight.' });
+        if (sludgeData.totalHits > 0) actionItems.push({ severity: totalDispels < sludgeData.totalHits ? 'warning' : 'info', priority: 2, title: 'Cleanse Vile Sludge faster', description: `${sludgeData.totalHits} Vile Sludge hit(s) landed across the raid; only ${totalDispels} dispel(s) were recorded.`, who: 'Priests / Paladins + players calling their debuff', fix: 'Assign a cleanse order. Sludge targets should call immediately, and dispellers should clear it before the next swap damage ramps.' });
+        if (transitionDeaths.length > 0) actionItems.push({ severity: 'critical', priority: 3, title: 'Stabilize transition windows', description: `${transitionDeaths.length} death(s) had Hydross/Corruption mark or swap damage as the primary source.`, who: 'Tanks, healers, and add pickups', fix: 'Swap earlier, keep resist tanks topped before each transition, and have add pickups pre-positioned so DoT damage never overlaps with loose adds.' });
+      } else if (bossKey === BOSS_KEYS.LURKER) {
+        const spoutData = aggregateMechanic(/Spout/i, entry => entry.role !== 'Tank');
+        const submergeDeaths = aggregateDeathsBy(death => isLurkerSubmergeTime(death.relative_time) || /Scalding Water|Geyser/i.test(death.topDamage || ''));
+        const boltTankDeaths = aggregateDeathsBy(death => getPlayerRole(death.player) === 'Tank' && /Water Bolt/i.test(death.topDamage || ''));
+        if (spoutData.totalHits > 0) actionItems.push({ severity: 'critical', priority: 1, title: 'Stop dying to Spout', description: `${spoutData.totalHits} avoidable Spout hit(s) across the pull set. Most hit: ${spoutData.worst.map(([name, count]) => `${name} (${count})`).join(', ') || 'multiple players'}.`, who: 'Anyone on the platform', fix: 'Call the Spout cast, move early, and rotate with the beam instead of greed-casting.' });
+        if (submergeDeaths.length > 0) actionItems.push({ severity: 'warning', priority: 2, title: 'Handle submerge transitions cleaner', description: `${submergeDeaths.length} death(s) occurred in submerge windows or to Scalding Water/Geyser damage.`, who: 'Entire raid', fix: 'Get out of the water immediately on submerge, regroup on the platform, and have add assignments ready before Water Bolts start stacking.' });
+        if (boltTankDeaths.length > 0) actionItems.push({ severity: 'critical', priority: 3, title: 'Reconnect the tank after Whirl', description: `${boltTankDeaths.length} tank death(s) were led by Water Bolt damage.`, who: 'Tank team + healers', fix: 'After Whirl or submerge, the tank must re-engage instantly while healers pre-cast for the reconnect window.' });
+      } else if (bossKey === BOSS_KEYS.LEO) {
+        const whirlwindData = aggregateMechanic(/Whirlwind/i, entry => entry.role !== 'Tank');
+        const demonData = aggregateMechanic(/Inner Demon|Insidious Whisper/i);
+        const chaosDeaths = aggregateDeathsBy(death => /Chaos Blast/i.test(death.topDamage || ''));
+        if (whirlwindData.totalHits > 0) actionItems.push({ severity: 'critical', priority: 1, title: 'Melee must leave Whirlwind immediately', description: `${whirlwindData.totalHits} Whirlwind hit(s) landed on non-tanks.`, who: 'Melee DPS', fix: 'Treat every Whirlwind as a hard stop: disengage instantly, then re-enter only after the spin ends.' });
+        if (demonData.totalHits > 0) actionItems.push({ severity: 'warning', priority: 2, title: 'Tighten Inner Demon execution', description: `${demonData.totalHits} hit(s) from Inner Demon / Insidious Whisper were logged.`, who: 'Players targeted by Inner Demon', fix: 'Pre-assign a kill order for personal demons, save cooldowns for your demon, and call if you need external help before an MC happens.' });
+        if (chaosDeaths.length > 0) actionItems.push({ severity: 'critical', priority: 3, title: 'Protect the demon tank', description: `${chaosDeaths.length} death(s) were driven by Chaos Blast.`, who: 'Warlock tank + healer pair', fix: 'Give the Warlock a dedicated healer, keep threat clean on demon form swaps, and plan personals for each Chaos Blast burst.' });
+      } else if (bossKey === BOSS_KEYS.KARATHRESS) {
+        const councilInterrupts = pulls.reduce((sum, pull) => sum + (pull.interrupts || []).filter(entry => /Karathress|Tidalvess|Caribdis|Sharkkis/i.test(entry.target || '')).length, 0);
+        const spitfireHits = pulls.reduce((sum, pull) => sum + totalMechanicHits(pull, /Spitfire Totem|Fireball/i), 0);
+        const spitfireDeaths = pulls.reduce((sum, pull) => sum + (pull.creature_deaths || []).filter(entry => /Spitfire Totem/i.test(entry.name || '')).length, 0);
+        const boltDeaths = aggregateDeathsBy(death => getPlayerRole(death.player) === 'Tank' && /Cataclysmic Bolt/i.test(death.topDamage || ''));
+        if (councilInterrupts < pulls.length) actionItems.push({ severity: 'critical', priority: 1, title: 'Lock in a Healing Wave interrupt rotation', description: `${councilInterrupts} council interrupt(s) across ${pulls.length} pulls is too low for Karathress.`, who: `Assign: ${interruptCapable.slice(0, 3).map(player => player.name + ' (' + player.class + ')').join(', ') || 'your best kickers'}`, fix: 'Assign a dedicated order on the shaman add / council heals and call every interrupt on voice.' });
+        if (spitfireHits > 0 || spitfireDeaths === 0) actionItems.push({ severity: 'warning', priority: 2, title: 'Kill Spitfire Totem on spawn', description: `${spitfireHits} totem-related hit(s) landed and only ${spitfireDeaths} totem death(s) were logged.`, who: 'Ranged DPS', fix: 'The moment Spitfire Totem spawns, swap and delete it before resuming the council target.' });
+        if (boltDeaths.length > 0) actionItems.push({ severity: 'critical', priority: 3, title: 'Keep the Karathress tank above 50%', description: `${boltDeaths.length} tank death(s) were led by Cataclysmic Bolt.`, who: 'Karathress tank + assigned healers', fix: 'The Karathress tank should never dip into bolt kill range. Pre-hot, pre-cast, and use externals before each bolt cycle.' });
+      } else if (bossKey === BOSS_KEYS.MOROGRIM) {
+        const tidalData = aggregateMechanic(/Tidal Wave/i, entry => entry.role !== 'Tank');
+        const murlocDeaths = aggregateDeathsBy(death => /Murloc|Earthquake|Water Globule/i.test(death.topDamage || ''));
+        const wateryData = aggregateMechanic(/Watery Grave/i);
+        if (tidalData.totalHits > 0) actionItems.push({ severity: 'critical', priority: 1, title: 'Fix Tidal Wave positioning', description: `${tidalData.totalHits} frontal hit(s) landed on non-tanks.`, who: 'Everyone except the active tank', fix: 'Keep Morogrim faced away from the raid and never drift into the frontal cone while repositioning for graves or murlocs.' });
+        if (murlocDeaths.length > 0) actionItems.push({ severity: 'critical', priority: 2, title: 'Control murloc waves during Earthquake', description: `${murlocDeaths.length} death(s) were caused by murloc/Earthquake pressure.`, who: 'Add tanks, slows, and AoE team', fix: 'Have pickup targets marked, pre-position slows, and have healers collapse toward the safe AoE stack point before murlocs reach them.' });
+        if (wateryData.totalHits >= pulls.length * 2) actionItems.push({ severity: 'warning', priority: 3, title: 'Pre-assign Watery Grave saves', description: `${wateryData.totalHits} Watery Grave hit(s) were logged across the pull set.`, who: 'Raid healers', fix: 'Call grave targets immediately and assign instant HoTs/shields so grave victims survive into the next Earthquake.' });
+      } else if (bossKey === BOSS_KEYS.VASHJ) {
+        const staticData = aggregateMechanic(/Static Charge/i);
+        const shockDeaths = aggregateDeathsBy(death => /Shock Blast/i.test(death.topDamage || ''));
+        const sporeData = aggregateMechanic(/Toxic Spore/i);
+        const longP2Pulls = pulls.filter(pull => !pull.kill && pull.duration_sec > 360).length;
+        if (staticData.totalHits > pulls.length * 3) actionItems.push({ severity: 'critical', priority: 1, title: 'Respect 12-yard spread for Static Charge', description: `${staticData.totalHits} Static Charge hit(s) were logged. Most clipped: ${staticData.worst.map(([name, count]) => `${name} (${count})`).join(', ') || 'multiple players'}.`, who: 'Entire raid', fix: 'Reset your spread every transition. Only collapse for planned core handoffs, then immediately fan back out.' });
+        if (shockDeaths.length > 0) actionItems.push({ severity: 'critical', priority: 2, title: 'Call Shock Blast and evacuate melee', description: `${shockDeaths.length} death(s) had Shock Blast as the primary source.`, who: 'Melee group + boss tank', fix: 'Assign one caller for Shock Blast. The moment the cast starts, all melee leave and ranged finish the damage window.' });
+        if (longP2Pulls > 0) actionItems.push({ severity: 'warning', priority: 3, title: 'Speed up Phase 2 core/add execution', description: `${longP2Pulls} wipe(s) lasted 6+ minutes, which usually means P2 dragged until adds overwhelmed the raid.`, who: 'Core runners, Strider control, tainted add team', fix: 'Tighten core relay assignments, snap tainted kills, and make sure each Strider is slowed and kited on spawn.' });
+        if (sporeData.totalHits > 0) actionItems.push({ severity: 'warning', priority: 4, title: 'Keep Spore Bats off the raid path', description: `${sporeData.totalHits} Toxic Spore hit(s) were logged.`, who: 'Spore Bat kiter + ranged', fix: 'Drag bats around the outer edge and never cut spores across the raid or core handoff lanes.' });
       }
 
-      // --- ACTION ITEM #5: DPS KILLING WRONG TARGETS ---
-      if (isKael) {
-        // Check if Capernian dies last in pulls (she should die first in P3)
-        const capernianLateDeaths = pulls.filter(pull => {
-          const creatureDeaths = pull.creature_deaths || [];
-          const p3Advisors = creatureDeaths.filter(c =>
-            ['Thaladred the Darkener', 'Lord Sanguinar', 'Grand Astromancer Capernian', 'Master Engineer Telonicus'].includes(c.name)
-          ).slice(4); // Only P3 deaths (after the first 4)
-          if (p3Advisors.length < 2) return false;
-          const capDeath = p3Advisors.find(c => c.name === 'Grand Astromancer Capernian');
-          if (!capDeath) return false;
-          const otherDeaths = p3Advisors.filter(c => c.name !== 'Grand Astromancer Capernian');
-          return otherDeaths.some(d => d.relative_time < capDeath.relative_time);
-        });
-        if (capernianLateDeaths.length > 0) {
-          actionItems.push({
-            severity: 'warning',
-            priority: 5,
-            title: 'DPS kill priority may be wrong in P3',
-            description: `In ${capernianLateDeaths.length} pull(s), another advisor died before Capernian in P3. She should ALWAYS die first — every second she's alive is another potential Conflagration.`,
-            who: 'All DPS',
-            fix: 'Kill order in P3 (per guide): Ranged kills Thaladred (kite away) then Capernian. Melee kills Sanguinar then Telonicus. Capernian should not stay alive long — every second she lives is another potential Conflag on your Warlock tank. Mark her with skull for ranged.'
-          });
-        }
+      if (!actionItems.length) {
+        actionItems.push({ severity: 'info', priority: 999, title: 'No repeat mechanic failure detected', description: 'Nothing obvious repeated across the available pulls. Use the summary and individual tabs to inspect one-off mistakes.', who: 'Raid leader', fix: 'Review the longest wipe and compare it to the best pull to isolate the missing piece.' });
       }
 
-      // --- PHASE TRANSITION CHECKLIST ---
-      const phaseChecklist = isKael ? [
-        { phase: 'P1 → P2 (Advisors die → Weapons spawn)', items: [
-          'All DPS switch to weapons immediately — no DOTs still ticking on dead advisors',
-          'Tanks pre-position to pick up Devastation and Warp Slicer',
-          'Healers conserve mana — P2 is your regen phase (light damage)',
-          'Kill priority: Staff of Disintegration (casters need this for P3 aura) > Cosmic Infuser (interrupt its Heal!) > Netherstrand Longbow > others',
-          'Mages/Shamans: interrupt Staff of Disintegration\'s first Frostbolt so it moves to raid for AoE'
-        ]},
-        { phase: 'P2 → P3 (Weapons die → Advisors revive)', items: [
-          'EVERYONE loot their assigned legendary weapon before P3 starts: Casters take Staff, Healers take Cosmic Infuser, Melee take Infinity Blade, Hunters take Netherstrand Longbow, designated player takes Phaseshift Bulwark',
-          'Casters/Feral Druids: equip Staff of Disintegration and activate Mental Protection Field aura',
-          'Healers: equip Cosmic Infuser for Infernal Protection buff on heal targets',
-          'Tanks position at their pre-assigned advisor spawn points',
-          'Healers top the raid and pre-HoT all tanks',
-          'Kamiguruu (Warlock): ready to re-establish threat on Capernian with Searing Pain',
-          'Use Heroism/Bloodlust when advisors revive — this is the hardest phase'
-        ]},
-        { phase: 'P3 → P4 (Advisors die → Kael engages)', items: [
-          'MT picks up Kael immediately — he hits hard',
-          'Face Kael away from raid',
-          'Staff holder stays within 30 yards of MT for Arcane Disruption protection',
-          'Mage: Counterspell Kael\'s FIRST Fireball immediately (it targets random player, can kill)',
-          'Spread slightly for Flamestrike — move out of fire on ground',
-          'When Shock Barrier appears, ALL DPS burn barrier fast before Pyroblast lands',
-          'After barrier breaks: interrupt Pyroblast immediately (Kick/Pummel/Counterspell)',
-          'If Pyroblast gets through, designated player uses Phaseshift Bulwark to absorb',
-          'Break MC\'d players using Infinity Blade procs (Hamstring/Wing Clip/Shiv) — do NOT kill them'
-        ]},
-        { phase: 'P4 → P5 (Kael at 50% → Gravity Lapse)', items: [
-          'All DPS cooldowns go out — this is the burn phase',
-          'During Gravity Lapse: swim away from dark Nether Vapor clouds',
-          'Use Netherstrand Longbow + instant casts while floating',
-          'Spread out during Gravity Lapse — Nether Beam chains to nearby players',
-          'Between Lapses: resume P4 mechanics (Shock Barrier, Flamestrike, MC, interrupt Fireball)'
-        ]}
-      ] : [];
+      const phaseChecklistMap = {
+        [BOSS_KEYS.KAEL]: [
+          { phase: 'P1 → P2 (Advisors die → Weapons spawn)', items: ['All DPS swap immediately to weapons', 'Tanks pre-position for Devastation and Warp Slicer', 'Healers conserve mana in this light-damage phase', 'Kill priority: Staff > Cosmic Infuser (interrupt Heal) > Longbow > others'] },
+          { phase: 'P2 → P3 (Weapons die → Advisors revive)', items: ['Loot assigned weapons before the revive', 'Pre-position tanks on advisor spawns', 'Pre-HoT tanks and top the raid', 'Use Heroism/Bloodlust when advisors revive'] },
+          { phase: 'P3 → P4 (Advisors die → Kael engages)', items: ['MT picks up Kael immediately', 'Counterspell the first Fireball', 'Burn Shock Barrier instantly', 'Interrupt Pyroblast the moment the barrier breaks'] },
+          { phase: 'P4 → P5 (50% → Gravity Lapse)', items: ['Spend DPS cooldowns', 'Spread while floating', 'Avoid Nether Vapor clouds', 'Resume P4 mechanics between lapses'] }
+        ],
+        [BOSS_KEYS.HYDROSS]: [
+          { phase: 'Every transition', items: ['Swap before marks get dangerous', 'Next resist tank is already in position', 'Add pickup team is standing on the spawn side', 'Raid spreads before Water Tomb goes out'] }
+        ],
+        [BOSS_KEYS.LURKER]: [
+          { phase: 'Surface → Spout', items: ['Call Spout early', 'Rotate with the beam, do not cross it', 'Tank returns immediately after Whirl'] },
+          { phase: 'Submerge', items: ['Get out of the water fast', 'Collapse for add control', 'Be ready to re-engage the boss as soon as he surfaces'] }
+        ],
+        [BOSS_KEYS.LEO]: [
+          { phase: 'Every form cycle', items: ['Melee disengage instantly for Whirlwind', 'Warlock tank is ready for demon phase', 'Each player kills their Inner Demon immediately'] }
+        ],
+        [BOSS_KEYS.KARATHRESS]: [
+          { phase: 'Council opener', items: ['Kill order and tank assignments are fixed before pull', 'Interrupt rotation is called out', 'Ranged are ready to swap to Spitfire Totem instantly'] }
+        ],
+        [BOSS_KEYS.MOROGRIM]: [
+          { phase: 'Each Earthquake / murloc wave', items: ['Healers collapse toward the AoE stack point', 'Add tank and slows meet the wave on spawn', 'Watery Grave targets are called immediately'] }
+        ],
+        [BOSS_KEYS.VASHJ]: [
+          { phase: 'P1 → P2', items: ['Maintain 12-yard spread for Static Charge', 'Melee leave for every Shock Blast', 'Core runners know the first relay positions'] },
+          { phase: 'P2 → P3', items: ['Kill the final tainted and generator on call', 'Reset spreads as Vashj becomes attackable', 'Start the Spore Bat kite path wide around the room'] }
+        ]
+      };
+      const phaseChecklist = phaseChecklistMap[bossKey] || [];
+      const headerText = isKael
+        ? 'These are the top priorities to address before your next attempt. Addressing items #1 and #2 alone will likely get you past Phase 3.'
+        : 'These are the biggest repeat failures across your pulls. Fix the critical items first, then tighten the warnings.';
 
-      // Sort action items by priority
       actionItems.sort((a, b) => a.priority - b.priority);
 
-      // --- INTERRUPT ASSIGNMENT TABLE ---
       let interruptTableHtml = '';
       if (isKael && interruptCapable.length > 0) {
-        const rows = interruptCapable.map((p, i) => `
+        const rows = interruptCapable.map((player, i) => `
           <tr>
             <td>${i < 3 ? '<span class="role-assign">PRIMARY</span>' : 'Backup'}</td>
-            <td>${escapeHtml(p.name)}</td>
-            <td>${escapeHtml(p.class)}</td>
-            <td class="ability">${p.ability}</td>
-            <td>${p.interrupts} total (${(p.interrupts / Math.max(pulls.length, 1)).toFixed(1)}/pull)</td>
+            <td>${escapeHtml(player.name)}</td>
+            <td>${escapeHtml(player.class)}</td>
+            <td class="ability">${player.ability}</td>
+            <td>${player.interrupts} total (${(player.interrupts / Math.max(pulls.length, 1)).toFixed(1)}/pull)</td>
           </tr>
         `).join('');
         interruptTableHtml = `
           <section class="card">
             <h3>Interrupt Rotation Assignment (Phase 4 — Kael'thas)</h3>
-            <p style="font-size:0.82rem;color:var(--muted);margin-bottom:10px;">Kael casts Fireball at random raid members in Phase 4. These MUST be interrupted or they will one-shot non-tanks. Assign 2-3 interrupters in rotation. After Shock Barrier breaks, first available player immediately kicks Pyroblast.</p>
+            <p style="font-size:0.82rem;color:var(--muted);margin-bottom:10px;">Assign 2-3 interrupters to Kael's Fireballs and Pyroblast windows.</p>
             <table class="interrupt-table">
               <thead><tr><th>Priority</th><th>Player</th><th>Class</th><th>Ability</th><th>Historical Interrupts</th></tr></thead>
               <tbody>${rows}</tbody>
             </table>
-            <p style="font-size:0.8rem;color:var(--muted);margin-top:8px;"><strong>Suggested rotation:</strong> Player 1 kicks Fireball → Player 2 kicks next Fireball → Player 3 covers. When Shock Barrier breaks, first available player kicks Pyroblast immediately (Mage Counterspell preferred — 8s lockout). Call "kick" on voice so others don't overlap.</p>
           </section>
         `;
       }
@@ -3335,7 +3827,7 @@
       return `
         <section class="card">
           <h2>Action Items to Clear ${escapeHtml(state.boss)}</h2>
-          <p style="font-size:0.85rem;color:var(--muted);margin-bottom:14px;">These are the top priorities to address before your next attempt. Addressing items #1 and #2 alone will likely get you past Phase 3.</p>
+          <p style="font-size:0.85rem;color:var(--muted);margin-bottom:14px;">${headerText}</p>
           ${actionItems.map((item, i) => `
             <div class="action-item ${item.severity}">
               <h4><span class="severity-badge ${item.severity}">${item.severity === 'critical' ? 'CRITICAL' : item.severity === 'warning' ? 'IMPORTANT' : 'INFO'}</span> #${i + 1}: ${item.title}</h4>
@@ -3351,12 +3843,12 @@
         ${phaseChecklist.length ? `
           <section class="card">
             <h3>Phase Transition Checklist</h3>
-            <p style="font-size:0.82rem;color:var(--muted);margin-bottom:12px;">Print this or have it on a second monitor. The raid leader should call each transition and remind the raid of the next steps.</p>
-            ${phaseChecklist.map(pc => `
+            <p style="font-size:0.82rem;color:var(--muted);margin-bottom:12px;">Quick raid-lead reminders for the major transition points.</p>
+            ${phaseChecklist.map(checklist => `
               <div class="strat-phase">
-                <h4>${pc.phase}</h4>
+                <h4>${checklist.phase}</h4>
                 <ul class="phase-checklist">
-                  ${pc.items.map(item => `<li>${item}</li>`).join('')}
+                  ${checklist.items.map(item => `<li>${item}</li>`).join('')}
                 </ul>
               </div>
             `).join('')}
@@ -3370,6 +3862,7 @@
     }
 
     function renderStrategy() {
+
       const boss = state.boss || '';
       const strategies = {
         "Kael'thas Sunstrider": {
@@ -3392,7 +3885,91 @@
             { title: 'YouTube — Metagoblin Kael Walkthrough', url: 'https://www.youtube.com/watch?v=HJvhBpKQB0I' },
           ]
         },
+        "Hydross the Unstable": {
+          overview: `Hydross is an execution fight built around clean elemental transitions. If swaps are late, marks stack, tanks explode, and the raid gets buried under add damage and tomb/sludge overlap.`,
+          phases: [
+            { name: 'Frost / Nature swap cycles', details: `Hydross alternates between Frost and Nature forms whenever he crosses the water line. Each form applies stacking marks that ramp raid damage over time and spawns elemental adds on every transition.<br><br><strong>Marks:</strong> Swap before stacks get dangerous — late swaps kill tanks and healers.<br><strong>Water Tomb:</strong> Hits multiple nearby players if the raid is clumped; maintain spread before every swap.<br><strong>Vile Sludge:</strong> Must be cleansed quickly or the DoT rolls into the next transition.` }
+          ],
+          tankStrategy: `Use dedicated resist tanks for each side if available. The incoming tank stands on the correct side before the pull crosses, taunts instantly, and immediately gathers their spawned adds. Never drag Hydross deep into the next side — short, controlled swaps keep marks low.`,
+          healerStrategy: `Pre-cast on the incoming tank before every swap. Be ready for burst when adds spawn and for Water Tomb victims to be briefly out of action. Assign Priests/Paladins to cleanse Vile Sludge fast so DoT damage never overlaps with the next mark ramp.`,
+          dpsStrategy: `Hold spread at all times, especially just before transitions. Swap to spawned adds instantly, then return to Hydross. Do not over-threat the new tank right after a transition — give them a beat to establish control.`,
+          references: [
+            { title: 'Wowhead TBC Hydross Guide', url: 'https://tbc.wowhead.com/guides/hydross-the-unstable-serpentshrine-cavern-raid-strategy' },
+            { title: 'Warcraft Tavern — Hydross Strategy', url: 'https://www.warcrafttavern.com/tbc/guides/hydross-the-unstable/' }
+          ]
+        },
+        "The Lurker Below": {
+          overview: `Lurker is a positioning fight. The raid wins by respecting Spout, handling each submerge cleanly, and getting the tank back on the boss instantly after every disruption.`,
+          phases: [
+            { name: 'Surface phase', details: `Tank Lurker on the platform.<br><br><strong>Spout:</strong> Rotating beam — everyone must move with it or jump in only when safe.<br><strong>Whirl:</strong> Knocks the tank back; they must reconnect fast or Water Bolts start hitting the raid.<br><strong>Geyser / Scalding Water:</strong> Punish players who linger in the water or stand carelessly.` },
+            { name: 'Submerge phase', details: `Lurker submerges periodically and adds spawn.<br><br>Players should get out of the water, collapse on assignments, kill adds cleanly, and be ready for the boss to resurface. Deaths here usually mean people stayed in water too long or adds were not controlled.` }
+          ],
+          tankStrategy: `Anchor the boss on the platform and be ready to reconnect after every Whirl. During submerge, gather your assigned add quickly and return to the boss as soon as he resurfaces so Water Bolts never free-cast into the raid.`,
+          healerStrategy: `Expect burst on the tank after Whirl and resurfacing. Keep an eye on anyone clipped by Spout or forced through water during submerge. Save fast spot heals for players late to reposition.`,
+          dpsStrategy: `Never greed a Spout cast. Move early, rotate with the beam, and treat submerge as a hard assignment check: get out, kill your add, and reset for the next surface phase.`,
+          references: [
+            { title: 'Wowhead TBC Lurker Guide', url: 'https://tbc.wowhead.com/guides/the-lurker-below-serpentshrine-cavern-raid-strategy' },
+            { title: 'Warcraft Tavern — Lurker Strategy', url: 'https://www.warcrafttavern.com/tbc/guides/the-lurker-below/' }
+          ]
+        },
+        "Leotheras the Blind": {
+          overview: `Leotheras alternates between humanoid and demon pressure while demanding perfect personal responsibility on Whirlwind and Inner Demon. Most wipes are avoidable execution failures, not raw throughput problems.`,
+          phases: [
+            { name: 'Humanoid / Whirlwind cycles', details: `Melee attack during normal windows, then disengage immediately for <strong>Whirlwind</strong>. Anyone left in during the spin is volunteering for death.` },
+            { name: 'Demon phase and Inner Demons', details: `A Warlock tank handles demon form and eats <strong>Chaos Blast</strong> with dedicated healing.<br><br><strong>Inner Demon / Insidious Whisper:</strong> Targeted players must kill their personal demon quickly or risk Mind Control. These failures snowball raids fast.` }
+          ],
+          tankStrategy: `The normal tank controls humanoid form while the Warlock tank is always prepared for demon form. Threat handoffs need to be clean so Chaos Blast never free-casts into the raid.`,
+          healerStrategy: `Give the Warlock tank a dedicated healer during demon phases. Be ready to spot-heal melee who are late out of Whirlwind, but call out repeat offenders — that damage is avoidable.`,
+          dpsStrategy: `Melee: get out instantly for Whirlwind. Everyone: save something for your Inner Demon if needed, swap immediately, and do not tunnel the boss while your personal add is alive.`,
+          references: [
+            { title: 'Wowhead TBC Leotheras Guide', url: 'https://tbc.wowhead.com/guides/leotheras-the-blind-serpentshrine-cavern-raid-strategy' },
+            { title: 'Warcraft Tavern — Leotheras Strategy', url: 'https://www.warcrafttavern.com/tbc/guides/leotheras-the-blind/' }
+          ]
+        },
+        "Fathom-Lord Karathress": {
+          overview: `Karathress is a council-style control check. The raid succeeds by killing the correct target order, interrupting Healing Wave on schedule, and deleting Spitfire Totems before they matter.`,
+          phases: [
+            { name: 'Council control and kill order', details: `Each advisor needs a firm assignment.<br><br><strong>Healing Wave:</strong> Must be interrupted every time.<br><strong>Spitfire Totem:</strong> Kill immediately on spawn.<br><strong>Cataclysmic Bolt:</strong> Punishes the Karathress tank if they fall below 50% HP.` }
+          ],
+          tankStrategy: `Pre-assign every council target. Keep Karathress stable and topped before bolt timings, while off-tanks lock down the adds so no healer gets clipped during swaps or totem spawns.`,
+          healerStrategy: `The Karathress tank needs proactive healing — if they dip low before Cataclysmic Bolt, they die. Be ready for random spike damage when Spitfire Totem survives too long.`,
+          dpsStrategy: `Respect kill order, swap to Spitfire Totem instantly, and assign a real interrupt rotation. Karathress punishes sloppy utility more than low raw DPS.`,
+          references: [
+            { title: 'Wowhead TBC Karathress Guide', url: 'https://tbc.wowhead.com/guides/fathom-lord-karathress-serpentshrine-cavern-raid-strategy' },
+            { title: 'Warcraft Tavern — Karathress Strategy', url: 'https://www.warcrafttavern.com/tbc/guides/fathom-lord-karathress/' }
+          ]
+        },
+        "Morogrim Tidewalker": {
+          overview: `Morogrim is about controlling predictable burst moments: Tidal Wave positioning, Watery Grave recovery, and murloc waves after Earthquake. If any of those three slip, the fight unravels instantly.`,
+          phases: [
+            { name: 'Main phase', details: `Morogrim is mostly stable until his burst mechanics overlap.<br><br><strong>Tidal Wave:</strong> Frontal cone — only the tank should ever be hit.<br><strong>Watery Grave:</strong> Random players are removed and need immediate healing coverage.<br><strong>Earthquake + murlocs:</strong> This is the real check; pickups, slows, and healer movement must already be planned.` },
+            { name: 'Final burn (25%)', details: `At low health, Water Globules / late-phase pressure make movement tighter. Clean positioning matters even more because healers are already strained from repeated murloc waves.` }
+          ],
+          tankStrategy: `Keep Morogrim faced away from the raid, never clip the cone, and have add pickup tanks pre-position for every murloc wave. The raid should know exactly where to move when Earthquake starts.`,
+          healerStrategy: `Pre-HoT Watery Grave targets and move toward the safe stack point before murlocs arrive. The dangerous moment is not after murlocs connect — it is the 2-3 seconds before they do.`,
+          dpsStrategy: `Stay out of Tidal Wave, swap to wave control/AoE immediately, and protect healers during murloc phases. Melee greed and scattered slows are the usual wipe cause here.`,
+          references: [
+            { title: 'Wowhead TBC Morogrim Guide', url: 'https://tbc.wowhead.com/guides/morogrim-tidewalker-serpentshrine-cavern-raid-strategy' },
+            { title: 'Warcraft Tavern — Morogrim Strategy', url: 'https://www.warcrafttavern.com/tbc/guides/morogrim-tidewalker/' }
+          ]
+        },
+        "Lady Vashj": {
+          overview: `Lady Vashj is the SSC endboss and a long-form execution test. P1 punishes spread mistakes, P2 tests core relays and add control, and P3 ends raids that cannot manage Shock Blast and Spore Bats cleanly.`,
+          phases: [
+            { name: 'Phase 1 — 100% to 70%', details: `<strong>Static Charge:</strong> Spread 12+ yards.<br><strong>Shock Blast:</strong> Melee must run out immediately.<br><strong>Forked Lightning / Entangle:</strong> Healers stabilize while the raid stays disciplined.` },
+            { name: 'Phase 2 — generators and adds', details: `Vashj becomes immune while the raid destroys generators using tainted cores.<br><br><strong>Tainted Elementals:</strong> Kill instantly and relay the core cleanly.<br><strong>Striders / naga / elites:</strong> Control them on spawn — long P2s are healer deaths in slow motion.` },
+            { name: 'Phase 3 — burn with Spore Bats', details: `Vashj becomes attackable again.<br><br><strong>Shock Blast</strong> still kills melee who stay in, <strong>Static Charge</strong> still demands spread, and <strong>Spore Bats / Toxic Spore</strong> punish poor kite paths.` }
+          ],
+          tankStrategy: `In P1/P3, keep Vashj stable and call every Shock Blast. In P2, add tanks and controllers need hard assignments for naga/elites and clear positioning for Strider kites.`,
+          healerStrategy: `Spread enough for Static Charge without losing line of sight. P2 is the mana check — use consumables early, cover core runners, and be ready for raid spikes when add control falters.`,
+          dpsStrategy: `P1/P3: stay spread and respect Shock Blast. P2: tainted kills and core relays are everything — the faster generators die, the less likely the raid is to drown in add pressure.`,
+          references: [
+            { title: 'Wowhead TBC Lady Vashj Guide', url: 'https://tbc.wowhead.com/guides/lady-vashj-serpentshrine-cavern-raid-strategy' },
+            { title: 'Warcraft Tavern — Lady Vashj Strategy', url: 'https://www.warcrafttavern.com/tbc/guides/lady-vashj/' }
+          ]
+        },
         "Al'ar": {
+
           overview: `Al'ar is the first boss in Tempest Keep: The Eye. A two-phase fight focused on tank positioning, platform management, and add control.`,
           phases: [
             { name: 'Phase 1 — Platforms', details: `Al'ar flies between platforms on the upper level. A tank must be in melee range on each platform to prevent Flame Buffet (raid-wide stacking fire damage when no melee target exists).<br><br><strong>Flame Buffet:</strong> Al'ar spams this if no tank is in melee. Ensure a tank is positioned to engage immediately after each platform move.<br><strong>Flame Quills:</strong> Al'ar flies to the center and does massive AoE to anyone on the platforms. Everyone must drop to the lower level immediately when this starts.<br><strong>Adds:</strong> Small phoenix adds spawn — kill them quickly and move away (they explode on death).` },
