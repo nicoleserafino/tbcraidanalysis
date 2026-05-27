@@ -2716,24 +2716,75 @@
           <ul class="summary-list">
             ${healerStats.map(h => `<li><strong>${escapeHtml(h.name)}</strong> (${escapeHtml(h.className)}): ${h.heals} casts, ${h.dispels} dispels${h.died ? ' — DIED at ' + h.deathTime.toFixed(0) + 's' : ''}</li>`).join('')}
           </ul>
-          ${totalDispels === 0 ? '<div class="issue-card critical"><strong>No dispels recorded.</strong> Debuffs must be removed quickly on Kael — assign dispel responsibilities.</div>' : ''}
+          ${totalDispels === 0 ? '<div class="issue-card critical"><strong>No dispels recorded.</strong> Debuffs must be removed quickly — assign dispel responsibilities.</div>' : ''}
           ${deadPlayers.length ? `<div class="issue-card warning"><strong>Healer deaths:</strong> ${deadPlayers.map(p => { const d = deathsForPlayer(p)[0]; return p + ' at ' + (d?.relative_time?.toFixed(0) || '?') + 's'; }).join(', ')}. Losing healers cascades into raid deaths.</div>` : ''}
         `;
       } else {
         // DPS
         const totalInterrupts = players.reduce((sum, p) => sum + countByPlayer(pull.interrupts, 'source', p), 0);
-        const conflagHits = players.reduce((sum, p) => sum + countByPlayer(pull.conflagrations, 'target', p), 0);
         const interrupters = players.filter(p => countByPlayer(pull.interrupts, 'source', p) > 0);
+        const bossKey = getBossKey();
+
+        // Boss-aware mechanic hit count for DPS summary
+        let dpsMechanicLabel = 'Mechanic Hits';
+        let dpsMechanicCount = 0;
+        let dpsMechanicWarning = '';
+        if (bossKey === BOSS_KEYS.KAEL) {
+          dpsMechanicLabel = 'Conflag Hits';
+          dpsMechanicCount = players.reduce((sum, p) => sum + countByPlayer(pull.conflagrations, 'target', p), 0);
+          if (dpsMechanicCount > 5) dpsMechanicWarning = `<div class="issue-card warning"><strong>${dpsMechanicCount} Conflagration hits on DPS.</strong> Only the Warlock tank should be within 30 yards of Capernian. DPS getting hit are too close.</div>`;
+        } else if (bossKey === BOSS_KEYS.LURKER) {
+          dpsMechanicLabel = 'Spout Hits';
+          dpsMechanicCount = players.reduce((sum, p) => sum + safeEntries(pull.player_damage_taken?.[p]).filter(([l]) => /Spout|Scalding Water/i.test(l)).reduce((s, [, c]) => s + Number(c || 0), 0), 0);
+          if (dpsMechanicCount > 3) dpsMechanicWarning = `<div class="issue-card warning"><strong>${dpsMechanicCount} Spout hits on DPS.</strong> Jump into the water or line-of-sight behind the island when Spout begins.</div>`;
+        } else if (bossKey === BOSS_KEYS.LEO) {
+          dpsMechanicLabel = 'Whirlwind Hits';
+          dpsMechanicCount = players.reduce((sum, p) => sum + safeEntries(pull.player_damage_taken?.[p]).filter(([l]) => /Whirlwind/i.test(l)).reduce((s, [, c]) => s + Number(c || 0), 0), 0);
+          if (dpsMechanicCount > 3) dpsMechanicWarning = `<div class="issue-card warning"><strong>${dpsMechanicCount} Whirlwind hits on DPS.</strong> Run out immediately when Leo begins Whirlwind — he moves randomly.</div>`;
+        } else if (bossKey === BOSS_KEYS.KARATHRESS) {
+          dpsMechanicLabel = 'Spitfire Hits';
+          dpsMechanicCount = players.reduce((sum, p) => sum + safeEntries(pull.player_damage_taken?.[p]).filter(([l]) => /Spitfire/i.test(l)).reduce((s, [, c]) => s + Number(c || 0), 0), 0);
+          if (dpsMechanicCount > 3) dpsMechanicWarning = `<div class="issue-card warning"><strong>${dpsMechanicCount} Spitfire Totem hits.</strong> Kill totems quickly or move away from them.</div>`;
+        } else if (bossKey === BOSS_KEYS.MOROGRIM) {
+          dpsMechanicLabel = 'Tidal/Quake Hits';
+          dpsMechanicCount = players.reduce((sum, p) => sum + safeEntries(pull.player_damage_taken?.[p]).filter(([l]) => /Tidal Wave|Earthquake/i.test(l)).reduce((s, [, c]) => s + Number(c || 0), 0), 0);
+          if (dpsMechanicCount > 5) dpsMechanicWarning = `<div class="issue-card warning"><strong>${dpsMechanicCount} Tidal Wave/Earthquake hits.</strong> Ranged/healers must not stand in front of Morogrim.</div>`;
+        } else if (bossKey === BOSS_KEYS.VASHJ) {
+          dpsMechanicLabel = 'Static/Shock Hits';
+          dpsMechanicCount = players.reduce((sum, p) => sum + safeEntries(pull.player_damage_taken?.[p]).filter(([l]) => /Static Charge|Shock Blast|Toxic Spore/i.test(l)).reduce((s, [, c]) => s + Number(c || 0), 0), 0);
+          if (dpsMechanicCount > 5) dpsMechanicWarning = `<div class="issue-card warning"><strong>${dpsMechanicCount} avoidable mechanic hits on DPS.</strong> Spread for Static Charge, run from Shock Blast, avoid Toxic Spore clouds.</div>`;
+        } else if (bossKey === BOSS_KEYS.HYDROSS) {
+          dpsMechanicLabel = 'Tomb/Sludge Hits';
+          dpsMechanicCount = players.reduce((sum, p) => sum + safeEntries(pull.player_damage_taken?.[p]).filter(([l]) => /Water Tomb|Vile Sludge/i.test(l)).reduce((s, [, c]) => s + Number(c || 0), 0), 0);
+        }
+
+        // Boss-aware interrupt note
+        let interruptNote = '';
+        if (bossKey === BOSS_KEYS.KAEL) {
+          interruptNote = totalInterrupts > 0
+            ? `<p><strong>Interrupt contributors:</strong> ${interrupters.map(p => escapeHtml(p) + ' (' + countByPlayer(pull.interrupts, 'source', p) + ')').join(', ')}</p><p class="mini-note">Interrupts needed in Phase 4 (Kael's Fireballs + Pyroblast after Shock Barrier) and Phase 2 (Cosmic Infuser Heal).</p>`
+            : '<p class="mini-note">Interrupts needed in Phase 4 (Kael\'s Fireballs + Pyroblast) and Phase 2 (Cosmic Infuser Heal).</p>';
+        } else if (bossKey === BOSS_KEYS.KARATHRESS) {
+          interruptNote = totalInterrupts > 0
+            ? `<p><strong>Interrupt contributors:</strong> ${interrupters.map(p => escapeHtml(p) + ' (' + countByPlayer(pull.interrupts, 'source', p) + ')').join(', ')}</p><p class="mini-note">Interrupt Healing Wave from Caribdis and Sear Nova from Sharkkis.</p>`
+            : '<p class="mini-note">Must interrupt Healing Wave (Caribdis) and Sear Nova (Sharkkis) — assign kick rotation.</p>';
+        } else if (bossKey === BOSS_KEYS.VASHJ) {
+          interruptNote = totalInterrupts > 0
+            ? `<p><strong>Interrupt contributors:</strong> ${interrupters.map(p => escapeHtml(p) + ' (' + countByPlayer(pull.interrupts, 'source', p) + ')').join(', ')}</p><p class="mini-note">Interrupt Forked Lightning from Coilfang Elite adds in Phase 2.</p>`
+            : '';
+        } else if (totalInterrupts > 0) {
+          interruptNote = `<p><strong>Interrupt contributors:</strong> ${interrupters.map(p => escapeHtml(p) + ' (' + countByPlayer(pull.interrupts, 'source', p) + ')').join(', ')}</p>`;
+        }
 
         summaryHtml = `
           <div class="metric-grid">
             <div class="metric"><span class="metric-value">${players.length}</span><span class="metric-label">Active DPS</span></div>
             <div class="metric"><span class="metric-value">${totalDeaths}</span><span class="metric-label">DPS Deaths</span></div>
             <div class="metric"><span class="metric-value">${totalInterrupts}</span><span class="metric-label">Total Interrupts</span></div>
-            <div class="metric"><span class="metric-value">${conflagHits}</span><span class="metric-label">Conflag Hits</span></div>
+            <div class="metric"><span class="metric-value">${dpsMechanicCount}</span><span class="metric-label">${dpsMechanicLabel}</span></div>
           </div>
-          ${totalInterrupts > 0 ? `<p><strong>Interrupt contributors:</strong> ${interrupters.map(p => escapeHtml(p) + ' (' + countByPlayer(pull.interrupts, 'source', p) + ')').join(', ')}</p><p class="mini-note">Interrupts are primarily needed in Phase 4 (Kael's Fireballs + Pyroblast after Shock Barrier) and Phase 2 (Cosmic Infuser Heal).</p>` : '<p class="mini-note">Interrupts are primarily needed in Phase 4 (Kael\'s Fireballs + Pyroblast) and Phase 2 (Cosmic Infuser Heal). Capernian does NOT need to be interrupted — she is handled by Warlock ranged-tank positioning.</p>'}
-          ${conflagHits > 5 ? `<div class="issue-card warning"><strong>${conflagHits} Conflagration hits on DPS.</strong> Only the Warlock tank (Kamiguruu) should be within 30 yards of Capernian. If DPS are getting hit by Conflag, they are too close. Stay >30 yards away.</div>` : ''}
+          ${interruptNote}
+          ${dpsMechanicWarning}
           ${deadPlayers.length > players.length * 0.4 ? `<div class="issue-card warning"><strong>${deadPlayers.length}/${players.length} DPS died.</strong> High DPS mortality reduces burn capacity and extends dangerous phases.</div>` : ''}
         `;
       }
@@ -2970,6 +3021,32 @@
       const deaths = deathsForPlayer(player);
       const damageBreakdown = safeEntries(pull.player_damage_taken?.[player]).map(([label, count]) => ({ label: cleanDamageLabel(label), count: Number(count || 0) })).sort((a, b) => b.count - a.count);
       const conflags = (pull.conflagrations || []).filter(item => item.target === player);
+      const bossKey = getBossKey();
+      // Boss-aware mechanic hit count
+      let mechanicLabel = '';
+      let mechanicCount = 0;
+      if (bossKey === BOSS_KEYS.KAEL) {
+        mechanicLabel = 'Conflag hits';
+        mechanicCount = conflags.length;
+      } else if (bossKey === BOSS_KEYS.HYDROSS) {
+        mechanicLabel = 'Sludge/Tomb hits';
+        mechanicCount = safeEntries(pull.player_damage_taken?.[player]).filter(([l]) => /Vile Sludge|Water Tomb/i.test(l)).reduce((s, [, c]) => s + Number(c || 0), 0);
+      } else if (bossKey === BOSS_KEYS.LURKER) {
+        mechanicLabel = 'Spout/Geyser hits';
+        mechanicCount = safeEntries(pull.player_damage_taken?.[player]).filter(([l]) => /Spout|Geyser|Scalding Water/i.test(l)).reduce((s, [, c]) => s + Number(c || 0), 0);
+      } else if (bossKey === BOSS_KEYS.LEO) {
+        mechanicLabel = 'Whirlwind hits';
+        mechanicCount = safeEntries(pull.player_damage_taken?.[player]).filter(([l]) => /Whirlwind|Chaos Blast/i.test(l)).reduce((s, [, c]) => s + Number(c || 0), 0);
+      } else if (bossKey === BOSS_KEYS.KARATHRESS) {
+        mechanicLabel = 'Cataclysm/Totem';
+        mechanicCount = safeEntries(pull.player_damage_taken?.[player]).filter(([l]) => /Cataclysmic Bolt|Spitfire/i.test(l)).reduce((s, [, c]) => s + Number(c || 0), 0);
+      } else if (bossKey === BOSS_KEYS.MOROGRIM) {
+        mechanicLabel = 'Tidal/Quake hits';
+        mechanicCount = safeEntries(pull.player_damage_taken?.[player]).filter(([l]) => /Tidal Wave|Earthquake|Watery Grave/i.test(l)).reduce((s, [, c]) => s + Number(c || 0), 0);
+      } else if (bossKey === BOSS_KEYS.VASHJ) {
+        mechanicLabel = 'Static/Shock hits';
+        mechanicCount = safeEntries(pull.player_damage_taken?.[player]).filter(([l]) => /Static Charge|Shock Blast|Toxic Spore/i.test(l)).reduce((s, [, c]) => s + Number(c || 0), 0);
+      }
       const casts = Number(pull.casts_by_player?.[player] || 0);
       const heals = Number(pull.heals_by_player?.[player] || 0);
       const dispels = countByPlayer(pull.dispels, 'source', player);
@@ -2987,7 +3064,7 @@
               </div>
               <div class="metric-grid" style="margin-top:14px;">
                 <div class="metric"><span class="muted">Deaths</span><span class="num">${deaths.length}</span></div>
-                <div class="metric"><span class="muted">Conflag hits</span><span class="num">${conflags.length}</span></div>
+                <div class="metric"><span class="muted">${mechanicLabel || 'Mechanic hits'}</span><span class="num">${mechanicCount}</span></div>
                 <div class="metric"><span class="muted">Casts</span><span class="num">${casts}</span></div>
                 <div class="metric"><span class="muted">Heals</span><span class="num">${heals}</span></div>
                 <div class="metric"><span class="muted">Dispels</span><span class="num">${dispels}</span></div>
