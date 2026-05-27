@@ -1132,7 +1132,7 @@
           const phase = getPhaseLabel(clusterTime);
           issues.push({
             title: 'Death cascade detected',
-            body: `${maxCluster} players died within 5 seconds at ${clusterTime.toFixed(0)}s (${phase}). This suggests a sudden overwhelming event — likely uncontrolled Conflagration, loose adds, or healer deaths causing a chain collapse.`,
+            body: `${maxCluster} players died within 5 seconds at ${clusterTime.toFixed(0)}s (${phase}). This suggests a sudden overwhelming event — likely an uncontrolled mechanic, loose adds, or healer deaths causing a chain collapse.`,
             severity: 'critical'
           });
         }
@@ -1578,12 +1578,12 @@
             likelyCause = 'Threat — melee damage from boss/add on a non-tank';
             evidence = `Primary damage source: ${topDmg}`;
             confidence = 'High';
-          } else if (/Conflagration/i.test(topDmg)) {
+          } else if (/Conflagration/i.test(topDmg) && isKael) {
             likelyCause = 'Positioning failure — Conflagration spread damage';
-            evidence = `Conflagration was primary damage source. Conflag is uninterruptible and undispellable — this player was too close to the target or raid was stacked.`;
+            evidence = `Conflagration was primary damage source. Conflag is uninterruptible and undispellable — this player was too close to Capernian.`;
             confidence = 'High';
           } else if (role === 'Healer') {
-            const conflagNearDeath = (pull.conflagrations || []).some(c => Math.abs(c.relative_time - death.relative_time) < 5);
+            const conflagNearDeath = isKael && (pull.conflagrations || []).some(c => Math.abs(c.relative_time - death.relative_time) < 5);
             if (conflagNearDeath) {
               likelyCause = 'Positioning — caught in Conflagration spread';
               evidence = 'Conflagration event within 5s of death';
@@ -1610,8 +1610,16 @@
               confidence = 'Medium';
             }
           } else {
-            // Generic DPS death
-            const avoidableSources = ['Conflagration', 'Remote Toy', 'Arcane Burst', 'Flame Strike'];
+            // Generic DPS death — check for avoidable mechanics based on current boss
+            const avoidableByBoss = {
+              [BOSS_KEYS.KAEL]: ['Conflagration', 'Remote Toy', 'Arcane Burst', 'Flame Strike'],
+              [BOSS_KEYS.LURKER]: ['Spout', 'Scalding Water'],
+              [BOSS_KEYS.LEO]: ['Whirlwind', 'Chaos Blast'],
+              [BOSS_KEYS.KARATHRESS]: ['Spitfire Totem'],
+              [BOSS_KEYS.MOROGRIM]: ['Tidal Wave'],
+              [BOSS_KEYS.VASHJ]: ['Shock Blast', 'Toxic Spore'],
+            };
+            const avoidableSources = avoidableByBoss[bossKey] || ['Conflagration', 'Remote Toy', 'Arcane Burst', 'Flame Strike'];
             const hitByAvoidable = dmgTaken.find(([label]) => avoidableSources.some(s => label.includes(s)));
             if (hitByAvoidable) {
               likelyCause = `Avoidable mechanic damage — ${hitByAvoidable[0]}`;
@@ -1672,14 +1680,25 @@
       // --- CLASS/SPEC-SPECIFIC ANALYSIS ---
       if (role === 'Healer') {
         const canDispelMagic = ['Priest', 'Paladin'].includes(playerClass);
-        if (dispels === 0 && isKael && canDispelMagic) {
-          findings.push({
-            title: 'No dispels cast',
-            body: playerClass === 'Priest'
-              ? 'As a Priest, Dispel Magic is your strongest utility. Watch for magic debuffs from Mind Control and other sources that need to be cleansed. Note: Remote Toy from Telonicus is NOT dispellable.'
-              : 'As a Paladin, Cleanse removes magic debuffs. Watch for magic debuffs that need to be cleansed. Note: Remote Toy from Telonicus is NOT dispellable.',
-            severity: 'warning'
-          });
+        if (dispels === 0 && canDispelMagic) {
+          // Only show dispel warning if this boss has dispellable mechanics
+          const dispelBosses = [BOSS_KEYS.KAEL, BOSS_KEYS.HYDROSS, BOSS_KEYS.KARATHRESS, BOSS_KEYS.VASHJ];
+          if (dispelBosses.includes(bossKey)) {
+            const dispelAdvice = bossKey === BOSS_KEYS.KAEL
+              ? (playerClass === 'Priest'
+                ? 'As a Priest, Dispel Magic removes Mind Control debuffs and other Magic effects. Note: Remote Toy from Telonicus is NOT dispellable (Arcane).'
+                : 'As a Paladin, Cleanse removes Magic debuffs. Note: Remote Toy from Telonicus is NOT dispellable (Arcane).')
+              : bossKey === BOSS_KEYS.HYDROSS
+              ? `Vile Sludge is a Magic debuff (halves healing received for 24s). ${playerClass === 'Priest' ? 'Use Dispel Magic' : 'Use Cleanse'} on affected tanks/healers immediately.`
+              : bossKey === BOSS_KEYS.KARATHRESS
+              ? `Caribdis applies Magic debuffs. ${playerClass === 'Priest' ? 'Use Dispel Magic' : 'Use Cleanse'} on affected players, especially during Cyclone overlaps.`
+              : `Static Charge is a Magic debuff — ${playerClass === 'Priest' ? 'Dispel Magic' : 'Cleanse'} it to stop the chain damage. Entangle root is also Magic-dispellable.`;
+            findings.push({
+              title: 'No dispels cast',
+              body: dispelAdvice,
+              severity: 'warning'
+            });
+          }
         }
 
         // Healer class-specific
@@ -1689,10 +1708,10 @@
           }
         }
         if (playerClass === 'Druid' && isKael) {
-          findings.push({ title: 'Resto Druid focus', body: 'Keep Lifebloom rolling on the active tanks (3-stack). Use Rejuvenation on Thaladred kiter and melee. Swiftmend is your emergency save — don\'t sit on it. During heavy raid damage (P3), blanket Rejuvs and use Nature\'s Swiftness + Healing Touch for emergency saves.', severity: 'info' });
+          findings.push({ title: 'Resto Druid focus (Kael)', body: 'Keep Lifebloom rolling on the active tanks (3-stack). Use Rejuvenation on Thaladred kiter and melee. Swiftmend is your emergency save — don\'t sit on it. During heavy raid damage (P3), blanket Rejuvs and use Nature\'s Swiftness + Healing Touch for emergency saves.', severity: 'info' });
         }
         if (playerClass === 'Shaman' && isKael) {
-          findings.push({ title: 'Resto Shaman focus', body: 'Chain Heal is most effective when the raid is stacked. During spread phases (Conflag), switch to Lesser Healing Wave on priority targets. Keep Earth Shield on the MT. Use Nature\'s Swiftness for emergency saves.', severity: 'info' });
+          findings.push({ title: 'Resto Shaman focus (Kael)', body: 'Chain Heal is most effective when the raid is stacked. During spread phases (Conflag), switch to Lesser Healing Wave on priority targets. Keep Earth Shield on the MT. Use Nature\'s Swiftness for emergency saves.', severity: 'info' });
         }
 
         // Healing activity
@@ -1744,7 +1763,7 @@
           if (overallOhPct > 35 && directHeals.length > 0) {
             findings.push({
               title: `Overall direct heal overhealing: ${overallOhPct.toFixed(0)}%`,
-              body: `Across all direct heals (excluding HoTs), ${overallOhPct.toFixed(0)}% of healing done was wasted. This represents significant mana inefficiency. In a fight like Kael where P3-P5 is a mana endurance test, this wasted mana directly translates to fewer heals when they matter most. Downrank your primary spells or adjust assignments.`,
+              body: `Across all direct heals (excluding HoTs), ${overallOhPct.toFixed(0)}% of healing done was wasted. This represents significant mana inefficiency — on long fights this wasted mana directly translates to fewer heals when they matter most. Downrank your primary spells or adjust assignments.`,
               severity: overallOhPct > 50 ? 'warning' : 'info'
             });
           }
@@ -1938,15 +1957,20 @@
 
         // DPS dying to avoidable damage
         if (dmgTaken.length && deaths.length > 0) {
-          const avoidable = dmgTaken.filter(([label]) => /Conflagration|Remote Toy|Arcane Burst|Flame Strike/i.test(label));
+          const avoidablePatterns = {
+            [BOSS_KEYS.KAEL]: /Conflagration|Remote Toy|Arcane Burst|Flame Strike/i,
+            [BOSS_KEYS.LURKER]: /Spout|Scalding Water/i,
+            [BOSS_KEYS.LEO]: /Whirlwind/i,
+            [BOSS_KEYS.KARATHRESS]: /Spitfire Totem/i,
+            [BOSS_KEYS.MOROGRIM]: /Tidal Wave/i,
+            [BOSS_KEYS.VASHJ]: /Shock Blast|Toxic Spore/i,
+          };
+          const pattern = avoidablePatterns[bossKey] || /Conflagration|Remote Toy|Arcane Burst|Flame Strike/i;
+          const avoidable = dmgTaken.filter(([label]) => pattern.test(label));
           if (avoidable.length) {
             findings.push({
               title: 'Dying to avoidable mechanics',
-              body: `Took heavy damage from: ${avoidable.slice(0,3).map(([l,c]) => `${l} (${c} hits)`).join(', ')}. ${
-                avoidable.some(([l]) => /Conflagration/i.test(l)) ? 'Conflagration: you were within 30 yards of Capernian. Only the Warlock tank should be that close.' :
-                avoidable.some(([l]) => /Remote Toy/i.test(l)) ? 'Remote Toy: this is undispellable — spread from other players to avoid splash Bomb damage.' :
-                'These mechanics can be avoided with proper positioning.'
-              }`,
+              body: `Took heavy damage from: ${avoidable.slice(0,3).map(([l,c]) => `${l} (${c} hits)`).join(', ')}. These mechanics can be avoided with proper positioning or awareness.`,
               severity: 'warning'
             });
           }
@@ -1965,7 +1989,7 @@
           if (activeTime > 60 && bladeFlurry.length === 0) {
             findings.push({
               title: 'Blade Flurry never used',
-              body: 'Blade Flurry (2 min CD) cleaves to a nearby target for 15 seconds. On a multi-target fight like Kael, this should be used on cooldown — especially during P2 weapons and P3 advisors when multiple mobs are up.',
+              body: 'Blade Flurry (2 min CD) cleaves to a nearby target for 15 seconds. On multi-target phases, this should be used on cooldown for significant DPS gains.',
               severity: 'warning'
             });
           }
