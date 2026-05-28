@@ -7,7 +7,7 @@ import json
 import re
 import sys
 import time
-from collections import defaultdict
+from collections import Counter, defaultdict
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -515,9 +515,12 @@ def generate_report(report_url: str) -> dict[str, Any]:
     aggregate_healing: dict[str, int] = defaultdict(int)
     aggregate_damage_done: dict[str, int] = defaultdict(int)
     aggregate_damage_taken: dict[str, int] = defaultdict(int)
+    pull_summaries: list[dict[str, Any]] = []
 
     for fight in fights:
         pull, summary = analyze_pull(client, report_id, report_start_ms, fight, actors_by_id, players_by_id, friendlies)
+        summary["players"] = pull["players"]
+        pull_summaries.append(summary)
         for player, spells in summary["spell_casts"].items():
             for spell, count in spells.items():
                 aggregate_spell_casts[player][spell] += count
@@ -538,25 +541,62 @@ def generate_report(report_url: str) -> dict[str, Any]:
         else:
             boss_entry["wipes"] += 1
 
-    players: dict[str, dict[str, str]] = {}
+    # Build a lookup of class/icon per player from friendlies
+    friendly_info: dict[str, dict[str, str]] = {}
     for friendly in sorted(friendlies, key=lambda item: item["name"]):
         name = friendly["name"]
-        player_class = friendly.get("type", "Unknown")
-        players[name] = {
-            "role": infer_role(
-                player_class,
-                friendly.get("icon"),
+        friendly_info[name] = {
+            "class": friendly.get("type", "Unknown"),
+            "icon": friendly.get("icon"),
+        }
+
+    # Infer roles per pull so spec swaps between pulls are detected
+    per_pull_roles: list[dict[str, str]] = []
+    for pull_summary in pull_summaries:
+        pull_roles: dict[str, str] = {}
+        for player_name in pull_summary["players"]:
+            info = friendly_info.get(player_name)
+            if not info:
+                continue
+            pull_roles[player_name] = infer_role(
+                info["class"],
+                info.get("icon"),
+                dict(pull_summary["spell_casts"].get(player_name, {})),
+                pull_summary["total_healing"].get(player_name, 0),
+                pull_summary["total_damage_taken"].get(player_name, 0),
+                pull_summary["total_damage_done"].get(player_name, 0),
+            )
+        per_pull_roles.append(pull_roles)
+
+    # Assign per-pull roles to each pull and determine primary (most common) role per player
+    player_role_counts: dict[str, Counter] = defaultdict(Counter)
+    pull_idx = 0
+    for boss_entry in bosses.values():
+        for pull in boss_entry["pulls"]:
+            roles = per_pull_roles[pull_idx]
+            pull["roles"] = roles
+            for player_name, role in roles.items():
+                player_role_counts[player_name][role] += 1
+            pull_idx += 1
+
+    # Global players dict uses most-common role as fallback
+    players: dict[str, dict[str, str]] = {}
+    for name, info in friendly_info.items():
+        if player_role_counts[name]:
+            primary_role = player_role_counts[name].most_common(1)[0][0]
+        else:
+            primary_role = infer_role(
+                info["class"],
+                info.get("icon"),
                 dict(aggregate_spell_casts.get(name, {})),
                 aggregate_healing.get(name, 0),
                 aggregate_damage_taken.get(name, 0),
                 aggregate_damage_done.get(name, 0),
-            ),
-            "class": player_class,
+            )
+        players[name] = {
+            "role": primary_role,
+            "class": info["class"],
         }
-
-    for boss_entry in bosses.values():
-        for pull in boss_entry["pulls"]:
-            pull["roles"] = {name: players[name]["role"] for name in pull["players"] if name in players}
 
     return {
         "log_info": {

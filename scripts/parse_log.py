@@ -595,6 +595,44 @@ def parse_talent_specs(lines):
     return talent_specs
 
 
+def parse_talent_specs_per_encounter(lines, encounters):
+    """Parse COMBATANT_INFO per encounter to detect spec swaps between pulls.
+
+    Returns: {encounter_index: {player_name: (t1, t2, t3)}}
+    """
+    # Build player ID -> name mapping
+    id_to_name = {}
+    for line in lines:
+        matches = re.findall(r'(Player-\d+-[A-F0-9]+),"([^"]+)"', line)
+        for pid, name in matches:
+            if pid not in id_to_name:
+                id_to_name[pid] = extract_player_name(name)
+
+    per_encounter_specs = {}
+    for enc_idx, enc in enumerate(encounters):
+        start = enc['start_line']
+        end = enc['end_line'] or len(lines) - 1
+        enc_specs = {}
+        for line in lines[start:end + 1]:
+            if 'COMBATANT_INFO' not in line:
+                continue
+            m = re.search(r'COMBATANT_INFO,(Player-\d+-[A-F0-9]+)', line)
+            if not m:
+                continue
+            player_id = m.group(1)
+            specs = re.findall(r'\((\d+),(\d+),(\d+)\)', line)
+            for s in specs:
+                total = int(s[0]) + int(s[1]) + int(s[2])
+                if 55 <= total <= 65:
+                    name = id_to_name.get(player_id)
+                    if name:
+                        enc_specs[name] = (int(s[0]), int(s[1]), int(s[2]))
+                    break
+        per_encounter_specs[enc_idx] = enc_specs
+
+    return per_encounter_specs
+
+
 def role_from_talents(player_class, spec):
     """Determine role from class + talent spec.
     
@@ -653,18 +691,24 @@ def generate_report(filepath):
 
     per_encounter_roles, primary_roles = identify_roles(lines, encounters)
     classes = identify_classes(lines, encounters)
-    talent_specs = parse_talent_specs(lines)
+    per_encounter_specs = parse_talent_specs_per_encounter(lines, encounters)
 
-    # Override roles with talent-based detection (authoritative)
-    for player, spec in talent_specs.items():
-        player_class = classes.get(player, 'Unknown')
-        talent_role = role_from_talents(player_class, spec)
-        if talent_role:  # None means talents are ambiguous (e.g., feral druid cat vs bear)
-            primary_roles[player] = talent_role
-            # Also override per-encounter roles where this player exists
-            for enc_idx in per_encounter_roles:
-                if player in per_encounter_roles[enc_idx]:
+    # Override roles with talent-based detection per encounter
+    for enc_idx, specs in per_encounter_specs.items():
+        for player, spec in specs.items():
+            player_class = classes.get(player, 'Unknown')
+            talent_role = role_from_talents(player_class, spec)
+            if talent_role:
+                if enc_idx in per_encounter_roles and player in per_encounter_roles[enc_idx]:
                     per_encounter_roles[enc_idx][player] = talent_role
+
+    # Recompute primary roles from per-encounter roles
+    player_role_counter: dict[str, Counter] = defaultdict(Counter)
+    for enc_idx, roles in per_encounter_roles.items():
+        for player, role in roles.items():
+            player_role_counter[player][role] += 1
+    for player, counts in player_role_counter.items():
+        primary_roles[player] = counts.most_common(1)[0][0]
 
     # Group encounters by boss
     boss_groups = defaultdict(list)
