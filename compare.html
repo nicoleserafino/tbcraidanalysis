@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TBC Raid Comparison</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>window.__COMPARE_DATA__ = {};</script>
+
+  <style>
+    :root {
+      --bg: #0b0f17;
+      --panel: #121927;
+      --panel-2: #182234;
+      --panel-3: #1f2d45;
+      --border: rgba(255, 255, 255, 0.08);
+      --text: #e8edf8;
+      --muted: #98a6c4;
+      --kill: #44d17a;
+      --wipe: #ff6363;
+      --tank: #57a6ff;
+      --healer: #55d48f;
+      --dps: #ffad42;
+      --accent: #8f7cff;
+      --warning: #ffd166;
+      --faster: #44d17a;
+      --slower: #ff6363;
+      --neutral: #98a6c4;
+      --shadow: 0 18px 40px rgba(0, 0, 0, 0.25);
+      --radius: 18px;
+      --radius-sm: 12px;
+      --font: Inter, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: var(--font);
+      color: var(--text);
+      background:
+        radial-gradient(circle at top, rgba(143, 124, 255, 0.18), transparent 28%),
+        linear-gradient(180deg, #0a0f18 0%, #0b0f17 60%, #0d111a 100%);
+      min-height: 100vh;
+    }
+
+    .app {
+      max-width: 1440px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    h1 { font-size: 1.8rem; margin: 0 0 4px; }
+    h2 { font-size: 1.2rem; margin: 0 0 12px; color: var(--accent); }
+    h3 { font-size: 1rem; margin: 0 0 8px; }
+
+    .subtitle { color: var(--muted); font-size: 0.9rem; margin-bottom: 20px; }
+
+    .hero {
+      text-align: center;
+      padding: 32px 0 24px;
+    }
+
+    /* Summary cards */
+    .summary-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+    .summary-card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 16px;
+      text-align: center;
+    }
+    .summary-card .label { color: var(--muted); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.5px; }
+    .summary-card .value { font-size: 1.4rem; font-weight: 700; margin-top: 4px; }
+    .summary-card .delta { font-size: 0.82rem; margin-top: 4px; }
+    .delta.faster { color: var(--faster); }
+    .delta.slower { color: var(--slower); }
+    .delta.neutral { color: var(--neutral); }
+
+    /* Panels */
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      margin-bottom: 20px;
+      box-shadow: var(--shadow);
+    }
+
+    /* Two column layout */
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    @media (max-width: 800px) { .two-col { grid-template-columns: 1fr; } }
+
+    .col-header {
+      font-size: 0.82rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    /* Tables */
+    table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    th { color: var(--muted); font-weight: 600; text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); font-size: 0.78rem; text-transform: uppercase; }
+    td { padding: 6px 8px; border-bottom: 1px solid rgba(255,255,255,0.03); }
+    tr:hover td { background: rgba(255,255,255,0.02); }
+
+    /* Boss comparison row */
+    .boss-row { cursor: pointer; }
+    .boss-row:hover { background: var(--panel-2); }
+    .boss-detail { display: none; padding: 12px; background: var(--panel-2); border-radius: 8px; margin: 8px 0; }
+    .boss-detail.open { display: block; }
+
+    /* Comp pills */
+    .class-pill {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 0.75rem;
+      margin: 2px;
+      background: var(--panel-3);
+    }
+
+    /* Recommendation cards */
+    .rec-card {
+      padding: 12px 16px;
+      border-radius: 8px;
+      margin-bottom: 10px;
+      border-left: 4px solid;
+    }
+    .rec-card.high { border-color: var(--wipe); background: rgba(255, 99, 99, 0.06); }
+    .rec-card.medium { border-color: var(--warning); background: rgba(255, 209, 102, 0.06); }
+    .rec-card.low { border-color: var(--muted); background: rgba(152, 166, 196, 0.04); }
+    .rec-card .rec-title { font-weight: 600; font-size: 0.88rem; margin-bottom: 4px; }
+    .rec-card .rec-category { font-size: 0.72rem; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+    .rec-card .rec-detail { font-size: 0.82rem; color: var(--muted); line-height: 1.4; }
+
+    /* Pacing bar */
+    .pacing-bar {
+      display: flex;
+      height: 28px;
+      border-radius: 6px;
+      overflow: hidden;
+      margin: 8px 0;
+      background: var(--panel-3);
+    }
+    .pacing-segment {
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.65rem;
+      color: white;
+      overflow: hidden;
+      white-space: nowrap;
+    }
+    .pacing-segment.boss { background: var(--accent); }
+    .pacing-segment.gap { background: rgba(255,255,255,0.05); color: var(--muted); }
+
+    /* Buff matrix */
+    .buff-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 4px;
+      font-size: 0.78rem;
+    }
+    .buff-item { padding: 4px 8px; border-radius: 4px; background: var(--panel-3); }
+    .buff-item.both { color: var(--faster); }
+    .buff-item.ours-only { color: var(--accent); }
+    .buff-item.theirs-only { color: var(--warning); }
+    .buff-item.missing { color: var(--slower); }
+
+    .nav-link {
+      display: inline-block;
+      padding: 6px 12px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 0.85rem;
+      margin-bottom: 16px;
+    }
+    .nav-link:hover { color: var(--text); border-color: var(--accent); }
+
+    .section-toggle {
+      cursor: pointer;
+      user-select: none;
+    }
+    .section-toggle::before {
+      content: '▶ ';
+      font-size: 0.7rem;
+      transition: transform 0.2s;
+    }
+    .section-toggle.open::before { content: '▼ '; }
+  </style>
+</head>
+<body>
+  <div class="app" id="compareApp">
+    <a href="index.html" class="nav-link">← Back to Raid Analysis</a>
+
+    <div class="hero">
+      <h1>⚔️ Raid Log Comparison</h1>
+      <div class="subtitle">Compare two raid logs side-by-side to find time savings and optimization opportunities.</div>
+      <div id="reportInfo"></div>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="summary-row" id="summaryCards"></div>
+
+    <!-- Recommendations -->
+    <div class="panel" id="recsPanel">
+      <h2>🎯 Recommendations</h2>
+      <div id="recommendations"></div>
+    </div>
+
+    <!-- Boss Comparison -->
+    <div class="panel">
+      <h2>⚔️ Boss-by-Boss Comparison</h2>
+      <table id="bossTable">
+        <thead>
+          <tr>
+            <th>Boss</th>
+            <th>Our Time</th>
+            <th>Their Time</th>
+            <th>Delta</th>
+            <th>Our DPS</th>
+            <th>Their DPS</th>
+            <th>Our Pulls</th>
+            <th>Their Pulls</th>
+          </tr>
+        </thead>
+        <tbody id="bossBody"></tbody>
+      </table>
+      <div id="bossDetails"></div>
+    </div>
+
+    <!-- Pacing -->
+    <div class="panel">
+      <h2>⏱️ Pacing & Timing</h2>
+      <div class="two-col">
+        <div>
+          <div class="col-header">Our Raid</div>
+          <div id="ourPacing"></div>
+        </div>
+        <div>
+          <div class="col-header">Their Raid</div>
+          <div id="theirPacing"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Composition -->
+    <div class="panel">
+      <h2>👥 Composition</h2>
+      <div class="two-col">
+        <div>
+          <div class="col-header">Our Comp</div>
+          <div id="ourComp"></div>
+        </div>
+        <div>
+          <div class="col-header">Their Comp</div>
+          <div id="theirComp"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Buffs -->
+    <div class="panel">
+      <h2>✨ Buff & Consumable Coverage</h2>
+      <div id="buffComparison"></div>
+    </div>
+  </div>
+
+  <script>
+    const data = window.__COMPARE_DATA__;
+
+    const CLASS_COLORS = {
+      Warrior: '#C79C6E', Paladin: '#F58CBA', Hunter: '#ABD473', Rogue: '#FFF569',
+      Priest: '#FFFFFF', Shaman: '#0070DE', Mage: '#69CCF0', Warlock: '#9482C9', Druid: '#FF7D0A',
+    };
+
+    function escapeHtml(str) {
+      return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    function formatNum(n) {
+      return n != null ? n.toLocaleString() : '—';
+    }
+
+    function init() {
+      if (!data || !data.ours) {
+        document.getElementById('compareApp').innerHTML = '<div class="hero"><h1>No Comparison Data</h1><p class="subtitle">Run <code>python3 scripts/compare_logs.py &lt;our_url&gt; &lt;their_url&gt;</code> to generate comparison data.</p></div>';
+        return;
+      }
+      renderReportInfo();
+      renderSummary();
+      renderRecommendations();
+      renderBossTable();
+      renderPacing();
+      renderComp();
+      renderBuffs();
+    }
+
+    function renderReportInfo() {
+      const el = document.getElementById('reportInfo');
+      el.innerHTML = `
+        <div style="display:flex;justify-content:center;gap:40px;margin-top:12px;font-size:0.85rem;">
+          <div><strong style="color:var(--accent)">Ours:</strong> ${escapeHtml(data.ours.title || data.ours.report_id)}</div>
+          <div><strong style="color:var(--warning)">Theirs:</strong> ${escapeHtml(data.theirs.title || data.theirs.report_id)}</div>
+        </div>
+      `;
+    }
+
+    function renderSummary() {
+      const el = document.getElementById('summaryCards');
+      const pacing = data.pacing;
+      const totalDelta = pacing.delta_total_ms;
+      const gapDelta = pacing.delta_gap_ms;
+      const ourBossKills = data.bosses.filter(b => b.ours).length;
+      const theirBossKills = data.bosses.filter(b => b.theirs).length;
+
+      // Total DPS across all bosses
+      let ourTotalDps = 0, theirTotalDps = 0, bossCount = 0;
+      for (const boss of data.bosses) {
+        if (boss.ours && boss.theirs) {
+          ourTotalDps += boss.ours.raid_dps;
+          theirTotalDps += boss.theirs.raid_dps;
+          bossCount++;
+        }
+      }
+      const avgDpsDiff = bossCount > 0 ? Math.round((ourTotalDps - theirTotalDps) / bossCount) : 0;
+
+      el.innerHTML = `
+        <div class="summary-card">
+          <div class="label">Total Raid Time</div>
+          <div class="value">${escapeHtml(pacing.ours.total_raid_str)}</div>
+          <div class="delta ${totalDelta > 0 ? 'slower' : totalDelta < 0 ? 'faster' : 'neutral'}">
+            ${totalDelta > 0 ? '+' : ''}${formatDuration(totalDelta)} vs theirs
+          </div>
+        </div>
+        <div class="summary-card">
+          <div class="label">Non-Combat Time</div>
+          <div class="value">${escapeHtml(pacing.ours.total_gap_str)}</div>
+          <div class="delta ${gapDelta > 0 ? 'slower' : gapDelta < 0 ? 'faster' : 'neutral'}">
+            ${gapDelta > 0 ? '+' : ''}${formatDuration(gapDelta)} vs theirs
+          </div>
+        </div>
+        <div class="summary-card">
+          <div class="label">Bosses Killed</div>
+          <div class="value">${ourBossKills}</div>
+          <div class="delta neutral">Theirs: ${theirBossKills}</div>
+        </div>
+        <div class="summary-card">
+          <div class="label">Avg Raid DPS Diff</div>
+          <div class="value ${avgDpsDiff >= 0 ? '' : ''}">${avgDpsDiff >= 0 ? '+' : ''}${formatNum(avgDpsDiff)}</div>
+          <div class="delta ${avgDpsDiff >= 0 ? 'faster' : 'slower'}">
+            ${avgDpsDiff >= 0 ? 'Higher than theirs' : 'Lower than theirs'}
+          </div>
+        </div>
+        <div class="summary-card">
+          <div class="label">Recommendations</div>
+          <div class="value">${data.recommendations.length}</div>
+          <div class="delta neutral">${data.recommendations.filter(r => r.severity === 'high').length} high priority</div>
+        </div>
+      `;
+    }
+
+    function formatDuration(ms) {
+      const neg = ms < 0;
+      ms = Math.abs(ms);
+      const sec = Math.floor(ms / 1000);
+      const m = Math.floor(sec / 60);
+      const s = sec % 60;
+      if (m >= 60) {
+        const h = Math.floor(m / 60);
+        return `${neg ? '-' : ''}${h}:${String(m % 60).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+      }
+      return `${neg ? '-' : ''}${m}:${String(s).padStart(2,'0')}`;
+    }
+
+    function renderRecommendations() {
+      const el = document.getElementById('recommendations');
+      if (!data.recommendations.length) {
+        el.innerHTML = '<p style="color:var(--muted)">No significant differences found — raids are performing similarly!</p>';
+        return;
+      }
+      el.innerHTML = data.recommendations.map(rec => `
+        <div class="rec-card ${rec.severity}">
+          <div class="rec-category">${escapeHtml(rec.category)}</div>
+          <div class="rec-title">${escapeHtml(rec.title)}</div>
+          <div class="rec-detail">${escapeHtml(rec.detail)}</div>
+        </div>
+      `).join('');
+    }
+
+    function renderBossTable() {
+      const tbody = document.getElementById('bossBody');
+      const details = document.getElementById('bossDetails');
+      let rows = '';
+      let detailsHtml = '';
+
+      for (const boss of data.bosses) {
+        const o = boss.ours || {};
+        const t = boss.theirs || {};
+        const d = boss.delta || {};
+        const deltaClass = d.time_favorable ? 'faster' : d.time_ms < 0 ? 'slower' : d.time_ms > 0 ? 'slower' : 'neutral';
+
+        rows += `<tr class="boss-row" data-boss="${escapeHtml(boss.name)}">
+          <td><strong>${escapeHtml(boss.name)}</strong></td>
+          <td>${o.duration_str || '—'}</td>
+          <td>${t.duration_str || '—'}</td>
+          <td class="${deltaClass}">${d.time_str ? (d.time_favorable ? '🟢 ' : '🔴 ') + d.time_str : '—'}</td>
+          <td>${o.raid_dps ? formatNum(o.raid_dps) : '—'}</td>
+          <td>${t.raid_dps ? formatNum(t.raid_dps) : '—'}</td>
+          <td>${o.pulls ? o.pulls.total_pulls + (o.pulls.wipes ? ` (${o.pulls.wipes} wipe${o.pulls.wipes > 1 ? 's' : ''})` : '') : '—'}</td>
+          <td>${t.pulls ? t.pulls.total_pulls + (t.pulls.wipes ? ` (${t.pulls.wipes} wipe${t.pulls.wipes > 1 ? 's' : ''})` : '') : '—'}</td>
+        </tr>`;
+
+        // Detail panel
+        detailsHtml += `<div class="boss-detail" id="detail-${escapeHtml(boss.name).replace(/[^a-zA-Z0-9]/g, '_')}">
+          <div class="two-col">
+            <div>
+              <h3 style="color:var(--accent)">Our Top DPS</h3>
+              ${(o.top_dps || []).map(([name, dmg]) => `<div style="font-size:0.82rem">${escapeHtml(name)}: ${formatNum(dmg)}</div>`).join('')}
+              <h3 style="margin-top:12px;color:var(--accent)">Our Top Healers</h3>
+              ${(o.top_healers || []).map(([name, heal]) => `<div style="font-size:0.82rem">${escapeHtml(name)}: ${formatNum(heal)}</div>`).join('')}
+              ${o.cooldowns && o.cooldowns.length ? `<h3 style="margin-top:12px;color:var(--accent)">Our Cooldowns</h3>${o.cooldowns.map(cd => `<div style="font-size:0.82rem">${cd.spell} at ${cd.time_sec}s (${cd.time_pct}%)</div>`).join('')}` : ''}
+              <div style="margin-top:8px;font-size:0.8rem;color:var(--muted)">Overheal: ${o.overheal_pct ?? '?'}%</div>
+            </div>
+            <div>
+              <h3 style="color:var(--warning)">Their Top DPS</h3>
+              ${(t.top_dps || []).map(([name, dmg]) => `<div style="font-size:0.82rem">${escapeHtml(name)}: ${formatNum(dmg)}</div>`).join('')}
+              <h3 style="margin-top:12px;color:var(--warning)">Their Top Healers</h3>
+              ${(t.top_healers || []).map(([name, heal]) => `<div style="font-size:0.82rem">${escapeHtml(name)}: ${formatNum(heal)}</div>`).join('')}
+              ${t.cooldowns && t.cooldowns.length ? `<h3 style="margin-top:12px;color:var(--warning)">Their Cooldowns</h3>${t.cooldowns.map(cd => `<div style="font-size:0.82rem">${cd.spell} at ${cd.time_sec}s (${cd.time_pct}%)</div>`).join('')}` : ''}
+              <div style="margin-top:8px;font-size:0.8rem;color:var(--muted)">Overheal: ${t.overheal_pct ?? '?'}%</div>
+            </div>
+          </div>
+          ${d.missing_buffs && d.missing_buffs.length ? `<div style="margin-top:12px;font-size:0.82rem;color:var(--warning)"><strong>Buffs they have that we don't:</strong> ${d.missing_buffs.join(', ')}</div>` : ''}
+          ${d.extra_buffs && d.extra_buffs.length ? `<div style="margin-top:4px;font-size:0.82rem;color:var(--accent)"><strong>Buffs we have that they don't:</strong> ${d.extra_buffs.join(', ')}</div>` : ''}
+        </div>`;
+      }
+
+      tbody.innerHTML = rows;
+      details.innerHTML = detailsHtml;
+
+      // Toggle details on row click
+      tbody.querySelectorAll('.boss-row').forEach(row => {
+        row.addEventListener('click', () => {
+          const bossName = row.dataset.boss.replace(/[^a-zA-Z0-9]/g, '_');
+          const detail = document.getElementById('detail-' + bossName);
+          if (detail) detail.classList.toggle('open');
+        });
+      });
+    }
+
+    function renderPacing() {
+      renderPacingBar('ourPacing', data.pacing.ours);
+      renderPacingBar('theirPacing', data.pacing.theirs);
+    }
+
+    function renderPacingBar(elId, pacingData) {
+      const el = document.getElementById(elId);
+      const totalMs = pacingData.total_raid_ms;
+      if (!totalMs || !pacingData.pacing || !pacingData.pacing.length) {
+        el.innerHTML = '<div style="color:var(--muted);font-size:0.85rem">No pacing data available</div>';
+        return;
+      }
+
+      let html = `<div style="font-size:0.85rem;margin-bottom:8px">Total: <strong>${pacingData.total_raid_str}</strong> | Gaps: <strong>${pacingData.total_gap_str}</strong></div>`;
+      html += '<div class="pacing-bar">';
+
+      for (const entry of pacingData.pacing) {
+        if (entry.gap_from_prev_ms && entry.gap_from_prev_ms > 0) {
+          const gapPct = (entry.gap_from_prev_ms / totalMs * 100).toFixed(1);
+          html += `<div class="pacing-segment gap" style="width:${gapPct}%" title="Gap: ${entry.gap_from_prev_str}">${gapPct > 5 ? entry.gap_from_prev_str : ''}</div>`;
+        }
+        const bossPct = (entry.fight_duration_ms / totalMs * 100).toFixed(1);
+        html += `<div class="pacing-segment boss" style="width:${bossPct}%" title="${entry.boss}">${bossPct > 4 ? entry.boss.split(' ')[0] : ''}</div>`;
+      }
+
+      html += '</div>';
+
+      // List view
+      html += '<div style="margin-top:12px;font-size:0.82rem">';
+      for (const entry of pacingData.pacing) {
+        if (entry.gap_from_prev_ms && entry.gap_from_prev_ms > 0) {
+          html += `<div style="color:var(--muted);padding:2px 0">↕ ${entry.gap_from_prev_str} gap</div>`;
+        }
+        const durSec = Math.round(entry.fight_duration_ms / 1000);
+        html += `<div style="padding:2px 0">⚔️ ${entry.boss} — ${Math.floor(durSec/60)}:${String(durSec%60).padStart(2,'0')}</div>`;
+      }
+      html += '</div>';
+
+      // Trash info
+      if (pacingData.trash && pacingData.trash.logged) {
+        html += `<div style="margin-top:12px;font-size:0.82rem;color:var(--muted)">
+          Trash: ${pacingData.trash.pull_count} pulls, ${pacingData.trash.total_time_str} total
+        </div>`;
+      } else if (pacingData.trash) {
+        html += `<div style="margin-top:12px;font-size:0.82rem;color:var(--muted)">Trash not logged — gap times include trash + movement</div>`;
+      }
+
+      el.innerHTML = html;
+    }
+
+    function renderComp() {
+      renderCompCol('ourComp', data.comp.ours, data.roster.ours);
+      renderCompCol('theirComp', data.comp.theirs, data.roster.theirs);
+    }
+
+    function renderCompCol(elId, comp, roster) {
+      const el = document.getElementById(elId);
+      let html = `<div style="font-size:0.88rem;margin-bottom:8px">
+        <strong>${comp.total}</strong> players — 
+        <span style="color:var(--tank)">${comp.roles.Tank} tanks</span>,
+        <span style="color:var(--healer)">${comp.roles.Healer} healers</span>,
+        <span style="color:var(--dps)">${comp.roles.DPS} DPS</span>
+      </div>`;
+
+      // Class breakdown
+      html += '<div style="margin-bottom:8px">';
+      for (const [cls, count] of Object.entries(comp.classes)) {
+        const color = CLASS_COLORS[cls] || '#aaa';
+        html += `<span class="class-pill" style="color:${color}">${cls} ×${count}</span> `;
+      }
+      html += '</div>';
+
+      // Player list grouped by role
+      const byRole = { Tank: [], Healer: [], DPS: [] };
+      for (const [name, info] of Object.entries(roster)) {
+        (byRole[info.role] || byRole.DPS).push({ name, ...info });
+      }
+
+      for (const role of ['Tank', 'Healer', 'DPS']) {
+        if (!byRole[role].length) continue;
+        const roleColor = role === 'Tank' ? 'var(--tank)' : role === 'Healer' ? 'var(--healer)' : 'var(--dps)';
+        html += `<div style="margin-top:8px;font-size:0.78rem;color:${roleColor};font-weight:600">${role}s</div>`;
+        html += '<div style="font-size:0.8rem">';
+        for (const p of byRole[role]) {
+          const color = CLASS_COLORS[p.class] || '#aaa';
+          html += `<div style="color:${color};padding:1px 0">${escapeHtml(p.name)} <span style="color:var(--muted)">(${p.class})</span></div>`;
+        }
+        html += '</div>';
+      }
+
+      el.innerHTML = html;
+    }
+
+    function renderBuffs() {
+      const el = document.getElementById('buffComparison');
+      // Collect all buffs from all bosses
+      const ourBuffs = new Set();
+      const theirBuffs = new Set();
+      for (const boss of data.bosses) {
+        if (boss.ours) boss.ours.buffs.forEach(b => ourBuffs.add(b));
+        if (boss.theirs) boss.theirs.buffs.forEach(b => theirBuffs.add(b));
+      }
+
+      const allBuffs = new Set([...ourBuffs, ...theirBuffs]);
+      const sorted = [...allBuffs].sort();
+
+      let html = '<div style="margin-bottom:12px;font-size:0.82rem;color:var(--muted)">';
+      html += `<span style="color:var(--faster)">● Both have</span> &nbsp; `;
+      html += `<span style="color:var(--accent)">● Only ours</span> &nbsp; `;
+      html += `<span style="color:var(--warning)">● Only theirs (we\'re missing)</span>`;
+      html += '</div>';
+
+      html += '<div class="buff-grid">';
+      for (const buff of sorted) {
+        const hasOurs = ourBuffs.has(buff);
+        const hasTheirs = theirBuffs.has(buff);
+        let cls = 'both';
+        if (hasOurs && !hasTheirs) cls = 'ours-only';
+        else if (!hasOurs && hasTheirs) cls = 'theirs-only';
+        html += `<div class="buff-item ${cls}">${escapeHtml(buff)}</div>`;
+      }
+      html += '</div>';
+
+      el.innerHTML = html;
+    }
+
+    document.addEventListener('DOMContentLoaded', init);
+  </script>
+</body>
+</html>
