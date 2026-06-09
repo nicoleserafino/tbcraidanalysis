@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>TBC Raid Comparison</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script>window.__COMPARE_DATA__ = {};</script>
+<script>window.__COMPARE_DATA__ = null;</script>
 
   <style>
     :root {
@@ -205,12 +205,43 @@
   </style>
 </head>
 <body>
-  <div class="app" id="compareApp">
+  <!-- Load screen: input form -->
+  <div id="loadScreen" class="app" style="padding:2rem;">
     <a href="index.html" class="nav-link">← Back to Raid Analysis</a>
+    <div class="hero">
+      <h1>⚔️ Raid Log Comparison</h1>
+      <div class="subtitle">Compare two WarcraftLogs reports side-by-side to find time savings and optimization opportunities.</div>
+    </div>
+    <div class="panel" style="max-width:650px;margin:0 auto;padding:1.5rem;">
+      <div style="margin-bottom:1rem;">
+        <label style="display:block;font-weight:600;margin-bottom:0.3rem;">Our Report URL</label>
+        <input id="ourUrlInput" type="text" placeholder="https://fresh.warcraftlogs.com/reports/ABC123..." style="width:100%;padding:0.5rem;border-radius:6px;border:1px solid #444;background:#1a1e2e;color:#e0e0e0;font-size:0.95rem;">
+      </div>
+      <div style="margin-bottom:1rem;">
+        <label style="display:block;font-weight:600;margin-bottom:0.3rem;">Their Report URL</label>
+        <input id="theirUrlInput" type="text" placeholder="https://fresh.warcraftlogs.com/reports/XYZ789..." style="width:100%;padding:0.5rem;border-radius:6px;border:1px solid #444;background:#1a1e2e;color:#e0e0e0;font-size:0.95rem;">
+      </div>
+      <div style="margin-bottom:1rem;">
+        <label style="display:block;font-weight:600;margin-bottom:0.3rem;">API Key (v1)</label>
+        <input id="apiKeyInput" type="password" placeholder="Your WarcraftLogs v1 API key" style="width:100%;padding:0.5rem;border-radius:6px;border:1px solid #444;background:#1a1e2e;color:#e0e0e0;font-size:0.95rem;">
+        <div style="font-size:0.8rem;color:#888;margin-top:0.3rem;">Saved in localStorage. Never sent anywhere except WarcraftLogs.</div>
+      </div>
+      <button id="compareBtn" style="padding:0.6rem 1.5rem;border-radius:6px;border:none;background:var(--accent);color:#fff;font-weight:600;cursor:pointer;font-size:0.95rem;">⚔️ Compare Reports</button>
+      <div id="fetchStatus" style="margin-top:1rem;font-size:0.9rem;color:#aaa;"></div>
+      <div id="fetchProgress" style="margin-top:0.5rem;font-size:0.82rem;color:var(--muted);"></div>
+    </div>
+  </div>
+
+  <!-- Main comparison UI (hidden until data loaded) -->
+  <div class="app" id="compareApp" style="display:none;">
+    <a href="index.html" class="nav-link">← Back to Raid Analysis</a>
+    <div style="margin-bottom:16px;">
+      <button id="backBtn" style="padding:0.4rem 0.8rem;border-radius:6px;border:1px solid #444;background:#2a2e3e;color:#e0e0e0;cursor:pointer;font-size:0.85rem;">← New Comparison</button>
+    </div>
 
     <div class="hero">
       <h1>⚔️ Raid Log Comparison</h1>
-      <div class="subtitle">Compare two raid logs side-by-side to find time savings and optimization opportunities.</div>
+      <div class="subtitle">Side-by-side breakdown — green means we're ahead, red means they are.</div>
       <div id="reportInfo"></div>
     </div>
 
@@ -282,26 +313,455 @@
   </div>
 
   <script>
-    const data = window.__COMPARE_DATA__;
+    // ===== State =====
+    let data = window.__COMPARE_DATA__;
 
     const CLASS_COLORS = {
       Warrior: '#C79C6E', Paladin: '#F58CBA', Hunter: '#ABD473', Rogue: '#FFF569',
       Priest: '#FFFFFF', Shaman: '#0070DE', Mage: '#69CCF0', Warlock: '#9482C9', Druid: '#FF7D0A',
     };
+    const PLAYER_CLASSES = new Set(['Warrior','Paladin','Hunter','Rogue','Priest','Shaman','Mage','Warlock','Druid']);
+    const CONSUMABLE_BUFFS = new Set([
+      'Flask of Pure Death','Flask of Blinding Light','Flask of Supreme Power','Flask of Relentless Assault',
+      'Flask of Mighty Versatility','Flask of Fortification','Flask of the Titans',
+      'Unstable Flask of the Bandit','Unstable Flask of the Elder','Unstable Flask of the Beast',
+      'Unstable Flask of the Physician','Unstable Flask of the Soldier','Unstable Flask of the Sorcerer',
+      'Well Fed','Brilliant Wizard Oil','Superior Wizard Oil','Adamantite Weightstone','Adamantite Sharpening Stone',
+      'Elixir of Major Agility','Elixir of Major Firepower','Elixir of Major Shadow Power',
+      'Elixir of Healing Power','Elixir of Draenic Wisdom','Elixir of Major Mageblood',
+      'Elixir of Major Strength','Elixir of Mastery','Elixir of Major Fortitude','Elixir of Major Defense',
+      'Haste Potion','Destruction Potion','Super Mana Potion','Ironshield Potion','Free Action Potion',
+    ]);
+    const RAID_BUFFS = new Set([
+      'Arcane Brilliance','Mark of the Wild','Gift of the Wild',
+      'Power Word: Fortitude','Prayer of Fortitude','Shadow Protection','Prayer of Shadow Protection',
+      'Divine Spirit','Prayer of Spirit','Blessing of Kings','Greater Blessing of Kings',
+      'Blessing of Might','Greater Blessing of Might','Blessing of Wisdom','Greater Blessing of Wisdom',
+      'Blessing of Salvation','Greater Blessing of Salvation','Blessing of Light','Greater Blessing of Light',
+      'Windfury Totem','Grace of Air Totem','Strength of Earth Totem','Mana Spring Totem',
+      'Wrath of Air Totem','Totem of Wrath','Moonkin Aura','Leader of the Pack',
+      'Trueshot Aura','Ferocious Inspiration','Unleashed Rage','Vampiric Embrace',
+    ]);
 
+    // ===== API Client =====
+    const WCL_API_BASE = 'https://fresh.warcraftlogs.com/v1';
+
+    function extractReportId(url) {
+      const m = url.match(/\/reports\/([A-Za-z0-9]+)/);
+      if (m) return m[1];
+      throw new Error('Could not extract report ID from URL: ' + url);
+    }
+
+    async function apiFetch(path, apiKey, params = {}) {
+      const query = new URLSearchParams({ api_key: apiKey, ...params });
+      const resp = await fetch(`${WCL_API_BASE}${path}?${query}`);
+      if (!resp.ok) {
+        const text = await resp.text();
+        throw new Error(`API error ${resp.status}: ${text}`);
+      }
+      return resp.json();
+    }
+
+    async function fetchPaginatedEvents(eventType, reportId, apiKey, start, end, extraParams = {}) {
+      const events = [];
+      let nextStart = start;
+      while (true) {
+        const payload = await apiFetch(`/report/events/${eventType}/${reportId}`, apiKey, { start: nextStart, end, ...extraParams });
+        const pageEvents = payload.events || [];
+        events.push(...pageEvents);
+        const nextPage = payload.nextPageTimestamp;
+        if (!nextPage || nextPage >= end || nextPage === nextStart) break;
+        nextStart = nextPage;
+      }
+      return events;
+    }
+
+    function roleFromIcon(playerClass, icon) {
+      icon = icon || '';
+      if (icon.includes('-Holy') || icon.includes('-Restoration') || icon.includes('-Discipline')) return 'Healer';
+      if (icon.includes('-Protection') || icon.includes('-Guardian')) return 'Tank';
+      if (['Mage','Warlock','Rogue','Hunter'].includes(playerClass)) return 'DPS';
+      const dpsSpecs = ['-Shadow','-Balance','-Feral','-Enhancement','-Elemental','-Retribution',
+        '-Arms','-Fury','-Combat','-Assassination','-Subtlety','-Frost','-Fire',
+        '-Arcane','-Marksmanship','-BeastMastery','-Survival','-Affliction','-Demonology','-Destruction'];
+      if (dpsSpecs.some(s => icon.includes(s))) return 'DPS';
+      return 'DPS';
+    }
+
+    function fmtDuration(ms) {
+      const totalSec = Math.abs(ms) / 1000;
+      if (totalSec >= 3600) {
+        const h = Math.floor(totalSec / 3600);
+        const m = Math.floor((totalSec % 3600) / 60);
+        const s = Math.floor(totalSec % 60);
+        return `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+      }
+      const m = Math.floor(totalSec / 60);
+      const s = Math.floor(totalSec % 60);
+      return `${m}:${String(s).padStart(2,'0')}`;
+    }
+
+    // ===== Fetch one report =====
+    async function fetchReportData(reportUrl, apiKey, statusEl) {
+      const reportId = extractReportId(reportUrl);
+      statusEl.textContent = `Fetching fights for ${reportId}...`;
+
+      const fightsPayload = await apiFetch(`/report/fights/${reportId}`, apiKey);
+      const allFights = fightsPayload.fights || [];
+      const bossFights = allFights.filter(f => (f.boss || 0) > 0);
+      const trashFights = allFights.filter(f => (f.boss || 0) === 0 && f.name !== 'Unknown');
+
+      const friendlies = fightsPayload.friendlies || [];
+      const playersById = {};
+      for (const actor of friendlies) {
+        if (PLAYER_CLASSES.has(actor.type)) playersById[actor.id] = actor;
+      }
+
+      const reportStartMs = fightsPayload.start || 0;
+      const title = fightsPayload.title || '';
+      const owner = fightsPayload.owner || '';
+
+      // Roster
+      const roster = {};
+      for (const actor of friendlies) {
+        if (!PLAYER_CLASSES.has(actor.type)) continue;
+        roster[actor.name] = { class: actor.type, role: roleFromIcon(actor.type, actor.icon), icon: actor.icon || '' };
+      }
+
+      // Per-boss: only keep fastest kill
+      const bossMap = {};
+      for (const fight of bossFights) {
+        if (!fight.kill) continue;
+        const dur = fight.end_time - fight.start_time;
+        if (!bossMap[fight.name] || dur < bossMap[fight.name].duration_ms) {
+          bossMap[fight.name] = { fight, duration_ms: dur };
+        }
+      }
+
+      const bosses = [];
+      for (const [bossName, entry] of Object.entries(bossMap)) {
+        const fight = entry.fight;
+        const start = fight.start_time, end = fight.end_time;
+        const durationMs = end - start;
+        statusEl.textContent = `${reportId}: Fetching ${bossName}...`;
+
+        // Fetch damage, healing, buffs in parallel
+        const [dmgTable, healTable, buffTable] = await Promise.all([
+          apiFetch(`/report/tables/damage-done/${reportId}`, apiKey, { start, end }),
+          apiFetch(`/report/tables/healing/${reportId}`, apiKey, { start, end }),
+          apiFetch(`/report/tables/buffs/${reportId}`, apiKey, { start, end }),
+        ]);
+
+        let totalDamage = 0;
+        const playerDamage = {};
+        for (const e of (dmgTable.entries || [])) {
+          if (e.id in playersById) {
+            const name = playersById[e.id].name;
+            const dmg = e.total || 0;
+            playerDamage[name] = dmg;
+            totalDamage += dmg;
+          }
+        }
+
+        let totalHealing = 0, totalOverheal = 0;
+        const playerHealing = {};
+        for (const e of (healTable.entries || [])) {
+          if (e.id in playersById) {
+            const name = playersById[e.id].name;
+            const heal = e.total || 0;
+            const oh = e.overheal || 0;
+            playerHealing[name] = { healing: heal, overheal: oh };
+            totalHealing += heal;
+            totalOverheal += oh;
+          }
+        }
+
+        const buffsPresent = new Set();
+        for (const e of (buffTable.auras || [])) {
+          if (CONSUMABLE_BUFFS.has(e.name) || RAID_BUFFS.has(e.name)) buffsPresent.add(e.name);
+        }
+
+        // Bloodlust/Heroism
+        statusEl.textContent = `${reportId}: ${bossName} cooldowns...`;
+        const cooldownEvents = [];
+        for (const cdSpell of ['Bloodlust', 'Heroism']) {
+          try {
+            const cdCasts = await fetchPaginatedEvents('casts', reportId, apiKey, start, end, { filter: `ability.name="${cdSpell}"` });
+            for (const ev of cdCasts) {
+              if (ev.type === 'cast') {
+                cooldownEvents.push({
+                  spell: cdSpell,
+                  time_sec: Math.round((ev.timestamp - start) / 100) / 10,
+                  time_pct: Math.round((ev.timestamp - start) / (end - start) * 1000) / 10,
+                });
+              }
+            }
+          } catch (e) { /* filter may fail on some reports */ }
+        }
+
+        const durationSec = durationMs / 1000;
+        bosses.push({
+          name: bossName,
+          fight_id: fight.id,
+          duration_ms: durationMs,
+          duration_str: fmtDuration(durationMs),
+          start_time: start,
+          end_time: end,
+          total_damage: totalDamage,
+          raid_dps: durationSec > 0 ? Math.round(totalDamage / durationSec) : 0,
+          total_healing: totalHealing,
+          total_overheal: totalOverheal,
+          overheal_pct: (totalHealing + totalOverheal) > 0 ? Math.round(totalOverheal / (totalHealing + totalOverheal) * 1000) / 10 : 0,
+          raid_hps: durationSec > 0 ? Math.round(totalHealing / durationSec) : 0,
+          player_damage: Object.fromEntries(Object.entries(playerDamage).sort((a,b) => b[1] - a[1])),
+          player_healing: Object.fromEntries(Object.entries(playerHealing).sort((a,b) => b[1].healing - a[1].healing)),
+          buffs_present: [...buffsPresent].sort(),
+          cooldowns: cooldownEvents,
+        });
+      }
+
+      bosses.sort((a, b) => a.start_time - b.start_time);
+
+      // Pull counts
+      const bossPullCounts = {};
+      for (const fight of bossFights) {
+        if (!bossPullCounts[fight.name]) bossPullCounts[fight.name] = { total_pulls: 0, kills: 0, wipes: 0 };
+        bossPullCounts[fight.name].total_pulls++;
+        if (fight.kill) bossPullCounts[fight.name].kills++;
+        else bossPullCounts[fight.name].wipes++;
+      }
+
+      // Trash
+      const trashData = { logged: false, total_time_ms: 0, pull_count: 0 };
+      if (trashFights.length) {
+        trashData.logged = true;
+        trashData.pull_count = trashFights.length;
+        const totalTrash = trashFights.reduce((sum, f) => sum + (f.end_time - f.start_time), 0);
+        trashData.total_time_ms = totalTrash;
+        trashData.total_time_str = fmtDuration(totalTrash);
+      }
+
+      // Pacing
+      const pacing = [];
+      for (let i = 0; i < bosses.length; i++) {
+        const entry = { boss: bosses[i].name, kill_time_ms: bosses[i].end_time, fight_duration_ms: bosses[i].duration_ms };
+        if (i > 0) {
+          const gapMs = bosses[i].start_time - bosses[i-1].end_time;
+          entry.gap_from_prev_ms = gapMs;
+          entry.gap_from_prev_str = fmtDuration(Math.max(0, gapMs));
+        }
+        pacing.push(entry);
+      }
+
+      // Total raid time
+      const firstEventMs = allFights.length ? Math.min(...allFights.map(f => f.start_time)) : (bosses[0]?.start_time || 0);
+      const lastKillMs = bosses.length ? bosses[bosses.length - 1].end_time : 0;
+      const totalRaidMs = lastKillMs - firstEventMs;
+      const totalGapMs = pacing.reduce((sum, p) => sum + Math.max(0, p.gap_from_prev_ms || 0), 0);
+
+      return {
+        report_id: reportId, url: reportUrl, title, owner, report_start_ms: reportStartMs,
+        total_raid_ms: totalRaidMs, total_raid_str: fmtDuration(totalRaidMs),
+        total_gap_ms: totalGapMs, total_gap_str: fmtDuration(totalGapMs),
+        roster, bosses, boss_order: bosses.map(b => b.name), boss_pull_counts: bossPullCounts,
+        trash: trashData, pacing,
+      };
+    }
+
+    // ===== Comparison logic =====
+    function compareReports(ours, theirs) {
+      function compSummary(roster) {
+        const roles = { Tank: 0, Healer: 0, DPS: 0 };
+        const classes = {};
+        for (const info of Object.values(roster)) {
+          roles[info.role || 'DPS']++;
+          classes[info.class] = (classes[info.class] || 0) + 1;
+        }
+        return { total: Object.keys(roster).length, roles, classes };
+      }
+
+      const ourComp = compSummary(ours.roster);
+      const theirComp = compSummary(theirs.roster);
+
+      // Boss comparison
+      const allBossNames = [...new Set([...ours.boss_order, ...theirs.boss_order])];
+      const bossComparison = [];
+
+      for (const bossName of allBossNames) {
+        const ourBoss = ours.bosses.find(b => b.name === bossName);
+        const theirBoss = theirs.bosses.find(b => b.name === bossName);
+        const entry = { name: bossName };
+
+        if (ourBoss) {
+          entry.ours = {
+            duration_ms: ourBoss.duration_ms, duration_str: ourBoss.duration_str,
+            raid_dps: ourBoss.raid_dps, raid_hps: ourBoss.raid_hps, overheal_pct: ourBoss.overheal_pct,
+            buffs: ourBoss.buffs_present, cooldowns: ourBoss.cooldowns,
+            top_dps: Object.entries(ourBoss.player_damage).slice(0, 5),
+            top_healers: Object.entries(ourBoss.player_healing).map(([k,v]) => [k, v.healing]).slice(0, 5),
+            pulls: ours.boss_pull_counts[bossName] || {},
+          };
+        }
+        if (theirBoss) {
+          entry.theirs = {
+            duration_ms: theirBoss.duration_ms, duration_str: theirBoss.duration_str,
+            raid_dps: theirBoss.raid_dps, raid_hps: theirBoss.raid_hps, overheal_pct: theirBoss.overheal_pct,
+            buffs: theirBoss.buffs_present, cooldowns: theirBoss.cooldowns,
+            top_dps: Object.entries(theirBoss.player_damage).slice(0, 5),
+            top_healers: Object.entries(theirBoss.player_healing).map(([k,v]) => [k, v.healing]).slice(0, 5),
+            pulls: theirs.boss_pull_counts[bossName] || {},
+          };
+        }
+
+        if (ourBoss && theirBoss) {
+          const timeDelta = ourBoss.duration_ms - theirBoss.duration_ms;
+          entry.delta = {
+            time_ms: timeDelta,
+            time_str: `${timeDelta > 0 ? '+' : ''}${fmtDuration(timeDelta)}`,
+            time_favorable: timeDelta < 0,
+            dps_diff: ourBoss.raid_dps - theirBoss.raid_dps,
+            hps_diff: ourBoss.raid_hps - theirBoss.raid_hps,
+            overheal_diff: Math.round((ourBoss.overheal_pct - theirBoss.overheal_pct) * 10) / 10,
+            missing_buffs: theirBoss.buffs_present.filter(b => !ourBoss.buffs_present.includes(b)),
+            extra_buffs: ourBoss.buffs_present.filter(b => !theirBoss.buffs_present.includes(b)),
+          };
+        }
+        bossComparison.push(entry);
+      }
+
+      const pacingComparison = {
+        ours: { total_raid_ms: ours.total_raid_ms, total_raid_str: ours.total_raid_str, total_gap_ms: ours.total_gap_ms, total_gap_str: ours.total_gap_str, pacing: ours.pacing, trash: ours.trash },
+        theirs: { total_raid_ms: theirs.total_raid_ms, total_raid_str: theirs.total_raid_str, total_gap_ms: theirs.total_gap_ms, total_gap_str: theirs.total_gap_str, pacing: theirs.pacing, trash: theirs.trash },
+        delta_total_ms: ours.total_raid_ms - theirs.total_raid_ms,
+        delta_gap_ms: ours.total_gap_ms - theirs.total_gap_ms,
+      };
+
+      const recommendations = generateRecommendations(ours, theirs, bossComparison, pacingComparison);
+
+      return {
+        ours: { report_id: ours.report_id, url: ours.url, title: ours.title, owner: ours.owner },
+        theirs: { report_id: theirs.report_id, url: theirs.url, title: theirs.title, owner: theirs.owner },
+        comp: { ours: ourComp, theirs: theirComp },
+        roster: { ours: ours.roster, theirs: theirs.roster },
+        bosses: bossComparison,
+        pacing: pacingComparison,
+        recommendations,
+      };
+    }
+
+    function generateRecommendations(ours, theirs, bossComparison, pacing) {
+      const tips = [];
+
+      // Pacing
+      const gapDelta = pacing.delta_gap_ms;
+      if (gapDelta > 30000) {
+        tips.push({ category: 'Pacing', severity: 'high',
+          title: `Non-combat time is ${fmtDuration(gapDelta)} longer`,
+          detail: 'Time between boss kills is significantly higher. Consider: pre-positioning, faster rebuffs, pulling trash while buffing, or assigning a pull leader.',
+        });
+      }
+
+      // Per-boss time
+      for (const boss of bossComparison) {
+        const d = boss.delta;
+        if (!d) continue;
+        if (d.time_ms > 15000) {
+          tips.push({ category: 'Kill Speed', severity: d.time_ms > 30000 ? 'high' : 'medium',
+            title: `${boss.name}: ${fmtDuration(d.time_ms)} slower`,
+            detail: `Their raid DPS was ${d.dps_diff > 0 ? '' : '+'}${(-d.dps_diff).toLocaleString()} higher. ` +
+              (d.missing_buffs.length ? `Missing buffs: ${d.missing_buffs.join(', ')}. ` : '') +
+              (Math.abs(d.overheal_diff) > 5 ? `Overheal difference: ${d.overheal_diff > 0 ? '+' : ''}${d.overheal_diff}%.` : ''),
+          });
+        }
+      }
+
+      // Comp
+      let ourHealers = 0, theirHealers = 0;
+      for (const info of Object.values(ours.roster)) { if (info.role === 'Healer') ourHealers++; }
+      for (const info of Object.values(theirs.roster)) { if (info.role === 'Healer') theirHealers++; }
+      if (ourHealers > theirHealers) {
+        tips.push({ category: 'Composition', severity: 'medium',
+          title: `Running ${ourHealers - theirHealers} more healer(s) than them`,
+          detail: 'Extra healers reduce raid DPS. If healing is comfortable, consider swapping a healer to DPS for faster kills.',
+        });
+      }
+
+      // Overheal
+      for (const boss of bossComparison) {
+        const d = boss.delta;
+        if (d && d.overheal_diff > 10) {
+          tips.push({ category: 'Healing Efficiency', severity: 'medium',
+            title: `${boss.name}: ${d.overheal_diff.toFixed(1)}% more overheal`,
+            detail: 'High overheal suggests healers could downrank, use fewer GCDs on healing, or one healer could swap to DPS.',
+          });
+          break;
+        }
+      }
+
+      // Cooldown timing
+      for (const boss of bossComparison) {
+        const ourCds = (boss.ours || {}).cooldowns || [];
+        const theirCds = (boss.theirs || {}).cooldowns || [];
+        const ourLust = ourCds.filter(c => c.spell === 'Bloodlust' || c.spell === 'Heroism');
+        const theirLust = theirCds.filter(c => c.spell === 'Bloodlust' || c.spell === 'Heroism');
+        if (theirLust.length && !ourLust.length) {
+          tips.push({ category: 'Cooldowns', severity: 'high',
+            title: `${boss.name}: They used Bloodlust/Heroism, you didn't`,
+            detail: 'Bloodlust/Heroism provides 30% haste. Consider using it on this boss.',
+          });
+        } else if (ourLust.length && theirLust.length) {
+          const diff = Math.abs(ourLust[0].time_pct - theirLust[0].time_pct);
+          if (diff > 20) {
+            tips.push({ category: 'Cooldowns', severity: 'low',
+              title: `${boss.name}: Different Bloodlust timing (${ourLust[0].time_pct.toFixed(0)}% vs ${theirLust[0].time_pct.toFixed(0)}%)`,
+              detail: `You used it at ${ourLust[0].time_pct.toFixed(0)}%, they at ${theirLust[0].time_pct.toFixed(0)}%. Earlier usage generally yields more value unless there's a burn phase.`,
+            });
+          }
+        }
+      }
+
+      // Trash
+      if (ours.trash.logged && theirs.trash.logged) {
+        const trashDelta = ours.trash.total_time_ms - theirs.trash.total_time_ms;
+        if (trashDelta > 60000) {
+          tips.push({ category: 'Trash', severity: 'medium',
+            title: `Trash pulls took ${fmtDuration(trashDelta)} longer`,
+            detail: `Your raid spent ${fmtDuration(ours.trash.total_time_ms)} on trash vs their ${fmtDuration(theirs.trash.total_time_ms)}. Consider bigger pulls, more AoE, or skipping optional packs.`,
+          });
+        }
+      }
+
+      const severityOrder = { high: 0, medium: 1, low: 2 };
+      tips.sort((a, b) => (severityOrder[a.severity] || 9) - (severityOrder[b.severity] || 9));
+      return tips;
+    }
+
+    // ===== Rendering =====
     function escapeHtml(str) {
       return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
     }
 
     function formatNum(n) {
-      return n != null ? n.toLocaleString() : '—';
+      return n != null ? n.toLocaleString() : '\u2014';
     }
 
-    function init() {
-      if (!data || !data.ours) {
-        document.getElementById('compareApp').innerHTML = '<div class="hero"><h1>No Comparison Data</h1><p class="subtitle">Run <code>python3 scripts/compare_logs.py &lt;our_url&gt; &lt;their_url&gt;</code> to generate comparison data.</p></div>';
-        return;
+    function formatDuration(ms) {
+      const neg = ms < 0;
+      ms = Math.abs(ms);
+      const sec = Math.floor(ms / 1000);
+      const m = Math.floor(sec / 60);
+      const s = sec % 60;
+      if (m >= 60) {
+        const h = Math.floor(m / 60);
+        return `${neg ? '-' : ''}${h}:${String(m % 60).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
       }
+      return `${neg ? '-' : ''}${m}:${String(s).padStart(2,'0')}`;
+    }
+
+    function showResults(comparisonData) {
+      data = comparisonData;
+      document.getElementById('loadScreen').style.display = 'none';
+      document.getElementById('compareApp').style.display = '';
       renderReportInfo();
       renderSummary();
       renderRecommendations();
@@ -329,7 +789,6 @@
       const ourBossKills = data.bosses.filter(b => b.ours).length;
       const theirBossKills = data.bosses.filter(b => b.theirs).length;
 
-      // Total DPS across all bosses
       let ourTotalDps = 0, theirTotalDps = 0, bossCount = 0;
       for (const boss of data.bosses) {
         if (boss.ours && boss.theirs) {
@@ -362,7 +821,7 @@
         </div>
         <div class="summary-card">
           <div class="label">Avg Raid DPS Diff</div>
-          <div class="value ${avgDpsDiff >= 0 ? '' : ''}">${avgDpsDiff >= 0 ? '+' : ''}${formatNum(avgDpsDiff)}</div>
+          <div class="value">${avgDpsDiff >= 0 ? '+' : ''}${formatNum(avgDpsDiff)}</div>
           <div class="delta ${avgDpsDiff >= 0 ? 'faster' : 'slower'}">
             ${avgDpsDiff >= 0 ? 'Higher than theirs' : 'Lower than theirs'}
           </div>
@@ -375,23 +834,10 @@
       `;
     }
 
-    function formatDuration(ms) {
-      const neg = ms < 0;
-      ms = Math.abs(ms);
-      const sec = Math.floor(ms / 1000);
-      const m = Math.floor(sec / 60);
-      const s = sec % 60;
-      if (m >= 60) {
-        const h = Math.floor(m / 60);
-        return `${neg ? '-' : ''}${h}:${String(m % 60).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
-      }
-      return `${neg ? '-' : ''}${m}:${String(s).padStart(2,'0')}`;
-    }
-
     function renderRecommendations() {
       const el = document.getElementById('recommendations');
       if (!data.recommendations.length) {
-        el.innerHTML = '<p style="color:var(--muted)">No significant differences found — raids are performing similarly!</p>';
+        el.innerHTML = '<p style="color:var(--muted)">No significant differences found \u2014 raids are performing similarly!</p>';
         return;
       }
       el.innerHTML = data.recommendations.map(rec => `
@@ -413,21 +859,21 @@
         const o = boss.ours || {};
         const t = boss.theirs || {};
         const d = boss.delta || {};
-        const deltaClass = d.time_favorable ? 'faster' : d.time_ms < 0 ? 'slower' : d.time_ms > 0 ? 'slower' : 'neutral';
+        const deltaClass = d.time_favorable ? 'faster' : d.time_ms > 0 ? 'slower' : 'neutral';
 
         rows += `<tr class="boss-row" data-boss="${escapeHtml(boss.name)}">
           <td><strong>${escapeHtml(boss.name)}</strong></td>
-          <td>${o.duration_str || '—'}</td>
-          <td>${t.duration_str || '—'}</td>
-          <td class="${deltaClass}">${d.time_str ? (d.time_favorable ? '🟢 ' : '🔴 ') + d.time_str : '—'}</td>
-          <td>${o.raid_dps ? formatNum(o.raid_dps) : '—'}</td>
-          <td>${t.raid_dps ? formatNum(t.raid_dps) : '—'}</td>
-          <td>${o.pulls ? o.pulls.total_pulls + (o.pulls.wipes ? ` (${o.pulls.wipes} wipe${o.pulls.wipes > 1 ? 's' : ''})` : '') : '—'}</td>
-          <td>${t.pulls ? t.pulls.total_pulls + (t.pulls.wipes ? ` (${t.pulls.wipes} wipe${t.pulls.wipes > 1 ? 's' : ''})` : '') : '—'}</td>
+          <td>${o.duration_str || '\u2014'}</td>
+          <td>${t.duration_str || '\u2014'}</td>
+          <td class="${deltaClass}">${d.time_str ? (d.time_favorable ? '\ud83d\udfe2 ' : '\ud83d\udd34 ') + d.time_str : '\u2014'}</td>
+          <td>${o.raid_dps ? formatNum(o.raid_dps) : '\u2014'}</td>
+          <td>${t.raid_dps ? formatNum(t.raid_dps) : '\u2014'}</td>
+          <td>${o.pulls ? o.pulls.total_pulls + (o.pulls.wipes ? ` (${o.pulls.wipes} wipe${o.pulls.wipes > 1 ? 's' : ''})` : '') : '\u2014'}</td>
+          <td>${t.pulls ? t.pulls.total_pulls + (t.pulls.wipes ? ` (${t.pulls.wipes} wipe${t.pulls.wipes > 1 ? 's' : ''})` : '') : '\u2014'}</td>
         </tr>`;
 
-        // Detail panel
-        detailsHtml += `<div class="boss-detail" id="detail-${escapeHtml(boss.name).replace(/[^a-zA-Z0-9]/g, '_')}">
+        const bossId = boss.name.replace(/[^a-zA-Z0-9]/g, '_');
+        detailsHtml += `<div class="boss-detail" id="detail-${bossId}">
           <div class="two-col">
             <div>
               <h3 style="color:var(--accent)">Our Top DPS</h3>
@@ -435,7 +881,7 @@
               <h3 style="margin-top:12px;color:var(--accent)">Our Top Healers</h3>
               ${(o.top_healers || []).map(([name, heal]) => `<div style="font-size:0.82rem">${escapeHtml(name)}: ${formatNum(heal)}</div>`).join('')}
               ${o.cooldowns && o.cooldowns.length ? `<h3 style="margin-top:12px;color:var(--accent)">Our Cooldowns</h3>${o.cooldowns.map(cd => `<div style="font-size:0.82rem">${cd.spell} at ${cd.time_sec}s (${cd.time_pct}%)</div>`).join('')}` : ''}
-              <div style="margin-top:8px;font-size:0.8rem;color:var(--muted)">Overheal: ${o.overheal_pct ?? '?'}%</div>
+              <div style="margin-top:8px;font-size:0.8rem;color:var(--muted)">Overheal: ${o.overheal_pct != null ? o.overheal_pct : '?'}%</div>
             </div>
             <div>
               <h3 style="color:var(--warning)">Their Top DPS</h3>
@@ -443,7 +889,7 @@
               <h3 style="margin-top:12px;color:var(--warning)">Their Top Healers</h3>
               ${(t.top_healers || []).map(([name, heal]) => `<div style="font-size:0.82rem">${escapeHtml(name)}: ${formatNum(heal)}</div>`).join('')}
               ${t.cooldowns && t.cooldowns.length ? `<h3 style="margin-top:12px;color:var(--warning)">Their Cooldowns</h3>${t.cooldowns.map(cd => `<div style="font-size:0.82rem">${cd.spell} at ${cd.time_sec}s (${cd.time_pct}%)</div>`).join('')}` : ''}
-              <div style="margin-top:8px;font-size:0.8rem;color:var(--muted)">Overheal: ${t.overheal_pct ?? '?'}%</div>
+              <div style="margin-top:8px;font-size:0.8rem;color:var(--muted)">Overheal: ${t.overheal_pct != null ? t.overheal_pct : '?'}%</div>
             </div>
           </div>
           ${d.missing_buffs && d.missing_buffs.length ? `<div style="margin-top:12px;font-size:0.82rem;color:var(--warning)"><strong>Buffs they have that we don't:</strong> ${d.missing_buffs.join(', ')}</div>` : ''}
@@ -454,11 +900,10 @@
       tbody.innerHTML = rows;
       details.innerHTML = detailsHtml;
 
-      // Toggle details on row click
       tbody.querySelectorAll('.boss-row').forEach(row => {
         row.addEventListener('click', () => {
-          const bossName = row.dataset.boss.replace(/[^a-zA-Z0-9]/g, '_');
-          const detail = document.getElementById('detail-' + bossName);
+          const bossId = row.dataset.boss.replace(/[^a-zA-Z0-9]/g, '_');
+          const detail = document.getElementById('detail-' + bossId);
           if (detail) detail.classList.toggle('open');
         });
       });
@@ -479,7 +924,6 @@
 
       let html = `<div style="font-size:0.85rem;margin-bottom:8px">Total: <strong>${pacingData.total_raid_str}</strong> | Gaps: <strong>${pacingData.total_gap_str}</strong></div>`;
       html += '<div class="pacing-bar">';
-
       for (const entry of pacingData.pacing) {
         if (entry.gap_from_prev_ms && entry.gap_from_prev_ms > 0) {
           const gapPct = (entry.gap_from_prev_ms / totalMs * 100).toFixed(1);
@@ -488,29 +932,23 @@
         const bossPct = (entry.fight_duration_ms / totalMs * 100).toFixed(1);
         html += `<div class="pacing-segment boss" style="width:${bossPct}%" title="${entry.boss}">${bossPct > 4 ? entry.boss.split(' ')[0] : ''}</div>`;
       }
-
       html += '</div>';
 
-      // List view
       html += '<div style="margin-top:12px;font-size:0.82rem">';
       for (const entry of pacingData.pacing) {
         if (entry.gap_from_prev_ms && entry.gap_from_prev_ms > 0) {
-          html += `<div style="color:var(--muted);padding:2px 0">↕ ${entry.gap_from_prev_str} gap</div>`;
+          html += `<div style="color:var(--muted);padding:2px 0">\u2195 ${entry.gap_from_prev_str} gap</div>`;
         }
         const durSec = Math.round(entry.fight_duration_ms / 1000);
-        html += `<div style="padding:2px 0">⚔️ ${entry.boss} — ${Math.floor(durSec/60)}:${String(durSec%60).padStart(2,'0')}</div>`;
+        html += `<div style="padding:2px 0">\u2694\ufe0f ${entry.boss} \u2014 ${Math.floor(durSec/60)}:${String(durSec%60).padStart(2,'0')}</div>`;
       }
       html += '</div>';
 
-      // Trash info
       if (pacingData.trash && pacingData.trash.logged) {
-        html += `<div style="margin-top:12px;font-size:0.82rem;color:var(--muted)">
-          Trash: ${pacingData.trash.pull_count} pulls, ${pacingData.trash.total_time_str} total
-        </div>`;
+        html += `<div style="margin-top:12px;font-size:0.82rem;color:var(--muted)">Trash: ${pacingData.trash.pull_count} pulls, ${pacingData.trash.total_time_str} total</div>`;
       } else if (pacingData.trash) {
-        html += `<div style="margin-top:12px;font-size:0.82rem;color:var(--muted)">Trash not logged — gap times include trash + movement</div>`;
+        html += '<div style="margin-top:12px;font-size:0.82rem;color:var(--muted)">Trash not logged \u2014 gap times include trash + movement</div>';
       }
-
       el.innerHTML = html;
     }
 
@@ -522,26 +960,23 @@
     function renderCompCol(elId, comp, roster) {
       const el = document.getElementById(elId);
       let html = `<div style="font-size:0.88rem;margin-bottom:8px">
-        <strong>${comp.total}</strong> players — 
+        <strong>${comp.total}</strong> players \u2014
         <span style="color:var(--tank)">${comp.roles.Tank} tanks</span>,
         <span style="color:var(--healer)">${comp.roles.Healer} healers</span>,
         <span style="color:var(--dps)">${comp.roles.DPS} DPS</span>
       </div>`;
 
-      // Class breakdown
       html += '<div style="margin-bottom:8px">';
-      for (const [cls, count] of Object.entries(comp.classes)) {
+      for (const [cls, count] of Object.entries(comp.classes).sort()) {
         const color = CLASS_COLORS[cls] || '#aaa';
-        html += `<span class="class-pill" style="color:${color}">${cls} ×${count}</span> `;
+        html += `<span class="class-pill" style="color:${color}">${cls} \u00d7${count}</span> `;
       }
       html += '</div>';
 
-      // Player list grouped by role
       const byRole = { Tank: [], Healer: [], DPS: [] };
       for (const [name, info] of Object.entries(roster)) {
         (byRole[info.role] || byRole.DPS).push({ name, ...info });
       }
-
       for (const role of ['Tank', 'Healer', 'DPS']) {
         if (!byRole[role].length) continue;
         const roleColor = role === 'Tank' ? 'var(--tank)' : role === 'Healer' ? 'var(--healer)' : 'var(--dps)';
@@ -553,30 +988,24 @@
         }
         html += '</div>';
       }
-
       el.innerHTML = html;
     }
 
     function renderBuffs() {
       const el = document.getElementById('buffComparison');
-      // Collect all buffs from all bosses
       const ourBuffs = new Set();
       const theirBuffs = new Set();
       for (const boss of data.bosses) {
-        if (boss.ours) boss.ours.buffs.forEach(b => ourBuffs.add(b));
-        if (boss.theirs) boss.theirs.buffs.forEach(b => theirBuffs.add(b));
+        if (boss.ours) (boss.ours.buffs || []).forEach(b => ourBuffs.add(b));
+        if (boss.theirs) (boss.theirs.buffs || []).forEach(b => theirBuffs.add(b));
       }
-
-      const allBuffs = new Set([...ourBuffs, ...theirBuffs]);
-      const sorted = [...allBuffs].sort();
+      const sorted = [...new Set([...ourBuffs, ...theirBuffs])].sort();
 
       let html = '<div style="margin-bottom:12px;font-size:0.82rem;color:var(--muted)">';
-      html += `<span style="color:var(--faster)">● Both have</span> &nbsp; `;
-      html += `<span style="color:var(--accent)">● Only ours</span> &nbsp; `;
-      html += `<span style="color:var(--warning)">● Only theirs (we\'re missing)</span>`;
-      html += '</div>';
-
-      html += '<div class="buff-grid">';
+      html += '<span style="color:var(--faster)">\u25cf Both have</span> \u00a0 ';
+      html += '<span style="color:var(--accent)">\u25cf Only ours</span> \u00a0 ';
+      html += '<span style="color:var(--warning)">\u25cf Only theirs (we\'re missing)</span>';
+      html += '</div><div class="buff-grid">';
       for (const buff of sorted) {
         const hasOurs = ourBuffs.has(buff);
         const hasTheirs = theirBuffs.has(buff);
@@ -586,11 +1015,68 @@
         html += `<div class="buff-item ${cls}">${escapeHtml(buff)}</div>`;
       }
       html += '</div>';
-
       el.innerHTML = html;
     }
 
-    document.addEventListener('DOMContentLoaded', init);
+    // ===== Bootstrap =====
+    document.addEventListener('DOMContentLoaded', () => {
+      const loadScreen = document.getElementById('loadScreen');
+      const compareBtn = document.getElementById('compareBtn');
+      const statusEl = document.getElementById('fetchStatus');
+      const progressEl = document.getElementById('fetchProgress');
+      const apiKeyInput = document.getElementById('apiKeyInput');
+      const backBtn = document.getElementById('backBtn');
+
+      // Restore saved API key
+      const savedKey = localStorage.getItem('wcl_api_key');
+      if (savedKey) apiKeyInput.value = savedKey;
+
+      // If pre-embedded data exists, show it
+      if (data && data.ours) {
+        showResults(data);
+        return;
+      }
+
+      compareBtn.addEventListener('click', async () => {
+        const ourUrl = document.getElementById('ourUrlInput').value.trim();
+        const theirUrl = document.getElementById('theirUrlInput').value.trim();
+        const apiKey = apiKeyInput.value.trim();
+
+        if (!ourUrl) { statusEl.textContent = 'Please enter your report URL.'; return; }
+        if (!theirUrl) { statusEl.textContent = 'Please enter their report URL.'; return; }
+        if (!apiKey) { statusEl.textContent = 'Please enter your API key.'; return; }
+
+        localStorage.setItem('wcl_api_key', apiKey);
+        compareBtn.disabled = true;
+        statusEl.textContent = 'Starting comparison...';
+        progressEl.textContent = '';
+
+        try {
+          progressEl.textContent = 'Fetching our report...';
+          const ourData = await fetchReportData(ourUrl, apiKey, statusEl);
+
+          progressEl.textContent = 'Fetching their report...';
+          const theirData = await fetchReportData(theirUrl, apiKey, statusEl);
+
+          progressEl.textContent = 'Comparing...';
+          const comparison = compareReports(ourData, theirData);
+
+          showResults(comparison);
+        } catch (err) {
+          statusEl.textContent = `Error: ${err.message}`;
+          progressEl.textContent = '';
+        } finally {
+          compareBtn.disabled = false;
+        }
+      });
+
+      backBtn.addEventListener('click', () => {
+        document.getElementById('compareApp').style.display = 'none';
+        loadScreen.style.display = '';
+        statusEl.textContent = '';
+        progressEl.textContent = '';
+      });
+    });
   </script>
 </body>
 </html>
