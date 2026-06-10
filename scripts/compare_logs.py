@@ -427,6 +427,8 @@ def compare_reports(ours: dict[str, Any], theirs: dict[str, Any]) -> dict[str, A
                 "top_dps": list(our_boss["player_damage"].items())[:5],
                 "top_healers": [(k, v["healing"]) for k, v in list(our_boss["player_healing"].items())[:5]],
                 "pulls": ours["boss_pull_counts"].get(boss_name, {}),
+                "all_player_damage": our_boss["player_damage"],
+                "all_player_healing": our_boss["player_healing"],
             }
         if their_boss:
             entry["theirs"] = {
@@ -440,6 +442,8 @@ def compare_reports(ours: dict[str, Any], theirs: dict[str, Any]) -> dict[str, A
                 "top_dps": list(their_boss["player_damage"].items())[:5],
                 "top_healers": [(k, v["healing"]) for k, v in list(their_boss["player_healing"].items())[:5]],
                 "pulls": theirs["boss_pull_counts"].get(boss_name, {}),
+                "all_player_damage": their_boss["player_damage"],
+                "all_player_healing": their_boss["player_healing"],
             }
 
         # Deltas
