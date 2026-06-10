@@ -4486,7 +4486,7 @@
       const label = `${fight.name} (${Math.round((end - start) / 1000)}s)`;
       statusEl.textContent = `Fetching: ${label}...`;
 
-      const [deaths, enemyDeaths, interrupts, dispels, healing, casts, damageTaken, conflagEvents, damageDoneTable] = await Promise.all([
+      const [deaths, enemyDeaths, interrupts, dispels, healing, casts, damageTaken, conflagEvents, damageDoneTable, buffEventsRaw] = await Promise.all([
         fetchPaginatedEvents('deaths', reportId, apiKey, start, end),
         fetchPaginatedEvents('deaths', reportId, apiKey, start, end, { hostility: 1 }),
         fetchPaginatedEvents('interrupts', reportId, apiKey, start, end),
@@ -4495,7 +4495,8 @@
         fetchPaginatedEvents('casts', reportId, apiKey, start, end),
         fetchPaginatedEvents('damage-taken', reportId, apiKey, start, end),
         fetchPaginatedEvents('damage-taken', reportId, apiKey, start, end, { filter: `ability.id=${CONFLAG_SPELL_ID}` }),
-        apiFetch(`/report/tables/damage-done/${reportId}`, apiKey, { start, end })
+        apiFetch(`/report/tables/damage-done/${reportId}`, apiKey, { start, end }),
+        fetchPaginatedEvents('buffs', reportId, apiKey, start, end),
       ]);
 
       // Participants
@@ -4583,6 +4584,22 @@
         }
       }
 
+      // Process buff events
+      const playerBuffEvents = {};
+      for (const ev of buffEventsRaw) {
+        if (!['applybuff', 'removebuff', 'refreshbuff', 'applydebuff', 'removedebuff'].includes(ev.type)) continue;
+        const targetId = ev.targetID;
+        if (!playersById[targetId]) continue;
+        const player = playersById[targetId].name;
+        const spell = ev.ability?.name || 'Unknown';
+        if (!playerBuffEvents[player]) playerBuffEvents[player] = [];
+        playerBuffEvents[player].push({
+          spell,
+          type: ev.type,
+          time: relSec(start, ev.timestamp),
+        });
+      }
+
       return {
         pull: {
           encounter_id: fight.boss, boss_name: fight.name,
@@ -4594,7 +4611,8 @@
           conflagrations, players: pullPlayerNames,
           heals_by_player: healsByPlayer, heal_details: healDetails,
           casts_by_player: castsByPlayer, cast_timeline: castTimeline,
-          spell_casts: spellCasts, damage_done: damageDone, buff_events: {}, consumables: {}
+          spell_casts: spellCasts, damage_done: damageDone,
+          buff_events: playerBuffEvents, consumables: {}
         },
         spellCasts, healDetails, damageDone, playerDamageTakenAmounts
       };

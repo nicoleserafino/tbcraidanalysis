@@ -285,6 +285,7 @@ def analyze_pull(
     healing = client.get_paginated_events("healing", report_id, start=start, end=end)
     casts = client.get_paginated_events("casts", report_id, start=start, end=end)
     damage_taken = client.get_paginated_events("damage-taken", report_id, start=start, end=end)
+    buff_events = client.get_paginated_events("buffs", report_id, start=start, end=end)
     conflagration_events = client.get_paginated_events(
         "damage-taken",
         report_id,
@@ -447,6 +448,23 @@ def analyze_pull(
                 spell = "Melee (Auto Attack)"
             damage_done[player][spell] = int(ability.get("total") or 0)
 
+    # Process buff events (applybuff, removebuff, refreshbuff)
+    player_buff_events: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for event in buff_events:
+        event_type = event.get("type", "")
+        if event_type not in ("applybuff", "removebuff", "refreshbuff", "applydebuff", "removedebuff"):
+            continue
+        target_id = event.get("targetID")
+        if target_id not in players_by_id:
+            continue
+        player = players_by_id[target_id]["name"]
+        spell = event.get("ability", {}).get("name") or "Unknown"
+        player_buff_events[player].append({
+            "spell": spell,
+            "type": event_type,
+            "time": relative_seconds(start, event["timestamp"]),
+        })
+
     pull = {
         "encounter_id": fight["boss"],
         "boss_name": fight["name"],
@@ -470,7 +488,7 @@ def analyze_pull(
         "cast_timeline": {player: times for player, times in sorted(cast_timeline.items())},
         "spell_casts": {player: dict(sorted(spells.items())) for player, spells in sorted(spell_casts.items())},
         "damage_done": {player: dict(sorted(spells.items())) for player, spells in sorted(damage_done.items())},
-        "buff_events": {},
+        "buff_events": {player: events for player, events in sorted(player_buff_events.items())},
         "consumables": {},
     }
 
