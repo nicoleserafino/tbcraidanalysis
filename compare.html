@@ -1268,7 +1268,7 @@
     }
 
     async function fetchPlayerBuffs(reportId, apiKey, playerId, start, end) {
-      const table = await apiFetch(`/report/tables/buffs/${reportId}`, apiKey, { start, end, sourceid: playerId, targetid: playerId });
+      const table = await apiFetch(`/report/tables/buffs/${reportId}`, apiKey, { start, end, targetid: playerId });
       const buffs = [];
       const fightDuration = end - start;
       for (const entry of (table.auras || [])) {
