@@ -1457,7 +1457,7 @@
 
       // === Cooldown Timeline ===
       html += '<h3 style="color:var(--text);margin-top:20px;margin-bottom:12px;">⚡ Cooldown Timeline</h3>';
-      const MAJOR_CDS = new Set([
+      const KNOWN_CDS = new Set([
         'Bloodlust', 'Heroism', 'Innervate', 'Rebirth', 'Soulstone Resurrection',
         'Divine Shield', 'Lay on Hands', 'Shield Wall', 'Last Stand', 'Recklessness',
         'Avenging Wrath', 'Arcane Power', 'Icy Veins', 'Combustion', 'Cold Snap',
@@ -1470,9 +1470,28 @@
         'Destruction Potion', 'Haste Potion', 'Super Mana Potion', 'Ironshield Potion',
         'Flame Cap', 'Dark Rune', 'Demonic Rune',
       ]);
+      // Abilities to exclude from the frequency-based detection (rotational abilities cast rarely)
+      const CD_EXCLUDE = new Set([
+        'Melee', 'Auto Shot', 'Shoot', 'Attack', 'Wand',
+      ]);
 
-      const ourCds = ourCastEvents.filter(e => MAJOR_CDS.has(e.ability));
-      const theirCds = theirCastEvents.filter(e => MAJOR_CDS.has(e.ability));
+      function detectCooldowns(castEvents) {
+        // Count how many times each ability was cast
+        const counts = {};
+        for (const e of castEvents) {
+          counts[e.ability] = (counts[e.ability] || 0) + 1;
+        }
+        // A cooldown is: in the known list, OR cast 3 or fewer times (likely a CD/trinket/on-use)
+        return castEvents.filter(e => {
+          if (CD_EXCLUDE.has(e.ability)) return false;
+          if (KNOWN_CDS.has(e.ability)) return true;
+          // Low frequency = likely a cooldown (trinkets, on-use items, etc)
+          return counts[e.ability] <= 3;
+        });
+      }
+
+      const ourCds = detectCooldowns(ourCastEvents);
+      const theirCds = detectCooldowns(theirCastEvents);
 
       html += '<div class="two-col">';
       if (ourName) {
