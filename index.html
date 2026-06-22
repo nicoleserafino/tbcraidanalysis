@@ -4234,13 +4234,17 @@
 
     // ─── Raid Awards ────────────────────────────────────────────────────
     function computeRaidAwards() {
-      const bossData = getBossData();
-      const pulls = bossData?.pulls || [];
-      if (!pulls.length) return null;
+      const bosses = state.report?.bosses || {};
+      const allBossPulls = [];
+      for (const [bossName, bossData] of Object.entries(bosses)) {
+        const bossKey = getBossKey(bossName);
+        (bossData.pulls || []).forEach(p => allBossPulls.push({ pull: p, bossName, bossKey }));
+      }
+      if (!allBossPulls.length) return null;
       const allPlayers = getAllPlayers();
       const awards = { clutch: [], utility: [], pump: [], mechanics: [], preparation: [], fun: [] };
 
-      // Aggregate data across all pulls for this boss
+      // Aggregate data across all pulls for ALL bosses
       const playerDeaths = {};
       const playerFirstDeaths = {};
       const playerLastAlive = {};
@@ -4255,7 +4259,6 @@
       const playerAvoidableDmg = {};
       const playerFlaskUptime = {};
 
-      const bossKey = getBossKey();
       const avoidablePatterns = {
         [BOSS_KEYS.KAEL]: /Conflagration|Remote Toy|Arcane Burst|Flame Strike/i,
         [BOSS_KEYS.LURKER]: /Spout|Scalding Water/i,
@@ -4265,9 +4268,9 @@
         [BOSS_KEYS.VASHJ]: /Shock Blast|Toxic Spore/i,
         [BOSS_KEYS.HYDROSS]: /Water Tomb/i,
       };
-      const avoidableRegex = avoidablePatterns[bossKey] || /Conflagration|Spout|Whirlwind|Shock Blast/i;
 
-      pulls.forEach((pull, pullIdx) => {
+      allBossPulls.forEach(({ pull, bossName, bossKey }) => {
+        const avoidableRegex = avoidablePatterns[bossKey] || /Conflagration|Spout|Whirlwind|Shock Blast/i;
         const pullPlayers = pull.players || Object.keys(pull.player_damage_taken || {});
 
         // Deaths
@@ -4352,6 +4355,10 @@
         });
       });
 
+      // Convenience: flat array of pull objects for aggregation below
+      const pulls = allBossPulls.map(x => x.pull);
+      const totalPulls = pulls.length;
+
       // Helper: top N from an object
       const topN = (obj, n = 3) => Object.entries(obj).sort((a, b) => b[1] - a[1]).slice(0, n);
       const bottomN = (obj, n = 3) => Object.entries(obj).filter(([,v]) => v > 0).sort((a, b) => a[1] - b[1]).slice(0, n);
@@ -4398,7 +4405,7 @@
         awards.pump.push({
           icon: '💪', title: 'Pump Lord', winner: topDamagers[0][0],
           value: `${(topDamagers[0][1] / 1000).toFixed(0)}k total damage`,
-          detail: `~${dpsValue} DPS avg across ${pulls.length} pull(s). ${topDamagers.slice(1).map(([p, d]) => `${p}: ${(d/1000).toFixed(0)}k`).join(', ')}`,
+          detail: `~${dpsValue} DPS avg across ${totalPulls} pull(s). ${topDamagers.slice(1).map(([p, d]) => `${p}: ${(d/1000).toFixed(0)}k`).join(', ')}`,
         });
       }
 
@@ -4448,12 +4455,16 @@
       const presentPlayers = allPullPlayers.filter(p => allPlayers[p]);
       const avoidableEntries = presentPlayers.map(p => [p, playerAvoidableDmg[p] || 0]);
       const cleanPlayers = avoidableEntries.filter(([p]) => allPlayers[p]?.role !== 'Tank').sort((a, b) => a[1] - b[1]);
-      if (cleanPlayers.length >= 3 && cleanPlayers[0][1] === 0) {
-        awards.mechanics.push({
-          icon: '🎯', title: 'Mechanic Gamer', winner: cleanPlayers[0][0],
-          value: '0 avoidable hits',
-          detail: `Cleanest positioning across ${pulls.length} pull(s). Next: ${cleanPlayers.slice(1, 3).map(([p, c]) => `${p}: ${c}`).join(', ')}`,
-        });
+      if (cleanPlayers.length >= 3 && cleanPlayers[0][1] === 0 && hasClearWinner(cleanPlayers.map(([p, v]) => [p, -v]))) {
+        // Only award if there's a unique winner (i.e., not multiple people at 0)
+        const zeroCount = cleanPlayers.filter(([, v]) => v === 0).length;
+        if (zeroCount === 1) {
+          awards.mechanics.push({
+            icon: '🎯', title: 'Mechanic Gamer', winner: cleanPlayers[0][0],
+            value: '0 avoidable hits',
+            detail: `Cleanest positioning across ${totalPulls} pull(s). Next: ${cleanPlayers.slice(1, 3).map(([p, c]) => `${p}: ${c}`).join(', ')}`,
+          });
+        }
       }
 
       // Mechanic Enjoyer — most avoidable damage
@@ -4482,7 +4493,7 @@
         awards.mechanics.push({
           icon: '🩸', title: 'First Blood', winner: topFirstDeaths[0][0],
           value: `First to die ${topFirstDeaths[0][1]}x`,
-          detail: `Died first on ${topFirstDeaths[0][1]} of ${pulls.length} pulls`,
+          detail: `Died first on ${topFirstDeaths[0][1]} of ${totalPulls} pulls`,
         });
       }
 
@@ -4587,20 +4598,20 @@
       }
 
       // ─── FUN / MEME ────────────────────────────────────────────────
-      // Main Character Syndrome — most targeted by boss conflagrations (Kael)
-      if (bossKey === BOSS_KEYS.KAEL) {
-        const conflagCounts = {};
-        pulls.forEach(p => (p.conflagrations || []).forEach(c => {
+      // Main Character Syndrome — most targeted by boss conflagrations (Kael pulls only)
+      const conflagCounts = {};
+      allBossPulls.filter(x => x.bossKey === BOSS_KEYS.KAEL).forEach(({ pull }) => {
+        (pull.conflagrations || []).forEach(c => {
           conflagCounts[c.target] = (conflagCounts[c.target] || 0) + 1;
-        }));
-        const topConflag = topN(conflagCounts);
-        if (topConflag.length && topConflag[0][1] > 2 && hasClearWinner(topConflag)) {
-          awards.fun.push({
-            icon: '🎭', title: 'Main Character Syndrome', winner: topConflag[0][0],
-            value: `Conflag'd ${topConflag[0][1]}x`,
-            detail: `Most targeted by Capernian across ${pulls.length} pulls`,
-          });
-        }
+        });
+      });
+      const topConflag = topN(conflagCounts);
+      if (topConflag.length && topConflag[0][1] > 2 && hasClearWinner(topConflag)) {
+        awards.fun.push({
+          icon: '🎭', title: 'Main Character Syndrome', winner: topConflag[0][0],
+          value: `Conflag'd ${topConflag[0][1]}x`,
+          detail: `Most targeted by Capernian across Kael pulls`,
+        });
       }
 
       // TODO: Threat Enjoyer — aggro/threat data not available from WCL v1 API
@@ -4623,11 +4634,11 @@
         });
       });
       const topPrepared = topN(playerBuffScore);
-      if (topPrepared.length && topPrepared[0][1] >= pulls.length && hasClearWinner(topPrepared)) {
+      if (topPrepared.length && topPrepared[0][1] >= totalPulls && hasClearWinner(topPrepared)) {
         awards.preparation.push({
           icon: '📋', title: 'Prepared Gamer', winner: topPrepared[0][0],
-          value: `Buff score: ${topPrepared[0][1]}/${pulls.length * 2}`,
-          detail: `Consistently flasked + food buffed across ${pulls.length} pull(s)`,
+          value: `Buff score: ${topPrepared[0][1]}/${totalPulls * 2}`,
+          detail: `Consistently flasked + food buffed across ${totalPulls} pull(s)`,
         });
       }
 
@@ -4654,8 +4665,10 @@
         fun: { label: 'Fun / Meme', icon: '😂' },
       };
 
-      let html = `<section class="card"><h2>🏆 Raid Awards — ${escapeHtml(state.boss)}</h2>
-        <p class="note">Aggregated across ${getBossData().pulls?.length || 0} pull(s). Awards computed from combat log data.</p>`;
+      const bossNames = Object.keys(state.report?.bosses || {});
+      const totalPullCount = bossNames.reduce((s, b) => s + (state.report.bosses[b].pulls?.length || 0), 0);
+      let html = `<section class="card"><h2>🏆 Raid Awards</h2>
+        <p class="note">Aggregated across ${totalPullCount} pull(s) on ${bossNames.length} boss(es). Awards computed from combat log data.</p>`;
 
       for (const [category, items] of Object.entries(awards)) {
         const meta = sectionLabels[category] || { label: category, icon: '🏅' };
