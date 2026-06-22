@@ -4415,9 +4415,31 @@
       }
 
       // Trash Tyrant — skip, only boss data available in this view
-      // Biggest Crit / Biggest Heal — individual event values not tracked (only totals)
-      // TODO: Biggest Crit — would require per-event crit flag + amount
       // TODO: Snap Healer — requires rolling window analysis on heal timeline
+
+      // Biggest Crit — from per-event data (clutch_heals/biggest_crits fields)
+      const allCrits = pulls.flatMap(p => p.biggest_crits || []);
+      if (allCrits.length) {
+        allCrits.sort((a, b) => b.amount - a.amount);
+        const top = allCrits[0];
+        awards.pump.push({
+          icon: '💥', title: 'Biggest Crit', winner: top.player,
+          value: `${(top.amount / 1000).toFixed(1)}k ${top.type} crit`,
+          detail: `${top.spell} (${top.type})`,
+        });
+      }
+
+      // Biggest Heal — from per-event data
+      const allBigHeals = pulls.flatMap(p => p.biggest_heals || []);
+      if (allBigHeals.length) {
+        allBigHeals.sort((a, b) => b.amount - a.amount);
+        const top = allBigHeals[0];
+        awards.pump.push({
+          icon: '🩹', title: 'Biggest Heal', winner: top.player,
+          value: `${(top.amount / 1000).toFixed(1)}k on ${top.target}`,
+          detail: `${top.spell}${top.crit ? ' (Crit!)' : ''}`,
+        });
+      }
 
       // ─── MECHANICS / EXECUTION ─────────────────────────────────────
       // Mechanic Gamer — least avoidable damage (only among DPS/Healers who were present)
@@ -4512,11 +4534,57 @@
         });
       }
 
-      // ─── CLUTCH / SURVIVAL (limited by data) ───────────────────────
-      // TODO: Clutch Heal — requires HP% at time of heal (not in data model)
-      // TODO: Clutch Self-Save — same limitation
-      // TODO: Closest Call — same limitation
-      // TODO: Guardian Angel — same limitation (need target HP context)
+      // ─── CLUTCH / SURVIVAL ──────────────────────────────────────────
+      const allClutchHeals = pulls.flatMap(p => p.clutch_heals || []);
+      if (allClutchHeals.length) {
+        allClutchHeals.sort((a, b) => a.hp_pct - b.hp_pct);
+        const deadPlayers = new Set(pulls.flatMap(p => (p.deaths || []).map(d => d.player)));
+
+        // Clutch Heal — lowest HP% save
+        const top = allClutchHeals[0];
+        awards.clutch.push({
+          icon: '❤️‍🔥', title: 'Clutch Heal', winner: top.healer,
+          value: `Saved ${top.target} at ${top.hp_pct}% HP`,
+          detail: `${top.spell} for ${(top.amount / 1000).toFixed(1)}k`,
+        });
+
+        // Clutch Self-Save — lowest HP% where healer === target
+        const selfSaves = allClutchHeals.filter(h => h.self_heal);
+        if (selfSaves.length) {
+          const selfTop = selfSaves[0];
+          awards.clutch.push({
+            icon: '🛟', title: 'Clutch Self-Save', winner: selfTop.healer,
+            value: `Self-healed at ${selfTop.hp_pct}% HP`,
+            detail: `${selfTop.spell} for ${(selfTop.amount / 1000).toFixed(1)}k`,
+          });
+        }
+
+        // Closest Call — lowest HP% survival where player didn't die that pull
+        // (approximate: check if target is NOT in the deaths list for this boss)
+        const survivedClutches = allClutchHeals.filter(h => !deadPlayers.has(h.target));
+        if (survivedClutches.length) {
+          const closest = survivedClutches[0];
+          awards.clutch.push({
+            icon: '😰', title: 'Closest Call', winner: closest.target,
+            value: `Survived at ${closest.hp_pct}% HP`,
+            detail: `Saved by ${closest.healer} with ${closest.spell}`,
+          });
+        }
+
+        // Guardian Angel — healer with most clutch saves (< 15% HP)
+        const guardianCounts = {};
+        allClutchHeals.filter(h => h.hp_pct < 15).forEach(h => {
+          guardianCounts[h.healer] = (guardianCounts[h.healer] || 0) + 1;
+        });
+        const topGuardians = topN(guardianCounts);
+        if (topGuardians.length && topGuardians[0][1] >= 2 && hasClearWinner(topGuardians)) {
+          awards.clutch.push({
+            icon: '👼', title: 'Guardian Angel', winner: topGuardians[0][0],
+            value: `${topGuardians[0][1]} clutch saves (<15% HP)`,
+            detail: topGuardians.slice(1, 3).map(([p, c]) => `${p}: ${c}`).join(', ') || null,
+          });
+        }
+      }
 
       // ─── FUN / MEME ────────────────────────────────────────────────
       // Main Character Syndrome — most targeted by boss conflagrations (Kael)
@@ -4535,8 +4603,33 @@
         }
       }
 
-      // TODO: Threat Enjoyer — aggro/threat data not available
-      // TODO: Prepared Gamer — consumable tracking incomplete from API
+      // TODO: Threat Enjoyer — aggro/threat data not available from WCL v1 API
+
+      // Prepared Gamer — player with most consistent flask + food buff presence
+      const FOOD_BUFFS = /well fed|food|fortitude of the|blessed sunfruit|grilled mudfish|blackened basilisk|ravager dog|warp burger/i;
+      const FLASK_BUFFS = /flask of|distilled wisdom|supreme power|chromatic wonder|mighty restoration|relentless assault|pure death|blinding light/i;
+      const playerBuffScore = {};
+      pulls.forEach(p => {
+        safeEntries(p.buff_events || {}).forEach(([player, events]) => {
+          let hasFlask = false, hasFood = false;
+          (events || []).forEach(e => {
+            if (e.type === 'applybuff' || e.type === 'refreshbuff') {
+              if (FLASK_BUFFS.test(e.spell)) hasFlask = true;
+              if (FOOD_BUFFS.test(e.spell)) hasFood = true;
+            }
+          });
+          const score = (hasFlask ? 1 : 0) + (hasFood ? 1 : 0);
+          if (score > 0) playerBuffScore[player] = (playerBuffScore[player] || 0) + score;
+        });
+      });
+      const topPrepared = topN(playerBuffScore);
+      if (topPrepared.length && topPrepared[0][1] >= pulls.length && hasClearWinner(topPrepared)) {
+        awards.preparation.push({
+          icon: '📋', title: 'Prepared Gamer', winner: topPrepared[0][0],
+          value: `Buff score: ${topPrepared[0][1]}/${pulls.length * 2}`,
+          detail: `Consistently flasked + food buffed across ${pulls.length} pull(s)`,
+        });
+      }
 
       // Filter out empty categories
       const filtered = {};

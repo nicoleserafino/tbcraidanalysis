@@ -285,6 +285,7 @@ def analyze_pull(
     healing = client.get_paginated_events("healing", report_id, start=start, end=end)
     casts = client.get_paginated_events("casts", report_id, start=start, end=end)
     damage_taken = client.get_paginated_events("damage-taken", report_id, start=start, end=end)
+    damage_done_events = client.get_paginated_events("damage-done", report_id, start=start, end=end)
     buff_events = client.get_paginated_events("buffs", report_id, start=start, end=end)
     conflagration_events = client.get_paginated_events(
         "damage-taken",
@@ -311,6 +312,11 @@ def analyze_pull(
     interrupts_out: list[dict[str, Any]] = []
     dispels_out: list[dict[str, Any]] = []
     conflagrations: list[dict[str, Any]] = []
+
+    # Award-related tracking
+    clutch_heals: list[dict[str, Any]] = []  # low-HP heal saves
+    biggest_heals: list[dict[str, Any]] = []  # top single heals
+    biggest_crits: list[dict[str, Any]] = []  # top single crits (heal + damage)
 
     for event in deaths:
         if event.get("type") != "death":
@@ -420,10 +426,75 @@ def analyze_pull(
         spell = event.get("ability", {}).get("name") or "Unknown"
         heals_by_player[player] += 1
         info = heal_details[player][spell]
-        info["total"] += int(event.get("amount") or 0)
-        info["overheal"] += int(event.get("overheal") or 0)
+        amount = int(event.get("amount") or 0)
+        overheal = int(event.get("overheal") or 0)
+        info["total"] += amount
+        info["overheal"] += overheal
         info["count"] += 1
         info["is_hot"] = info["is_hot"] or bool(event.get("tick"))
+
+        # Award tracking: clutch heals, biggest heals, biggest crits
+        hit_points = event.get("hitPoints")
+        hit_type = event.get("hitType")
+        target_id = event.get("targetID")
+        target_name = players_by_id.get(target_id, {}).get("name") if target_id else None
+
+        if amount > 0 and hit_points is not None and target_name:
+            hp_before = hit_points - amount
+            # Clutch heal: target was below 20% of their post-heal HP
+            if hp_before >= 0 and hit_points > 0:
+                hp_pct_before = round(hp_before / hit_points * 100, 1)
+                if hp_pct_before < 20:
+                    clutch_heals.append({
+                        "healer": player,
+                        "target": target_name,
+                        "spell": spell,
+                        "amount": amount,
+                        "hp_pct": hp_pct_before,
+                        "time": relative_seconds(start, event["timestamp"]),
+                        "self_heal": source_id == target_id,
+                    })
+
+        # Track biggest single heals
+        if amount > 0:
+            biggest_heals.append({
+                "player": player,
+                "target": target_name or "Unknown",
+                "spell": spell,
+                "amount": amount,
+                "crit": hit_type == 2,
+                "time": relative_seconds(start, event["timestamp"]),
+            })
+
+        # Track biggest crits (heals)
+        if hit_type == 2 and amount > 0:
+            biggest_crits.append({
+                "player": player,
+                "spell": spell,
+                "amount": amount,
+                "type": "heal",
+                "time": relative_seconds(start, event["timestamp"]),
+            })
+
+    # Track biggest damage crits from damage-done events
+    for event in damage_done_events:
+        if event.get("type") != "damage" or not event.get("sourceIsFriendly"):
+            continue
+        source_id = event.get("sourceID")
+        if source_id not in players_by_id:
+            continue
+        hit_type = event.get("hitType")
+        amount = int(event.get("amount") or 0)
+        if hit_type == 2 and amount > 0:
+            player = players_by_id[source_id]["name"]
+            spell = event.get("ability", {}).get("name") or "Unknown"
+            biggest_crits.append({
+                "player": player,
+                "spell": spell,
+                "amount": amount,
+                "type": "damage",
+                "time": relative_seconds(start, event["timestamp"]),
+            })
 
     for event in casts:
         if event.get("type") != "cast" or not event.get("sourceIsFriendly"):
@@ -465,6 +536,11 @@ def analyze_pull(
             "time": relative_seconds(start, event["timestamp"]),
         })
 
+    # Prepare award data: keep only top entries sorted by relevance
+    clutch_heals.sort(key=lambda x: x["hp_pct"])
+    biggest_heals.sort(key=lambda x: -x["amount"])
+    biggest_crits.sort(key=lambda x: -x["amount"])
+
     pull = {
         "encounter_id": fight["boss"],
         "boss_name": fight["name"],
@@ -490,6 +566,9 @@ def analyze_pull(
         "damage_done": {player: dict(sorted(spells.items())) for player, spells in sorted(damage_done.items())},
         "buff_events": {player: events for player, events in sorted(player_buff_events.items())},
         "consumables": {},
+        "clutch_heals": clutch_heals[:10],
+        "biggest_heals": biggest_heals[:5],
+        "biggest_crits": biggest_crits[:5],
     }
 
     summary = {
