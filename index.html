@@ -4323,17 +4323,21 @@
           });
         });
 
-        // Buff events for drums and flask
+        // Buff events for drums and flask (track flask presence per pull)
+        const pullFlaskPlayers = new Set();
         safeEntries(pull.buff_events).forEach(([player, events]) => {
           (events || []).forEach(ev => {
             if (/Drums of/i.test(ev.spell) && ev.type === 'applybuff') {
               playerDrumUses[player] = (playerDrumUses[player] || 0) + 1;
             }
             if (/Flask of/i.test(ev.spell)) {
-              playerFlaskUptime[player] = (playerFlaskUptime[player] || 0) + 1;
+              pullFlaskPlayers.add(player);
             }
           });
         });
+        for (const player of pullFlaskPlayers) {
+          playerFlaskUptime[player] = (playerFlaskUptime[player] || 0) + 1;
+        }
 
         // Total damage done
         safeEntries(pull.damage_done).forEach(([player, spells]) => {
@@ -4569,13 +4573,13 @@
         });
       }
 
-      // Flask Enjoyer — tracked via buff events (presence implies uptime)
+      // Flask Enjoyer — pulls with flask active (skip if most players are tied)
       const topFlask = topN(playerFlaskUptime);
       if (topFlask.length && topFlask[0][1] > 0 && hasClearWinner(topFlask)) {
         awards.preparation.push({
           title: 'Flask Enjoyer', winner: topFlask[0][0],
-          value: `Flask active ${topFlask[0][1]} events`,
-          detail: 'Tracked via buff application events',
+          value: `Flask active on ${topFlask[0][1]}/${totalPulls} pulls`,
+          detail: topFlask.slice(1, 3).map(([p, c]) => `${p}: ${c}/${totalPulls}`).join(', ') || null,
         });
       }
 
