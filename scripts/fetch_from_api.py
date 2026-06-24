@@ -439,7 +439,15 @@ def analyze_pull(
         target_id = event.get("targetID")
         target_name = players_by_id.get(target_id, {}).get("name") if target_id else None
 
-        if amount > 0 and hit_points is not None and target_name:
+        # Exclude passive/proc heals from clutch tracking
+        PASSIVE_HEAL_SPELLS = {
+            "Judgement of Light", "Vampiric Embrace", "Spirit Link",
+            "Mana Spring", "Healing Stream Totem", "Mark of the Wild",
+            "Fel Armor", "Siphon Life", "Death Coil",
+        }
+        is_passive = spell in PASSIVE_HEAL_SPELLS or bool(event.get("tick"))
+
+        if amount > 0 and hit_points is not None and target_name and not is_passive:
             hp_before = hit_points - amount
             # Clutch heal: target was below 20% of their post-heal HP
             if hp_before >= 0 and hit_points > 0:
