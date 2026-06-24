@@ -537,10 +537,6 @@
       transform: translateY(-2px);
       box-shadow: 0 8px 24px rgba(0,0,0,0.3);
     }
-    .award-card .award-icon {
-      font-size: 1.6rem;
-      margin-bottom: 6px;
-    }
     .award-card .award-title {
       font-size: 0.82rem;
       text-transform: uppercase;
@@ -682,7 +678,7 @@
     const TABS = [
       { id: 'summary', label: 'Summary' },
       { id: 'action-items', label: 'Action Items' },
-      { id: 'awards', label: '🏆 Awards' },
+      { id: 'awards', label: 'Awards' },
       { id: 'strategy', label: 'Strategy' },
       { id: 'tank', label: 'Tanks' },
       { id: 'healer', label: 'Healers' },
@@ -4258,6 +4254,13 @@
       const playerTotalHealing = {};
       const playerAvoidableDmg = {};
       const playerFlaskUptime = {};
+      const playerUniqueSpells = {};
+      const playerTotalCasts = {};
+      const playerTotalTime = {};
+      const playerTotalOverheal = {};
+      const playerTotalRawHealing = {};
+      const playerPullsPresent = {};
+      const playerPullsSurvived = {};
 
       const avoidablePatterns = {
         [BOSS_KEYS.KAEL]: /Conflagration|Remote Toy|Arcane Burst|Flame Strike/i,
@@ -4353,6 +4356,37 @@
             }
           });
         });
+
+        // Unique spells cast per player
+        safeEntries(pull.spell_casts).forEach(([player, spells]) => {
+          if (!playerUniqueSpells[player]) playerUniqueSpells[player] = new Set();
+          Object.keys(spells).forEach(s => playerUniqueSpells[player].add(s));
+        });
+
+        // Total casts and time for CPM
+        safeEntries(pull.casts_by_player || {}).forEach(([player, count]) => {
+          playerTotalCasts[player] = (playerTotalCasts[player] || 0) + count;
+        });
+        pullPlayers.forEach(player => {
+          playerTotalTime[player] = (playerTotalTime[player] || 0) + (pull.duration_sec || 0);
+        });
+
+        // Overheal tracking
+        safeEntries(pull.heal_details).forEach(([player, spells]) => {
+          safeEntries(spells).forEach(([, info]) => {
+            playerTotalOverheal[player] = (playerTotalOverheal[player] || 0) + (info.overheal || 0);
+            playerTotalRawHealing[player] = (playerTotalRawHealing[player] || 0) + (info.total || 0) + (info.overheal || 0);
+          });
+        });
+
+        // Pulls survived (present but didn't die)
+        const deadThisPull = new Set((pull.deaths || []).map(d => d.player));
+        pullPlayers.forEach(player => {
+          playerPullsPresent[player] = (playerPullsPresent[player] || 0) + 1;
+          if (!deadThisPull.has(player)) {
+            playerPullsSurvived[player] = (playerPullsSurvived[player] || 0) + 1;
+          }
+        });
       });
 
       // Convenience: flat array of pull objects for aggregation below
@@ -4369,7 +4403,7 @@
       const topInterrupters = topN(playerInterrupts);
       if (topInterrupters.length && topInterrupters[0][1] > 0 && hasClearWinner(topInterrupters)) {
         awards.utility.push({
-          icon: '⚡', title: 'MVP Interrupt', winner: topInterrupters[0][0],
+          title: 'MVP Interrupt', winner: topInterrupters[0][0],
           value: `${topInterrupters[0][1]} interrupts`,
           detail: topInterrupters.slice(1).map(([p, c]) => `${p}: ${c}`).join(', ') || null,
         });
@@ -4378,7 +4412,7 @@
       const topDispellers = topN(playerDispels);
       if (topDispellers.length && topDispellers[0][1] > 0 && hasClearWinner(topDispellers)) {
         awards.utility.push({
-          icon: '✨', title: 'Dispel Hero', winner: topDispellers[0][0],
+          title: 'Dispel Hero', winner: topDispellers[0][0],
           value: `${topDispellers[0][1]} dispels`,
           detail: topDispellers.slice(1).map(([p, c]) => `${p}: ${c}`).join(', ') || null,
         });
@@ -4387,7 +4421,7 @@
       const topDrummers = topN(playerDrumUses);
       if (topDrummers.length && topDrummers[0][1] > 0 && hasClearWinner(topDrummers)) {
         awards.utility.push({
-          icon: '🥁', title: 'Drumline Captain', winner: topDrummers[0][0],
+          title: 'Drumline Captain', winner: topDrummers[0][0],
           value: `${topDrummers[0][1]} drum uses`,
           detail: topDrummers.slice(1).map(([p, c]) => `${p}: ${c}`).join(', ') || null,
         });
@@ -4403,7 +4437,7 @@
         const dps = pulls.reduce((s, p) => s + (p.duration_sec || 0), 0);
         const dpsValue = dps > 0 ? Math.round(topDamagers[0][1] / dps) : topDamagers[0][1];
         awards.pump.push({
-          icon: '💪', title: 'Pump Lord', winner: topDamagers[0][0],
+          title: 'Pump Lord', winner: topDamagers[0][0],
           value: `${(topDamagers[0][1] / 1000).toFixed(0)}k total damage`,
           detail: `~${dpsValue} DPS avg across ${totalPulls} pull(s). ${topDamagers.slice(1).map(([p, d]) => `${p}: ${(d/1000).toFixed(0)}k`).join(', ')}`,
         });
@@ -4415,7 +4449,7 @@
         const totalTime = pulls.reduce((s, p) => s + (p.duration_sec || 0), 0);
         const hpsValue = totalTime > 0 ? Math.round(topHealers[0][1] / totalTime) : topHealers[0][1];
         awards.pump.push({
-          icon: '💚', title: 'HPS Monster', winner: topHealers[0][0],
+          title: 'HPS Monster', winner: topHealers[0][0],
           value: `${(topHealers[0][1] / 1000).toFixed(0)}k total healing`,
           detail: `~${hpsValue} HPS avg. ${topHealers.slice(1).map(([p, h]) => `${p}: ${(h/1000).toFixed(0)}k`).join(', ')}`,
         });
@@ -4430,7 +4464,7 @@
         allCrits.sort((a, b) => b.amount - a.amount);
         const top = allCrits[0];
         awards.pump.push({
-          icon: '💥', title: 'Biggest Crit', winner: top.player,
+          title: 'Biggest Crit', winner: top.player,
           value: `${(top.amount / 1000).toFixed(1)}k ${top.type} crit`,
           detail: `${top.spell} (${top.type})`,
         });
@@ -4442,7 +4476,7 @@
         allBigHeals.sort((a, b) => b.amount - a.amount);
         const top = allBigHeals[0];
         awards.pump.push({
-          icon: '🩹', title: 'Biggest Heal', winner: top.player,
+          title: 'Biggest Heal', winner: top.player,
           value: `${(top.amount / 1000).toFixed(1)}k on ${top.target}`,
           detail: `${top.spell}${top.crit ? ' (Crit!)' : ''}`,
         });
@@ -4460,7 +4494,7 @@
         const zeroCount = cleanPlayers.filter(([, v]) => v === 0).length;
         if (zeroCount === 1) {
           awards.mechanics.push({
-            icon: '🎯', title: 'Mechanic Gamer', winner: cleanPlayers[0][0],
+            title: 'Mechanic Gamer', winner: cleanPlayers[0][0],
             value: '0 avoidable hits',
             detail: `Cleanest positioning across ${totalPulls} pull(s). Next: ${cleanPlayers.slice(1, 3).map(([p, c]) => `${p}: ${c}`).join(', ')}`,
           });
@@ -4471,7 +4505,7 @@
       const dirtyPlayers = avoidableEntries.filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
       if (dirtyPlayers.length && hasClearWinner(dirtyPlayers)) {
         awards.fun.push({
-          icon: '🔥', title: 'Standing in It Champion', winner: dirtyPlayers[0][0],
+          title: 'Standing in It Champion', winner: dirtyPlayers[0][0],
           value: `${dirtyPlayers[0][1]} avoidable hits`,
           detail: dirtyPlayers.slice(1, 3).map(([p, c]) => `${p}: ${c}`).join(', ') || null,
         });
@@ -4481,7 +4515,7 @@
       const topDeaths = topN(playerDeaths);
       if (topDeaths.length && topDeaths[0][1] > 0 && hasClearWinner(topDeaths)) {
         awards.mechanics.push({
-          icon: '💀', title: 'Floor Inspector', winner: topDeaths[0][0],
+          title: 'Floor Inspector', winner: topDeaths[0][0],
           value: `${topDeaths[0][1]} deaths`,
           detail: topDeaths.slice(1).map(([p, c]) => `${p}: ${c}`).join(', ') || null,
         });
@@ -4491,7 +4525,7 @@
       const topFirstDeaths = topN(playerFirstDeaths);
       if (topFirstDeaths.length && topFirstDeaths[0][1] > 1 && hasClearWinner(topFirstDeaths)) {
         awards.mechanics.push({
-          icon: '🩸', title: 'First Blood', winner: topFirstDeaths[0][0],
+          title: 'First Blood', winner: topFirstDeaths[0][0],
           value: `First to die ${topFirstDeaths[0][1]}x`,
           detail: `Died first on ${topFirstDeaths[0][1]} of ${totalPulls} pulls`,
         });
@@ -4501,7 +4535,7 @@
       const topLastAlive = topN(playerLastAlive);
       if (topLastAlive.length && topLastAlive[0][1] > 1 && hasClearWinner(topLastAlive)) {
         awards.mechanics.push({
-          icon: '🛡️', title: 'Last One Standing', winner: topLastAlive[0][0],
+          title: 'Last One Standing', winner: topLastAlive[0][0],
           value: `Survived last ${topLastAlive[0][1]}x`,
           detail: `Last alive on ${topLastAlive[0][1]} wipe(s)`,
         });
@@ -4511,7 +4545,7 @@
       const topPotions = topN(playerPotionUses);
       if (topPotions.length && topPotions[0][1] > 0 && hasClearWinner(topPotions)) {
         awards.preparation.push({
-          icon: '🧪', title: 'Potion Goblin', winner: topPotions[0][0],
+          title: 'Potion Goblin', winner: topPotions[0][0],
           value: `${topPotions[0][1]} potions used`,
           detail: topPotions.slice(1).map(([p, c]) => `${p}: ${c}`).join(', ') || null,
         });
@@ -4520,7 +4554,7 @@
       const topDarkRunes = topN(playerDarkRuneUses);
       if (topDarkRunes.length && topDarkRunes[0][1] > 0 && hasClearWinner(topDarkRunes)) {
         awards.preparation.push({
-          icon: '🌑', title: 'Dark Rune Enthusiast', winner: topDarkRunes[0][0],
+          title: 'Dark Rune Enthusiast', winner: topDarkRunes[0][0],
           value: `${topDarkRunes[0][1]} runes used`,
           detail: topDarkRunes.slice(1).map(([p, c]) => `${p}: ${c}`).join(', ') || null,
         });
@@ -4529,7 +4563,7 @@
       const topHS = topN(playerHealthstoneUses);
       if (topHS.length && topHS[0][1] > 0 && hasClearWinner(topHS)) {
         awards.preparation.push({
-          icon: '💎', title: 'Healthstone Enjoyer', winner: topHS[0][0],
+          title: 'Healthstone Enjoyer', winner: topHS[0][0],
           value: `${topHS[0][1]} stones used`,
           detail: topHS.slice(1).map(([p, c]) => `${p}: ${c}`).join(', ') || null,
         });
@@ -4539,7 +4573,7 @@
       const topFlask = topN(playerFlaskUptime);
       if (topFlask.length && topFlask[0][1] > 0 && hasClearWinner(topFlask)) {
         awards.preparation.push({
-          icon: '⚗️', title: 'Flask Enjoyer', winner: topFlask[0][0],
+          title: 'Flask Enjoyer', winner: topFlask[0][0],
           value: `Flask active ${topFlask[0][1]} events`,
           detail: 'Tracked via buff application events',
         });
@@ -4554,7 +4588,7 @@
         // Clutch Heal — lowest HP% save
         const top = allClutchHeals[0];
         awards.clutch.push({
-          icon: '❤️‍🔥', title: 'Clutch Heal', winner: top.healer,
+          title: 'Clutch Heal', winner: top.healer,
           value: `Saved ${top.target} at ${top.hp_pct}% HP`,
           detail: `${top.spell} for ${(top.amount / 1000).toFixed(1)}k`,
         });
@@ -4564,7 +4598,7 @@
         if (selfSaves.length) {
           const selfTop = selfSaves[0];
           awards.clutch.push({
-            icon: '🛟', title: 'Clutch Self-Save', winner: selfTop.healer,
+            title: 'Clutch Self-Save', winner: selfTop.healer,
             value: `Self-healed at ${selfTop.hp_pct}% HP`,
             detail: `${selfTop.spell} for ${(selfTop.amount / 1000).toFixed(1)}k`,
           });
@@ -4576,7 +4610,7 @@
         if (survivedClutches.length) {
           const closest = survivedClutches[0];
           awards.clutch.push({
-            icon: '😰', title: 'Closest Call', winner: closest.target,
+            title: 'Closest Call', winner: closest.target,
             value: `Survived at ${closest.hp_pct}% HP`,
             detail: `Saved by ${closest.healer} with ${closest.spell}`,
           });
@@ -4590,7 +4624,7 @@
         const topGuardians = topN(guardianCounts);
         if (topGuardians.length && topGuardians[0][1] >= 2 && hasClearWinner(topGuardians)) {
           awards.clutch.push({
-            icon: '👼', title: 'Guardian Angel', winner: topGuardians[0][0],
+            title: 'Guardian Angel', winner: topGuardians[0][0],
             value: `${topGuardians[0][1]} clutch saves (<15% HP)`,
             detail: topGuardians.slice(1, 3).map(([p, c]) => `${p}: ${c}`).join(', ') || null,
           });
@@ -4608,7 +4642,7 @@
       const topConflag = topN(conflagCounts);
       if (topConflag.length && topConflag[0][1] > 2 && hasClearWinner(topConflag)) {
         awards.fun.push({
-          icon: '🎭', title: 'Main Character Syndrome', winner: topConflag[0][0],
+          title: 'Main Character Syndrome', winner: topConflag[0][0],
           value: `Conflag'd ${topConflag[0][1]}x`,
           detail: `Most targeted by Capernian across Kael pulls`,
         });
@@ -4636,9 +4670,100 @@
       const topPrepared = topN(playerBuffScore);
       if (topPrepared.length && topPrepared[0][1] >= totalPulls && hasClearWinner(topPrepared)) {
         awards.preparation.push({
-          icon: '📋', title: 'Prepared Gamer', winner: topPrepared[0][0],
+          title: 'Prepared Gamer', winner: topPrepared[0][0],
           value: `Buff score: ${topPrepared[0][1]}/${totalPulls * 2}`,
           detail: `Consistently flasked + food buffed across ${totalPulls} pull(s)`,
+        });
+      }
+
+      // One Trick Pony — fewest unique spells (min 3 pulls present)
+      const uniqueSpellEntries = Object.entries(playerUniqueSpells)
+        .filter(([p]) => (playerPullsPresent[p] || 0) >= 3 && allPlayers[p]?.role === 'DPS')
+        .map(([p, s]) => [p, s.size])
+        .sort((a, b) => a[1] - b[1]);
+      if (uniqueSpellEntries.length && hasClearWinner(uniqueSpellEntries)) {
+        awards.fun.push({
+          title: 'One Trick Pony', winner: uniqueSpellEntries[0][0],
+          value: `${uniqueSpellEntries[0][1]} unique spells`,
+          detail: uniqueSpellEntries.slice(1, 3).map(([p, c]) => `${p}: ${c}`).join(', ') || null,
+        });
+      }
+
+      // Swiss Army Knife — most unique spells
+      const swissEntries = Object.entries(playerUniqueSpells)
+        .filter(([p]) => (playerPullsPresent[p] || 0) >= 3)
+        .map(([p, s]) => [p, s.size])
+        .sort((a, b) => b[1] - a[1]);
+      if (swissEntries.length && hasClearWinner(swissEntries)) {
+        awards.fun.push({
+          title: 'Swiss Army Knife', winner: swissEntries[0][0],
+          value: `${swissEntries[0][1]} unique spells`,
+          detail: swissEntries.slice(1, 3).map(([p, c]) => `${p}: ${c}`).join(', ') || null,
+        });
+      }
+
+      // Overheal Olympics — healer with highest overheal %
+      const overhealEntries = Object.entries(playerTotalOverheal)
+        .filter(([p]) => allPlayers[p]?.role === 'Healer' && (playerTotalRawHealing[p] || 0) > 0)
+        .map(([p, oh]) => [p, Math.round(oh / playerTotalRawHealing[p] * 100)])
+        .sort((a, b) => b[1] - a[1]);
+      if (overhealEntries.length && overhealEntries[0][1] > 0 && hasClearWinner(overhealEntries)) {
+        awards.fun.push({
+          title: 'Overheal Olympics', winner: overhealEntries[0][0],
+          value: `${overhealEntries[0][1]}% overheal`,
+          detail: overhealEntries.slice(1, 3).map(([p, c]) => `${p}: ${c}%`).join(', ') || null,
+        });
+      }
+
+      // Glass Cannon — highest total damage among players who died at least once
+      const glassCannonEntries = Object.entries(playerTotalDamage)
+        .filter(([p]) => (playerDeaths[p] || 0) > 0 && allPlayers[p]?.role === 'DPS')
+        .sort((a, b) => b[1] - a[1]);
+      if (glassCannonEntries.length && hasClearWinner(glassCannonEntries)) {
+        const [p, d] = glassCannonEntries[0];
+        awards.fun.push({
+          title: 'Glass Cannon', winner: p,
+          value: `${(d / 1000).toFixed(0)}k damage, died ${playerDeaths[p]}x`,
+          detail: 'Top damage among players who died',
+        });
+      }
+
+      // Unkillable — most pulls present without dying (min 5 pulls)
+      const survivalEntries = Object.entries(playerPullsSurvived)
+        .filter(([p]) => (playerPullsPresent[p] || 0) >= 5)
+        .sort((a, b) => b[1] - a[1]);
+      if (survivalEntries.length && hasClearWinner(survivalEntries)) {
+        const [p, survived] = survivalEntries[0];
+        awards.fun.push({
+          title: 'Unkillable', winner: p,
+          value: `Survived ${survived}/${playerPullsPresent[p]} pulls`,
+          detail: `${((survived / playerPullsPresent[p]) * 100).toFixed(0)}% survival rate`,
+        });
+      }
+
+      // Button Masher — highest casts per minute
+      const cpmEntries = Object.entries(playerTotalCasts)
+        .filter(([p]) => (playerTotalTime[p] || 0) >= 60)
+        .map(([p, c]) => [p, Math.round(c / playerTotalTime[p] * 60)])
+        .sort((a, b) => b[1] - a[1]);
+      if (cpmEntries.length && hasClearWinner(cpmEntries)) {
+        awards.fun.push({
+          title: 'Button Masher', winner: cpmEntries[0][0],
+          value: `${cpmEntries[0][1]} casts/min`,
+          detail: cpmEntries.slice(1, 3).map(([p, c]) => `${p}: ${c}`).join(', ') || null,
+        });
+      }
+
+      // AFK Champion — lowest casts per minute (DPS only, min 60s present)
+      const afkEntries = Object.entries(playerTotalCasts)
+        .filter(([p]) => (playerTotalTime[p] || 0) >= 60 && allPlayers[p]?.role === 'DPS')
+        .map(([p, c]) => [p, Math.round(c / playerTotalTime[p] * 60)])
+        .sort((a, b) => a[1] - b[1]);
+      if (afkEntries.length && hasClearWinner(afkEntries)) {
+        awards.fun.push({
+          title: 'AFK Champion', winner: afkEntries[0][0],
+          value: `${afkEntries[0][1]} casts/min`,
+          detail: afkEntries.slice(1, 3).map(([p, c]) => `${p}: ${c}`).join(', ') || null,
         });
       }
 
@@ -4657,28 +4782,27 @@
       }
 
       const sectionLabels = {
-        clutch: { label: 'Clutch / Survival', icon: '❤️‍🔥' },
-        utility: { label: 'Utility / Support', icon: '🛠️' },
-        pump: { label: 'Throughput / Big Numbers', icon: '📈' },
-        mechanics: { label: 'Mechanics / Execution', icon: '⚙️' },
-        preparation: { label: 'Preparation / Consumables', icon: '📦' },
-        fun: { label: 'Fun / Meme', icon: '😂' },
+        clutch: { label: 'Clutch / Survival' },
+        utility: { label: 'Utility / Support' },
+        pump: { label: 'Throughput / Big Numbers' },
+        mechanics: { label: 'Mechanics / Execution' },
+        preparation: { label: 'Preparation / Consumables' },
+        fun: { label: 'Fun / Meme' },
       };
 
       const bossNames = Object.keys(state.report?.bosses || {});
       const totalPullCount = bossNames.reduce((s, b) => s + (state.report.bosses[b].pulls?.length || 0), 0);
-      let html = `<section class="card"><h2>🏆 Raid Awards</h2>
+      let html = `<section class="card"><h2>Raid Awards</h2>
         <p class="note">Aggregated across ${totalPullCount} pull(s) on ${bossNames.length} boss(es). Awards computed from combat log data.</p>`;
 
       for (const [category, items] of Object.entries(awards)) {
-        const meta = sectionLabels[category] || { label: category, icon: '🏅' };
-        html += `<h3 class="awards-section-title">${meta.icon} ${meta.label}</h3><div class="awards-grid">`;
+        const meta = sectionLabels[category] || { label: category };
+        html += `<h3 class="awards-section-title">${meta.label}</h3><div class="awards-grid">`;
         items.forEach((award, idx) => {
           const isGold = idx === 0;
           html += `
             <div class="award-card${isGold ? ' gold' : ''}">
               <div class="award-rank">#${idx + 1}</div>
-              <div class="award-icon">${award.icon}</div>
               <div class="award-title">${escapeHtml(award.title)}</div>
               <div class="award-winner">${escapeHtml(award.winner)}</div>
               <div class="award-value">${escapeHtml(award.value)}</div>

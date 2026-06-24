@@ -1,0 +1,2966 @@
+{
+  "ours": {
+    "report_id": "tDpb4Fn2Bvg6WkMA",
+    "url": "https://fresh.warcraftlogs.com/reports/tDpb4Fn2Bvg6WkMA",
+    "title": "Gep SSC 06/18",
+    "owner": "Freefaller23"
+  },
+  "theirs": {
+    "report_id": "6YR9vPLr1GXhHmcK",
+    "url": "https://fresh.warcraftlogs.com/reports/6YR9vPLr1GXhHmcK",
+    "title": "SSC",
+    "owner": "Vibecoding"
+  },
+  "comp": {
+    "ours": {
+      "total": 25,
+      "roles": {
+        "Tank": 0,
+        "Healer": 5,
+        "DPS": 20
+      },
+      "classes": {
+        "Druid": 1,
+        "Hunter": 2,
+        "Mage": 2,
+        "Paladin": 5,
+        "Priest": 3,
+        "Rogue": 2,
+        "Shaman": 4,
+        "Warlock": 2,
+        "Warrior": 4
+      }
+    },
+    "theirs": {
+      "total": 25,
+      "roles": {
+        "Tank": 0,
+        "Healer": 5,
+        "DPS": 20
+      },
+      "classes": {
+        "Druid": 2,
+        "Hunter": 3,
+        "Mage": 2,
+        "Paladin": 3,
+        "Priest": 3,
+        "Rogue": 1,
+        "Shaman": 5,
+        "Warlock": 2,
+        "Warrior": 4
+      }
+    }
+  },
+  "roster": {
+    "ours": {
+      "Leafay": {
+        "class": "Paladin",
+        "role": "DPS",
+        "icon": "Paladin"
+      },
+      "Aurapole": {
+        "class": "Paladin",
+        "role": "Healer",
+        "icon": "Paladin-Holy"
+      },
+      "Azurp": {
+        "class": "Rogue",
+        "role": "DPS",
+        "icon": "Rogue-Combat"
+      },
+      "Gepetis": {
+        "class": "Mage",
+        "role": "DPS",
+        "icon": "Mage-Arcane"
+      },
+      "Darkrazor": {
+        "class": "Paladin",
+        "role": "Healer",
+        "icon": "Paladin-Holy"
+      },
+      "Orckboi": {
+        "class": "Warrior",
+        "role": "DPS",
+        "icon": "Warrior-Fury"
+      },
+      "Seedyshadows": {
+        "class": "Warlock",
+        "role": "DPS",
+        "icon": "Warlock"
+      },
+      "Skrayump": {
+        "class": "Hunter",
+        "role": "DPS",
+        "icon": "Hunter-BeastMastery"
+      },
+      "Jarbear": {
+        "class": "Warrior",
+        "role": "DPS",
+        "icon": "Warrior-Arms"
+      },
+      "Smegna": {
+        "class": "Shaman",
+        "role": "DPS",
+        "icon": "Shaman-Elemental"
+      },
+      "Otherz": {
+        "class": "Shaman",
+        "role": "DPS",
+        "icon": "Shaman-Enhancement"
+      },
+      "Shbones": {
+        "class": "Rogue",
+        "role": "DPS",
+        "icon": "Rogue-Combat"
+      },
+      "Tertha": {
+        "class": "Hunter",
+        "role": "DPS",
+        "icon": "Hunter-Survival"
+      },
+      "Playwisme": {
+        "class": "Warrior",
+        "role": "DPS",
+        "icon": "Warrior"
+      },
+      "Catpizz": {
+        "class": "Druid",
+        "role": "DPS",
+        "icon": "Druid"
+      },
+      "Ashimato": {
+        "class": "Warrior",
+        "role": "DPS",
+        "icon": "Warrior"
+      },
+      "Pawmo": {
+        "class": "Shaman",
+        "role": "DPS",
+        "icon": "Shaman-Elemental"
+      },
+      "Peachini": {
+        "class": "Paladin",
+        "role": "Healer",
+        "icon": "Paladin-Holy"
+      },
+      "Vibetoteming": {
+        "class": "Shaman",
+        "role": "DPS",
+        "icon": "Shaman"
+      },
+      "Kayybee": {
+        "class": "Priest",
+        "role": "Healer",
+        "icon": "Priest-Holy"
+      },
+      "Eleisia": {
+        "class": "Paladin",
+        "role": "DPS",
+        "icon": "Paladin"
+      },
+      "Linica": {
+        "class": "Priest",
+        "role": "Healer",
+        "icon": "Priest-Holy"
+      },
+      "Lidets": {
+        "class": "Priest",
+        "role": "DPS",
+        "icon": "Priest-Shadow"
+      },
+      "Freefall": {
+        "class": "Warlock",
+        "role": "DPS",
+        "icon": "Warlock-Destruction"
+      },
+      "Rathmor": {
+        "class": "Mage",
+        "role": "DPS",
+        "icon": "Mage-Arcane"
+      }
+    },
+    "theirs": {
+      "Changedsham": {
+        "class": "Shaman",
+        "role": "DPS",
+        "icon": "Shaman-Enhancement"
+      },
+      "Spectertiger": {
+        "class": "Shaman",
+        "role": "Healer",
+        "icon": "Shaman-Restoration"
+      },
+      "Mightystorm": {
+        "class": "Warrior",
+        "role": "DPS",
+        "icon": "Warrior"
+      },
+      "Greattotem": {
+        "class": "Shaman",
+        "role": "DPS",
+        "icon": "Shaman-Elemental"
+      },
+      "Kamiguruu": {
+        "class": "Warlock",
+        "role": "DPS",
+        "icon": "Warlock-Destruction"
+      },
+      "Kirkc": {
+        "class": "Druid",
+        "role": "DPS",
+        "icon": "Druid"
+      },
+      "Guerelius": {
+        "class": "Mage",
+        "role": "DPS",
+        "icon": "Mage-Arcane"
+      },
+      "Chimbarongo": {
+        "class": "Shaman",
+        "role": "DPS",
+        "icon": "Shaman-Enhancement"
+      },
+      "Assaracus": {
+        "class": "Warrior",
+        "role": "DPS",
+        "icon": "Warrior-Arms"
+      },
+      "Joarrak": {
+        "class": "Priest",
+        "role": "Healer",
+        "icon": "Priest-Holy"
+      },
+      "Relampag\u00f8": {
+        "class": "Warrior",
+        "role": "DPS",
+        "icon": "Warrior-Fury"
+      },
+      "Gpain": {
+        "class": "Hunter",
+        "role": "DPS",
+        "icon": "Hunter-BeastMastery"
+      },
+      "Cryowolf": {
+        "class": "Mage",
+        "role": "DPS",
+        "icon": "Mage-Fire"
+      },
+      "Rootboo": {
+        "class": "Druid",
+        "role": "Healer",
+        "icon": "Druid-Restoration"
+      },
+      "Dungeonrogue": {
+        "class": "Rogue",
+        "role": "DPS",
+        "icon": "Rogue-Combat"
+      },
+      "Kenboloni": {
+        "class": "Hunter",
+        "role": "DPS",
+        "icon": "Hunter-Survival"
+      },
+      "Yono": {
+        "class": "Paladin",
+        "role": "Healer",
+        "icon": "Paladin-Holy"
+      },
+      "Guaaripolo": {
+        "class": "Warlock",
+        "role": "DPS",
+        "icon": "Warlock-Destruction"
+      },
+      "Dronke": {
+        "class": "Paladin",
+        "role": "DPS",
+        "icon": "Paladin-Retribution"
+      },
+      "Greatvailian": {
+        "class": "Hunter",
+        "role": "DPS",
+        "icon": "Hunter-BeastMastery"
+      },
+      "Vibecoding": {
+        "class": "Priest",
+        "role": "Healer",
+        "icon": "Priest-Holy"
+      },
+      "Clumbo": {
+        "class": "Priest",
+        "role": "DPS",
+        "icon": "Priest-Shadow"
+      },
+      "Griphard": {
+        "class": "Warrior",
+        "role": "DPS",
+        "icon": "Warrior-Arms"
+      },
+      "Tannali": {
+        "class": "Paladin",
+        "role": "DPS",
+        "icon": "Paladin"
+      },
+      "Ziiclorn": {
+        "class": "Shaman",
+        "role": "DPS",
+        "icon": "Shaman-Elemental"
+      }
+    }
+  },
+  "bosses": [
+    {
+      "name": "Hydross the Unstable",
+      "ours": {
+        "duration_ms": 185425,
+        "duration_str": "3:05",
+        "raid_dps": 18415,
+        "raid_hps": 2800,
+        "overheal_pct": 59.0,
+        "buffs": [
+          "Arcane Brilliance",
+          "Blessing of Kings",
+          "Elixir of Draenic Wisdom",
+          "Elixir of Major Fortitude",
+          "Ferocious Inspiration",
+          "Flask of Blinding Light",
+          "Flask of Fortification",
+          "Flask of Pure Death",
+          "Flask of Relentless Assault",
+          "Greater Blessing of Kings",
+          "Greater Blessing of Might",
+          "Greater Blessing of Salvation",
+          "Greater Blessing of Wisdom",
+          "Moonkin Aura",
+          "Unleashed Rage",
+          "Well Fed"
+        ],
+        "cooldowns": [
+          {
+            "spell": "Bloodlust",
+            "time_sec": 22.0,
+            "time_pct": 11.9
+          },
+          {
+            "spell": "Bloodlust",
+            "time_sec": 22.7,
+            "time_pct": 12.2
+          }
+        ],
+        "top_dps": [
+          [
+            "Skrayump",
+            320714
+          ],
+          [
+            "Rathmor",
+            250785
+          ],
+          [
+            "Shbones",
+            227410
+          ],
+          [
+            "Jarbear",
+            224905
+          ],
+          [
+            "Orckboi",
+            223881
+          ]
+        ],
+        "top_healers": [
+          [
+            "Aurapole",
+            121720
+          ],
+          [
+            "Peachini",
+            105306
+          ],
+          [
+            "Linica",
+            103264
+          ],
+          [
+            "Darkrazor",
+            96789
+          ],
+          [
+            "Kayybee",
+            68407
+          ]
+        ],
+        "pulls": {
+          "total_pulls": 1,
+          "kills": 1,
+          "wipes": 0
+        },
+        "all_player_damage": {
+          "Skrayump": 320714,
+          "Rathmor": 250785,
+          "Shbones": 227410,
+          "Jarbear": 224905,
+          "Orckboi": 223881,
+          "Gepetis": 223215,
+          "Freefall": 216566,
+          "Tertha": 206833,
+          "Leafay": 188920,
+          "Catpizz": 187422,
+          "Azurp": 181945,
+          "Pawmo": 164721,
+          "Seedyshadows": 156346,
+          "Smegna": 133241,
+          "Vibetoteming": 118835,
+          "Otherz": 118699,
+          "Lidets": 113152,
+          "Playwisme": 61517,
+          "Eleisia": 45579,
+          "Ashimato": 44602,
+          "Kayybee": 3520,
+          "Linica": 1792
+        },
+        "all_player_healing": {
+          "Aurapole": {
+            "healing": 121720,
+            "overheal": 125062
+          },
+          "Peachini": {
+            "healing": 105306,
+            "overheal": 67368
+          },
+          "Linica": {
+            "healing": 103264,
+            "overheal": 124857
+          },
+          "Darkrazor": {
+            "healing": 96789,
+            "overheal": 100284
+          },
+          "Kayybee": {
+            "healing": 68407,
+            "overheal": 151828
+          },
+          "Lidets": {
+            "healing": 5485,
+            "overheal": 77313
+          },
+          "Vibetoteming": {
+            "healing": 4566,
+            "overheal": 24839
+          },
+          "Leafay": {
+            "healing": 2718,
+            "overheal": 1367
+          },
+          "Playwisme": {
+            "healing": 2669,
+            "overheal": 4521
+          },
+          "Orckboi": {
+            "healing": 2057,
+            "overheal": 6451
+          },
+          "Ashimato": {
+            "healing": 1529,
+            "overheal": 4646
+          },
+          "Seedyshadows": {
+            "healing": 1127,
+            "overheal": 7709
+          },
+          "Tertha": {
+            "healing": 907,
+            "overheal": 6313
+          },
+          "Otherz": {
+            "healing": 758,
+            "overheal": 6035
+          },
+          "Skrayump": {
+            "healing": 730,
+            "overheal": 10575
+          },
+          "Shbones": {
+            "healing": 448,
+            "overheal": 11047
+          },
+          "Jarbear": {
+            "healing": 380,
+            "overheal": 3848
+          },
+          "Smegna": {
+            "healing": 286,
+            "overheal": 48
+          },
+          "Eleisia": {
+            "healing": 115,
+            "overheal": 2122
+          },
+          "Freefall": {
+            "healing": 0,
+            "overheal": 1273
+          },
+          "Catpizz": {
+            "healing": 0,
+            "overheal": 2090
+          },
+          "Azurp": {
+            "healing": 0,
+            "overheal": 8502
+          }
+        }
+      },
+      "theirs": {
+        "duration_ms": 211850,
+        "duration_str": "3:31",
+        "raid_dps": 16118,
+        "raid_hps": 3731,
+        "overheal_pct": 58.4,
+        "buffs": [
+          "Arcane Brilliance",
+          "Blessing of Might",
+          "Elixir of Draenic Wisdom",
+          "Ferocious Inspiration",
+          "Flask of Pure Death",
+          "Gift of the Wild",
+          "Greater Blessing of Kings",
+          "Greater Blessing of Might",
+          "Greater Blessing of Salvation",
+          "Greater Blessing of Wisdom",
+          "Leader of the Pack",
+          "Power Word: Fortitude",
+          "Prayer of Fortitude",
+          "Prayer of Spirit",
+          "Unleashed Rage",
+          "Well Fed"
+        ],
+        "cooldowns": [
+          {
+            "spell": "Bloodlust",
+            "time_sec": 8.5,
+            "time_pct": 4.0
+          },
+          {
+            "spell": "Bloodlust",
+            "time_sec": 8.7,
+            "time_pct": 4.1
+          },
+          {
+            "spell": "Bloodlust",
+            "time_sec": 8.7,
+            "time_pct": 4.1
+          }
+        ],
+        "top_dps": [
+          [
+            "Kenboloni",
+            266401
+          ],
+          [
+            "Cryowolf",
+            244229
+          ],
+          [
+            "Guerelius",
+            241330
+          ],
+          [
+            "Changedsham",
+            226681
+          ],
+          [
+            "Kamiguruu",
+            224714
+          ]
+        ],
+        "top_healers": [
+          [
+            "Spectertiger",
+            194204
+          ],
+          [
+            "Vibecoding",
+            179120
+          ],
+          [
+            "Rootboo",
+            160161
+          ],
+          [
+            "Joarrak",
+            121105
+          ],
+          [
+            "Yono",
+            100029
+          ]
+        ],
+        "pulls": {
+          "total_pulls": 1,
+          "kills": 1,
+          "wipes": 0
+        },
+        "all_player_damage": {
+          "Kenboloni": 266401,
+          "Cryowolf": 244229,
+          "Guerelius": 241330,
+          "Changedsham": 226681,
+          "Kamiguruu": 224714,
+          "Greatvailian": 215181,
+          "Gpain": 214999,
+          "Clumbo": 210452,
+          "Greattotem": 191463,
+          "Guaaripolo": 182336,
+          "Dungeonrogue": 179882,
+          "Chimbarongo": 167898,
+          "Ziiclorn": 150535,
+          "Griphard": 137904,
+          "Dronke": 127418,
+          "Relampag\u00f8": 118459,
+          "Mightystorm": 94728,
+          "Assaracus": 87371,
+          "Tannali": 54079,
+          "Spectertiger": 38373,
+          "Kirkc": 35575,
+          "Joarrak": 2961,
+          "Vibecoding": 1631
+        },
+        "all_player_healing": {
+          "Spectertiger": {
+            "healing": 194204,
+            "overheal": 248900
+          },
+          "Vibecoding": {
+            "healing": 179120,
+            "overheal": 152805
+          },
+          "Rootboo": {
+            "healing": 160161,
+            "overheal": 265488
+          },
+          "Joarrak": {
+            "healing": 121105,
+            "overheal": 144347
+          },
+          "Yono": {
+            "healing": 100029,
+            "overheal": 95833
+          },
+          "Clumbo": {
+            "healing": 11836,
+            "overheal": 148773
+          },
+          "Mightystorm": {
+            "healing": 8340,
+            "overheal": 9522
+          },
+          "Kamiguruu": {
+            "healing": 6122,
+            "overheal": 12267
+          },
+          "Relampag\u00f8": {
+            "healing": 3141,
+            "overheal": 975
+          },
+          "Greattotem": {
+            "healing": 1610,
+            "overheal": 0
+          },
+          "Kirkc": {
+            "healing": 1592,
+            "overheal": 11805
+          },
+          "Griphard": {
+            "healing": 1526,
+            "overheal": 8543
+          },
+          "Chimbarongo": {
+            "healing": 1039,
+            "overheal": 7389
+          },
+          "Greatvailian": {
+            "healing": 550,
+            "overheal": 1946
+          },
+          "Assaracus": {
+            "healing": 68,
+            "overheal": 285
+          }
+        }
+      },
+      "delta": {
+        "time_ms": -26425,
+        "time_str": "0:26",
+        "time_favorable": true,
+        "dps_diff": 2297,
+        "hps_diff": -931,
+        "overheal_diff": 0.6,
+        "missing_buffs": [
+          "Blessing of Might",
+          "Gift of the Wild",
+          "Leader of the Pack",
+          "Power Word: Fortitude",
+          "Prayer of Fortitude",
+          "Prayer of Spirit"
+        ],
+        "extra_buffs": [
+          "Blessing of Kings",
+          "Elixir of Major Fortitude",
+          "Flask of Blinding Light",
+          "Flask of Fortification",
+          "Flask of Relentless Assault",
+          "Moonkin Aura"
+        ]
+      }
+    },
+    {
+      "name": "The Lurker Below",
+      "ours": {
+        "duration_ms": 214364,
+        "duration_str": "3:34",
+        "raid_dps": 18677,
+        "raid_hps": 3842,
+        "overheal_pct": 35.1,
+        "buffs": [
+          "Arcane Brilliance",
+          "Blessing of Kings",
+          "Blessing of Wisdom",
+          "Elixir of Draenic Wisdom",
+          "Elixir of Major Fortitude",
+          "Ferocious Inspiration",
+          "Flask of Blinding Light",
+          "Flask of Fortification",
+          "Flask of Pure Death",
+          "Flask of Relentless Assault",
+          "Gift of the Wild",
+          "Greater Blessing of Kings",
+          "Greater Blessing of Light",
+          "Greater Blessing of Might",
+          "Greater Blessing of Salvation",
+          "Greater Blessing of Wisdom",
+          "Mark of the Wild",
+          "Moonkin Aura",
+          "Prayer of Fortitude",
+          "Unleashed Rage",
+          "Well Fed"
+        ],
+        "cooldowns": [
+          {
+            "spell": "Bloodlust",
+            "time_sec": 154.7,
+            "time_pct": 72.2
+          },
+          {
+            "spell": "Bloodlust",
+            "time_sec": 155.1,
+            "time_pct": 72.4
+          },
+          {
+            "spell": "Bloodlust",
+            "time_sec": 155.4,
+            "time_pct": 72.5
+          }
+        ],
+        "top_dps": [
+          [
+            "Orckboi",
+            296112
+          ],
+          [
+            "Jarbear",
+            287581
+          ],
+          [
+            "Skrayump",
+            275526
+          ],
+          [
+            "Freefall",
+            275326
+          ],
+          [
+            "Gepetis",
+            265789
+          ]
+        ],
+        "top_healers": [
+          [
+            "Linica",
+            168790
+          ],
+          [
+            "Peachini",
+            147346
+          ],
+          [
+            "Aurapole",
+            143211
+          ],
+          [
+            "Darkrazor",
+            124802
+          ],
+          [
+            "Kayybee",
+            117951
+          ]
+        ],
+        "pulls": {
+          "total_pulls": 1,
+          "kills": 1,
+          "wipes": 0
+        },
+        "all_player_damage": {
+          "Orckboi": 296112,
+          "Jarbear": 287581,
+          "Skrayump": 275526,
+          "Freefall": 275326,
+          "Gepetis": 265789,
+          "Catpizz": 243151,
+          "Tertha": 242638,
+          "Rathmor": 235741,
+          "Leafay": 232510,
+          "Pawmo": 228244,
+          "Azurp": 215697,
+          "Smegna": 201711,
+          "Seedyshadows": 195242,
+          "Lidets": 169660,
+          "Shbones": 155684,
+          "Otherz": 149907,
+          "Vibetoteming": 111366,
+          "Ashimato": 77518,
+          "Eleisia": 72001,
+          "Playwisme": 66161,
+          "Kayybee": 5226,
+          "Darkrazor": 789
+        },
+        "all_player_healing": {
+          "Linica": {
+            "healing": 168790,
+            "overheal": 89199
+          },
+          "Peachini": {
+            "healing": 147346,
+            "overheal": 42954
+          },
+          "Aurapole": {
+            "healing": 143211,
+            "overheal": 68116
+          },
+          "Darkrazor": {
+            "healing": 124802,
+            "overheal": 63580
+          },
+          "Kayybee": {
+            "healing": 117951,
+            "overheal": 59273
+          },
+          "Lidets": {
+            "healing": 27316,
+            "overheal": 78309
+          },
+          "Skrayump": {
+            "healing": 13395,
+            "overheal": 2375
+          },
+          "Vibetoteming": {
+            "healing": 12050,
+            "overheal": 9743
+          },
+          "Tertha": {
+            "healing": 11198,
+            "overheal": 1817
+          },
+          "Orckboi": {
+            "healing": 10440,
+            "overheal": 3640
+          },
+          "Playwisme": {
+            "healing": 7816,
+            "overheal": 2539
+          },
+          "Otherz": {
+            "healing": 7110,
+            "overheal": 1204
+          },
+          "Freefall": {
+            "healing": 6373,
+            "overheal": 0
+          },
+          "Azurp": {
+            "healing": 5244,
+            "overheal": 4208
+          },
+          "Ashimato": {
+            "healing": 4613,
+            "overheal": 3842
+          },
+          "Jarbear": {
+            "healing": 4370,
+            "overheal": 1995
+          },
+          "Shbones": {
+            "healing": 4088,
+            "overheal": 2752
+          },
+          "Leafay": {
+            "healing": 3818,
+            "overheal": 932
+          },
+          "Eleisia": {
+            "healing": 2038,
+            "overheal": 950
+          },
+          "Seedyshadows": {
+            "healing": 1172,
+            "overheal": 5791
+          },
+          "Catpizz": {
+            "healing": 380,
+            "overheal": 1805
+          }
+        }
+      },
+      "theirs": {
+        "duration_ms": 213739,
+        "duration_str": "3:33",
+        "raid_dps": 18731,
+        "raid_hps": 4608,
+        "overheal_pct": 35.9,
+        "buffs": [
+          "Arcane Brilliance",
+          "Blessing of Might",
+          "Elixir of Draenic Wisdom",
+          "Ferocious Inspiration",
+          "Flask of Pure Death",
+          "Flask of Relentless Assault",
+          "Gift of the Wild",
+          "Greater Blessing of Kings",
+          "Greater Blessing of Might",
+          "Greater Blessing of Salvation",
+          "Greater Blessing of Wisdom",
+          "Leader of the Pack",
+          "Prayer of Fortitude",
+          "Prayer of Spirit",
+          "Unleashed Rage",
+          "Well Fed"
+        ],
+        "cooldowns": [
+          {
+            "spell": "Bloodlust",
+            "time_sec": 10.7,
+            "time_pct": 5.0
+          },
+          {
+            "spell": "Bloodlust",
+            "time_sec": 11.2,
+            "time_pct": 5.2
+          }
+        ],
+        "top_dps": [
+          [
+            "Kamiguruu",
+            276642
+          ],
+          [
+            "Greattotem",
+            272767
+          ],
+          [
+            "Relampag\u00f8",
+            262062
+          ],
+          [
+            "Cryowolf",
+            260741
+          ],
+          [
+            "Dungeonrogue",
+            259608
+          ]
+        ],
+        "top_healers": [
+          [
+            "Spectertiger",
+            235097
+          ],
+          [
+            "Joarrak",
+            188112
+          ],
+          [
+            "Vibecoding",
+            177857
+          ],
+          [
+            "Rootboo",
+            140618
+          ],
+          [
+            "Yono",
+            121633
+          ]
+        ],
+        "pulls": {
+          "total_pulls": 1,
+          "kills": 1,
+          "wipes": 0
+        },
+        "all_player_damage": {
+          "Kamiguruu": 276642,
+          "Greattotem": 272767,
+          "Relampag\u00f8": 262062,
+          "Cryowolf": 260741,
+          "Dungeonrogue": 259608,
+          "Guerelius": 252120,
+          "Guaaripolo": 248888,
+          "Changedsham": 237929,
+          "Chimbarongo": 234839,
+          "Greatvailian": 216948,
+          "Clumbo": 213473,
+          "Gpain": 210979,
+          "Kenboloni": 190874,
+          "Griphard": 190285,
+          "Dronke": 186505,
+          "Ziiclorn": 174858,
+          "Kirkc": 135840,
+          "Mightystorm": 86185,
+          "Tannali": 49728,
+          "Assaracus": 41905,
+          "Joarrak": 404
+        },
+        "all_player_healing": {
+          "Spectertiger": {
+            "healing": 235097,
+            "overheal": 140664
+          },
+          "Joarrak": {
+            "healing": 188112,
+            "overheal": 70971
+          },
+          "Vibecoding": {
+            "healing": 177857,
+            "overheal": 81458
+          },
+          "Rootboo": {
+            "healing": 140618,
+            "overheal": 100930
+          },
+          "Yono": {
+            "healing": 121633,
+            "overheal": 40345
+          },
+          "Clumbo": {
+            "healing": 52133,
+            "overheal": 91472
+          },
+          "Chimbarongo": {
+            "healing": 14872,
+            "overheal": 2079
+          },
+          "Mightystorm": {
+            "healing": 10456,
+            "overheal": 4510
+          },
+          "Griphard": {
+            "healing": 10190,
+            "overheal": 1900
+          },
+          "Kenboloni": {
+            "healing": 7725,
+            "overheal": 0
+          },
+          "Gpain": {
+            "healing": 7125,
+            "overheal": 0
+          },
+          "Kirkc": {
+            "healing": 6033,
+            "overheal": 5501
+          },
+          "Kamiguruu": {
+            "healing": 4773,
+            "overheal": 7928
+          },
+          "Dungeonrogue": {
+            "healing": 2496,
+            "overheal": 0
+          },
+          "Greatvailian": {
+            "healing": 2375,
+            "overheal": 0
+          },
+          "Relampag\u00f8": {
+            "healing": 2010,
+            "overheal": 360
+          },
+          "Ziiclorn": {
+            "healing": 1508,
+            "overheal": 2414
+          }
+        }
+      },
+      "delta": {
+        "time_ms": 625,
+        "time_str": "+0:00",
+        "time_favorable": false,
+        "dps_diff": -54,
+        "hps_diff": -766,
+        "overheal_diff": -0.8,
+        "missing_buffs": [
+          "Blessing of Might",
+          "Leader of the Pack",
+          "Prayer of Spirit"
+        ],
+        "extra_buffs": [
+          "Blessing of Kings",
+          "Blessing of Wisdom",
+          "Elixir of Major Fortitude",
+          "Flask of Blinding Light",
+          "Flask of Fortification",
+          "Greater Blessing of Light",
+          "Mark of the Wild",
+          "Moonkin Aura"
+        ]
+      }
+    },
+    {
+      "name": "Leotheras the Blind",
+      "ours": {
+        "duration_ms": 259772,
+        "duration_str": "4:19",
+        "raid_dps": 16267,
+        "raid_hps": 3779,
+        "overheal_pct": 50.1,
+        "buffs": [
+          "Arcane Brilliance",
+          "Blessing of Kings",
+          "Elixir of Draenic Wisdom",
+          "Elixir of Major Fortitude",
+          "Ferocious Inspiration",
+          "Flask of Blinding Light",
+          "Flask of Fortification",
+          "Flask of Pure Death",
+          "Flask of Relentless Assault",
+          "Gift of the Wild",
+          "Greater Blessing of Kings",
+          "Greater Blessing of Light",
+          "Greater Blessing of Might",
+          "Greater Blessing of Salvation",
+          "Greater Blessing of Wisdom",
+          "Moonkin Aura",
+          "Prayer of Fortitude",
+          "Unleashed Rage",
+          "Well Fed"
+        ],
+        "cooldowns": [
+          {
+            "spell": "Bloodlust",
+            "time_sec": 89.8,
+            "time_pct": 34.5
+          },
+          {
+            "spell": "Bloodlust",
+            "time_sec": 93.4,
+            "time_pct": 35.9
+          }
+        ],
+        "top_dps": [
+          [
+            "Skrayump",
+            342941
+          ],
+          [
+            "Gepetis",
+            332063
+          ],
+          [
+            "Rathmor",
+            310648
+          ],
+          [
+            "Jarbear",
+            276714
+          ],
+          [
+            "Orckboi",
+            268677
+          ]
+        ],
+        "top_healers": [
+          [
+            "Linica",
+            193912
+          ],
+          [
+            "Aurapole",
+            180238
+          ],
+          [
+            "Vibetoteming",
+            156688
+          ],
+          [
+            "Darkrazor",
+            147759
+          ],
+          [
+            "Kayybee",
+            127845
+          ]
+        ],
+        "pulls": {
+          "total_pulls": 2,
+          "kills": 1,
+          "wipes": 1
+        },
+        "all_player_damage": {
+          "Skrayump": 342941,
+          "Gepetis": 332063,
+          "Rathmor": 310648,
+          "Jarbear": 276714,
+          "Orckboi": 268677,
+          "Tertha": 257455,
+          "Pawmo": 252532,
+          "Lidets": 249770,
+          "Shbones": 248550,
+          "Smegna": 244030,
+          "Leafay": 228846,
+          "Seedyshadows": 219222,
+          "Azurp": 208657,
+          "Catpizz": 199108,
+          "Freefall": 155543,
+          "Otherz": 153199,
+          "Ashimato": 97322,
+          "Eleisia": 91984,
+          "Playwisme": 54655,
+          "Peachini": 10392,
+          "Linica": 8829,
+          "Kayybee": 8762,
+          "Vibetoteming": 5870
+        },
+        "all_player_healing": {
+          "Linica": {
+            "healing": 193912,
+            "overheal": 170638
+          },
+          "Aurapole": {
+            "healing": 180238,
+            "overheal": 128235
+          },
+          "Vibetoteming": {
+            "healing": 156688,
+            "overheal": 155895
+          },
+          "Darkrazor": {
+            "healing": 147759,
+            "overheal": 88862
+          },
+          "Kayybee": {
+            "healing": 127845,
+            "overheal": 174375
+          },
+          "Peachini": {
+            "healing": 101525,
+            "overheal": 126750
+          },
+          "Lidets": {
+            "healing": 21781,
+            "overheal": 63907
+          },
+          "Orckboi": {
+            "healing": 7216,
+            "overheal": 5919
+          },
+          "Azurp": {
+            "healing": 7172,
+            "overheal": 7431
+          },
+          "Leafay": {
+            "healing": 6464,
+            "overheal": 2157
+          },
+          "Skrayump": {
+            "healing": 5337,
+            "overheal": 6775
+          },
+          "Tertha": {
+            "healing": 4327,
+            "overheal": 4128
+          },
+          "Ashimato": {
+            "healing": 3909,
+            "overheal": 5686
+          },
+          "Otherz": {
+            "healing": 3468,
+            "overheal": 3801
+          },
+          "Playwisme": {
+            "healing": 2974,
+            "overheal": 3771
+          },
+          "Seedyshadows": {
+            "healing": 2799,
+            "overheal": 12440
+          },
+          "Shbones": {
+            "healing": 2772,
+            "overheal": 8438
+          },
+          "Pawmo": {
+            "healing": 2431,
+            "overheal": 0
+          },
+          "Jarbear": {
+            "healing": 1619,
+            "overheal": 3936
+          },
+          "Eleisia": {
+            "healing": 1559,
+            "overheal": 2951
+          },
+          "Freefall": {
+            "healing": 0,
+            "overheal": 2339
+          },
+          "Catpizz": {
+            "healing": 0,
+            "overheal": 2660
+          },
+          "Smegna": {
+            "healing": 0,
+            "overheal": 3013
+          }
+        }
+      },
+      "theirs": {
+        "duration_ms": 238636,
+        "duration_str": "3:58",
+        "raid_dps": 17625,
+        "raid_hps": 4564,
+        "overheal_pct": 49.3,
+        "buffs": [
+          "Arcane Brilliance",
+          "Blessing of Light",
+          "Blessing of Might",
+          "Divine Spirit",
+          "Elixir of Draenic Wisdom",
+          "Ferocious Inspiration",
+          "Flask of Pure Death",
+          "Flask of Relentless Assault",
+          "Gift of the Wild",
+          "Greater Blessing of Kings",
+          "Greater Blessing of Might",
+          "Greater Blessing of Salvation",
+          "Greater Blessing of Wisdom",
+          "Leader of the Pack",
+          "Mark of the Wild",
+          "Power Word: Fortitude",
+          "Prayer of Fortitude",
+          "Prayer of Spirit",
+          "Unleashed Rage",
+          "Well Fed"
+        ],
+        "cooldowns": [
+          {
+            "spell": "Bloodlust",
+            "time_sec": 89.0,
+            "time_pct": 37.3
+          },
+          {
+            "spell": "Bloodlust",
+            "time_sec": 90.0,
+            "time_pct": 37.7
+          }
+        ],
+        "top_dps": [
+          [
+            "Greattotem",
+            306708
+          ],
+          [
+            "Kenboloni",
+            300595
+          ],
+          [
+            "Greatvailian",
+            292819
+          ],
+          [
+            "Guerelius",
+            257501
+          ],
+          [
+            "Clumbo",
+            251039
+          ]
+        ],
+        "top_healers": [
+          [
+            "Spectertiger",
+            239017
+          ],
+          [
+            "Vibecoding",
+            230393
+          ],
+          [
+            "Rootboo",
+            207474
+          ],
+          [
+            "Joarrak",
+            181732
+          ],
+          [
+            "Yono",
+            135406
+          ]
+        ],
+        "pulls": {
+          "total_pulls": 1,
+          "kills": 1,
+          "wipes": 0
+        },
+        "all_player_damage": {
+          "Greattotem": 306708,
+          "Kenboloni": 300595,
+          "Greatvailian": 292819,
+          "Guerelius": 257501,
+          "Clumbo": 251039,
+          "Chimbarongo": 249170,
+          "Changedsham": 244964,
+          "Dungeonrogue": 244047,
+          "Gpain": 230838,
+          "Griphard": 228224,
+          "Guaaripolo": 228175,
+          "Relampag\u00f8": 219712,
+          "Dronke": 211022,
+          "Assaracus": 198312,
+          "Cryowolf": 179712,
+          "Ziiclorn": 169734,
+          "Kamiguruu": 104242,
+          "Kirkc": 93357,
+          "Mightystorm": 84642,
+          "Tannali": 67868,
+          "Spectertiger": 28784,
+          "Rootboo": 10392,
+          "Joarrak": 3785,
+          "Vibecoding": 292
+        },
+        "all_player_healing": {
+          "Spectertiger": {
+            "healing": 239017,
+            "overheal": 252084
+          },
+          "Vibecoding": {
+            "healing": 230393,
+            "overheal": 126644
+          },
+          "Rootboo": {
+            "healing": 207474,
+            "overheal": 248107
+          },
+          "Joarrak": {
+            "healing": 181732,
+            "overheal": 143189
+          },
+          "Yono": {
+            "healing": 135406,
+            "overheal": 94975
+          },
+          "Clumbo": {
+            "healing": 37112,
+            "overheal": 145821
+          },
+          "Gpain": {
+            "healing": 8494,
+            "overheal": 0
+          },
+          "Kamiguruu": {
+            "healing": 7745,
+            "overheal": 5352
+          },
+          "Chimbarongo": {
+            "healing": 6113,
+            "overheal": 7358
+          },
+          "Griphard": {
+            "healing": 6070,
+            "overheal": 6669
+          },
+          "Greattotem": {
+            "healing": 5689,
+            "overheal": 661
+          },
+          "Greatvailian": {
+            "healing": 5444,
+            "overheal": 3581
+          },
+          "Mightystorm": {
+            "healing": 4240,
+            "overheal": 9531
+          },
+          "Relampag\u00f8": {
+            "healing": 3366,
+            "overheal": 1545
+          },
+          "Kirkc": {
+            "healing": 3092,
+            "overheal": 13606
+          },
+          "Changedsham": {
+            "healing": 2496,
+            "overheal": 0
+          },
+          "Dungeonrogue": {
+            "healing": 2496,
+            "overheal": 0
+          },
+          "Kenboloni": {
+            "healing": 2375,
+            "overheal": 0
+          },
+          "Cryowolf": {
+            "healing": 357,
+            "overheal": 0
+          },
+          "Assaracus": {
+            "healing": 100,
+            "overheal": 107
+          }
+        }
+      },
+      "delta": {
+        "time_ms": 21136,
+        "time_str": "+0:21",
+        "time_favorable": false,
+        "dps_diff": -1358,
+        "hps_diff": -785,
+        "overheal_diff": 0.8,
+        "missing_buffs": [
+          "Blessing of Light",
+          "Blessing of Might",
+          "Divine Spirit",
+          "Leader of the Pack",
+          "Mark of the Wild",
+          "Power Word: Fortitude",
+          "Prayer of Spirit"
+        ],
+        "extra_buffs": [
+          "Blessing of Kings",
+          "Elixir of Major Fortitude",
+          "Flask of Blinding Light",
+          "Flask of Fortification",
+          "Greater Blessing of Light",
+          "Moonkin Aura"
+        ]
+      }
+    },
+    {
+      "name": "Fathom-Lord Karathress",
+      "ours": {
+        "duration_ms": 179744,
+        "duration_str": "2:59",
+        "raid_dps": 22902,
+        "raid_hps": 4899,
+        "overheal_pct": 24.6,
+        "buffs": [
+          "Arcane Brilliance",
+          "Blessing of Kings",
+          "Elixir of Draenic Wisdom",
+          "Elixir of Major Fortitude",
+          "Ferocious Inspiration",
+          "Flask of Blinding Light",
+          "Flask of Fortification",
+          "Flask of Pure Death",
+          "Flask of Relentless Assault",
+          "Gift of the Wild",
+          "Greater Blessing of Kings",
+          "Greater Blessing of Light",
+          "Greater Blessing of Might",
+          "Greater Blessing of Salvation",
+          "Greater Blessing of Wisdom",
+          "Mark of the Wild",
+          "Moonkin Aura",
+          "Prayer of Fortitude",
+          "Unleashed Rage",
+          "Well Fed"
+        ],
+        "cooldowns": [
+          {
+            "spell": "Bloodlust",
+            "time_sec": 11.7,
+            "time_pct": 6.5
+          },
+          {
+            "spell": "Bloodlust",
+            "time_sec": 15.1,
+            "time_pct": 8.4
+          }
+        ],
+        "top_dps": [
+          [
+            "Orckboi",
+            399874
+          ],
+          [
+            "Freefall",
+            311330
+          ],
+          [
+            "Jarbear",
+            302724
+          ],
+          [
+            "Gepetis",
+            280011
+          ],
+          [
+            "Tertha",
+            270936
+          ]
+        ],
+        "top_healers": [
+          [
+            "Linica",
+            224892
+          ],
+          [
+            "Darkrazor",
+            177516
+          ],
+          [
+            "Aurapole",
+            170525
+          ],
+          [
+            "Peachini",
+            154381
+          ],
+          [
+            "Kayybee",
+            107195
+          ]
+        ],
+        "pulls": {
+          "total_pulls": 1,
+          "kills": 1,
+          "wipes": 0
+        },
+        "all_player_damage": {
+          "Orckboi": 399874,
+          "Freefall": 311330,
+          "Jarbear": 302724,
+          "Gepetis": 280011,
+          "Tertha": 270936,
+          "Rathmor": 263606,
+          "Azurp": 262893,
+          "Skrayump": 256964,
+          "Pawmo": 241803,
+          "Smegna": 214721,
+          "Seedyshadows": 194559,
+          "Catpizz": 193632,
+          "Vibetoteming": 184727,
+          "Otherz": 176644,
+          "Lidets": 165289,
+          "Eleisia": 98280,
+          "Ashimato": 92926,
+          "Shbones": 75365,
+          "Playwisme": 73960,
+          "Leafay": 46066,
+          "Kayybee": 7888,
+          "Linica": 2369
+        },
+        "all_player_healing": {
+          "Linica": {
+            "healing": 224892,
+            "overheal": 87849
+          },
+          "Darkrazor": {
+            "healing": 177516,
+            "overheal": 9415
+          },
+          "Aurapole": {
+            "healing": 170525,
+            "overheal": 80959
+          },
+          "Peachini": {
+            "healing": 154381,
+            "overheal": 30026
+          },
+          "Kayybee": {
+            "healing": 107195,
+            "overheal": 48461
+          },
+          "Vibetoteming": {
+            "healing": 7190,
+            "overheal": 13397
+          },
+          "Shbones": {
+            "healing": 6448,
+            "overheal": 962
+          },
+          "Orckboi": {
+            "healing": 5166,
+            "overheal": 915
+          },
+          "Leafay": {
+            "healing": 5064,
+            "overheal": 285
+          },
+          "Playwisme": {
+            "healing": 4396,
+            "overheal": 0
+          },
+          "Azurp": {
+            "healing": 4210,
+            "overheal": 0
+          },
+          "Freefall": {
+            "healing": 3145,
+            "overheal": 0
+          },
+          "Seedyshadows": {
+            "healing": 2706,
+            "overheal": 11157
+          },
+          "Smegna": {
+            "healing": 2496,
+            "overheal": 0
+          },
+          "Skrayump": {
+            "healing": 2496,
+            "overheal": 0
+          },
+          "Tertha": {
+            "healing": 2375,
+            "overheal": 0
+          },
+          "Ashimato": {
+            "healing": 400,
+            "overheal": 0
+          },
+          "Catpizz": {
+            "healing": 0,
+            "overheal": 95
+          },
+          "Lidets": {
+            "healing": 0,
+            "overheal": 3870
+          }
+        }
+      },
+      "theirs": {
+        "duration_ms": 216559,
+        "duration_str": "3:36",
+        "raid_dps": 23691,
+        "raid_hps": 5810,
+        "overheal_pct": 41.0,
+        "buffs": [
+          "Arcane Brilliance",
+          "Blessing of Light",
+          "Blessing of Might",
+          "Divine Spirit",
+          "Elixir of Draenic Wisdom",
+          "Ferocious Inspiration",
+          "Flask of Pure Death",
+          "Flask of Relentless Assault",
+          "Gift of the Wild",
+          "Greater Blessing of Kings",
+          "Greater Blessing of Might",
+          "Greater Blessing of Salvation",
+          "Greater Blessing of Wisdom",
+          "Leader of the Pack",
+          "Power Word: Fortitude",
+          "Prayer of Fortitude",
+          "Prayer of Shadow Protection",
+          "Prayer of Spirit",
+          "Shadow Protection",
+          "Unleashed Rage",
+          "Well Fed"
+        ],
+        "cooldowns": [
+          {
+            "spell": "Bloodlust",
+            "time_sec": 137.7,
+            "time_pct": 63.6
+          }
+        ],
+        "top_dps": [
+          [
+            "Relampag\u00f8",
+            351212
+          ],
+          [
+            "Kenboloni",
+            346200
+          ],
+          [
+            "Greattotem",
+            344026
+          ],
+          [
+            "Greatvailian",
+            324373
+          ],
+          [
+            "Griphard",
+            310272
+          ]
+        ],
+        "top_healers": [
+          [
+            "Spectertiger",
+            293635
+          ],
+          [
+            "Vibecoding",
+            273280
+          ],
+          [
+            "Rootboo",
+            244445
+          ],
+          [
+            "Joarrak",
+            198310
+          ],
+          [
+            "Yono",
+            161526
+          ]
+        ],
+        "pulls": {
+          "total_pulls": 2,
+          "kills": 1,
+          "wipes": 1
+        },
+        "all_player_damage": {
+          "Relampag\u00f8": 351212,
+          "Kenboloni": 346200,
+          "Greattotem": 344026,
+          "Greatvailian": 324373,
+          "Griphard": 310272,
+          "Gpain": 298146,
+          "Assaracus": 296517,
+          "Changedsham": 291213,
+          "Chimbarongo": 282206,
+          "Guerelius": 265565,
+          "Dungeonrogue": 263636,
+          "Guaaripolo": 260133,
+          "Kamiguruu": 259469,
+          "Cryowolf": 253078,
+          "Clumbo": 246599,
+          "Ziiclorn": 238417,
+          "Kirkc": 148475,
+          "Tannali": 133426,
+          "Dronke": 124269,
+          "Mightystorm": 89109,
+          "Joarrak": 3021,
+          "Vibecoding": 1220
+        },
+        "all_player_healing": {
+          "Spectertiger": {
+            "healing": 293635,
+            "overheal": 184727
+          },
+          "Vibecoding": {
+            "healing": 273280,
+            "overheal": 127469
+          },
+          "Rootboo": {
+            "healing": 244445,
+            "overheal": 252976
+          },
+          "Joarrak": {
+            "healing": 198310,
+            "overheal": 111349
+          },
+          "Yono": {
+            "healing": 161526,
+            "overheal": 58802
+          },
+          "Clumbo": {
+            "healing": 29682,
+            "overheal": 105062
+          },
+          "Kamiguruu": {
+            "healing": 11299,
+            "overheal": 8459
+          },
+          "Kirkc": {
+            "healing": 8464,
+            "overheal": 6334
+          },
+          "Griphard": {
+            "healing": 6480,
+            "overheal": 4798
+          },
+          "Kenboloni": {
+            "healing": 4750,
+            "overheal": 0
+          },
+          "Mightystorm": {
+            "healing": 4708,
+            "overheal": 4725
+          },
+          "Chimbarongo": {
+            "healing": 4117,
+            "overheal": 6736
+          },
+          "Relampag\u00f8": {
+            "healing": 4086,
+            "overheal": 1170
+          },
+          "Greatvailian": {
+            "healing": 3446,
+            "overheal": 1425
+          },
+          "Assaracus": {
+            "healing": 2716,
+            "overheal": 482
+          },
+          "Changedsham": {
+            "healing": 2496,
+            "overheal": 0
+          },
+          "Ziiclorn": {
+            "healing": 2496,
+            "overheal": 0
+          },
+          "Guaaripolo": {
+            "healing": 2359,
+            "overheal": 0
+          }
+        }
+      },
+      "delta": {
+        "time_ms": -36815,
+        "time_str": "0:36",
+        "time_favorable": true,
+        "dps_diff": -789,
+        "hps_diff": -911,
+        "overheal_diff": -16.4,
+        "missing_buffs": [
+          "Blessing of Light",
+          "Blessing of Might",
+          "Divine Spirit",
+          "Leader of the Pack",
+          "Power Word: Fortitude",
+          "Prayer of Shadow Protection",
+          "Prayer of Spirit",
+          "Shadow Protection"
+        ],
+        "extra_buffs": [
+          "Blessing of Kings",
+          "Elixir of Major Fortitude",
+          "Flask of Blinding Light",
+          "Flask of Fortification",
+          "Greater Blessing of Light",
+          "Mark of the Wild",
+          "Moonkin Aura"
+        ]
+      }
+    },
+    {
+      "name": "Morogrim Tidewalker",
+      "ours": {
+        "duration_ms": 329022,
+        "duration_str": "5:29",
+        "raid_dps": 17297,
+        "raid_hps": 3550,
+        "overheal_pct": 29.9,
+        "buffs": [
+          "Arcane Brilliance",
+          "Blessing of Kings",
+          "Blessing of Wisdom",
+          "Elixir of Draenic Wisdom",
+          "Elixir of Major Fortitude",
+          "Ferocious Inspiration",
+          "Flask of Blinding Light",
+          "Flask of Fortification",
+          "Flask of Pure Death",
+          "Flask of Relentless Assault",
+          "Gift of the Wild",
+          "Greater Blessing of Kings",
+          "Greater Blessing of Light",
+          "Greater Blessing of Might",
+          "Greater Blessing of Salvation",
+          "Greater Blessing of Wisdom",
+          "Mark of the Wild",
+          "Moonkin Aura",
+          "Prayer of Fortitude",
+          "Unleashed Rage",
+          "Well Fed"
+        ],
+        "cooldowns": [
+          {
+            "spell": "Bloodlust",
+            "time_sec": 55.9,
+            "time_pct": 17.0
+          }
+        ],
+        "top_dps": [
+          [
+            "Orckboi",
+            475637
+          ],
+          [
+            "Tertha",
+            421113
+          ],
+          [
+            "Freefall",
+            384684
+          ],
+          [
+            "Shbones",
+            379008
+          ],
+          [
+            "Jarbear",
+            358961
+          ]
+        ],
+        "top_healers": [
+          [
+            "Darkrazor",
+            279282
+          ],
+          [
+            "Aurapole",
+            247343
+          ],
+          [
+            "Peachini",
+            229260
+          ],
+          [
+            "Kayybee",
+            129635
+          ],
+          [
+            "Catpizz",
+            71595
+          ]
+        ],
+        "pulls": {
+          "total_pulls": 4,
+          "kills": 1,
+          "wipes": 3
+        },
+        "all_player_damage": {
+          "Orckboi": 475637,
+          "Tertha": 421113,
+          "Freefall": 384684,
+          "Shbones": 379008,
+          "Jarbear": 358961,
+          "Gepetis": 345408,
+          "Smegna": 342373,
+          "Azurp": 337606,
+          "Pawmo": 325966,
+          "Otherz": 319966,
+          "Rathmor": 318719,
+          "Leafay": 310865,
+          "Skrayump": 267254,
+          "Seedyshadows": 252442,
+          "Lidets": 200544,
+          "Vibetoteming": 197428,
+          "Catpizz": 178348,
+          "Ashimato": 128581,
+          "Playwisme": 98727,
+          "Eleisia": 46398,
+          "Kayybee": 885,
+          "Aurapole": 87
+        },
+        "all_player_healing": {
+          "Darkrazor": {
+            "healing": 279282,
+            "overheal": 65018
+          },
+          "Aurapole": {
+            "healing": 247343,
+            "overheal": 123689
+          },
+          "Peachini": {
+            "healing": 229260,
+            "overheal": 108017
+          },
+          "Kayybee": {
+            "healing": 129635,
+            "overheal": 62415
+          },
+          "Catpizz": {
+            "healing": 71595,
+            "overheal": 30596
+          },
+          "Linica": {
+            "healing": 38438,
+            "overheal": 20507
+          },
+          "Eleisia": {
+            "healing": 33634,
+            "overheal": 3500
+          },
+          "Lidets": {
+            "healing": 32524,
+            "overheal": 57034
+          },
+          "Seedyshadows": {
+            "healing": 20405,
+            "overheal": 0
+          },
+          "Leafay": {
+            "healing": 15557,
+            "overheal": 1144
+          },
+          "Freefall": {
+            "healing": 13122,
+            "overheal": 37
+          },
+          "Ashimato": {
+            "healing": 7815,
+            "overheal": 1520
+          },
+          "Azurp": {
+            "healing": 7105,
+            "overheal": 2598
+          },
+          "Tertha": {
+            "healing": 6750,
+            "overheal": 1227
+          },
+          "Orckboi": {
+            "healing": 5606,
+            "overheal": 4875
+          },
+          "Playwisme": {
+            "healing": 5053,
+            "overheal": 4253
+          },
+          "Smegna": {
+            "healing": 4576,
+            "overheal": 0
+          },
+          "Vibetoteming": {
+            "healing": 4479,
+            "overheal": 0
+          },
+          "Shbones": {
+            "healing": 3983,
+            "overheal": 4593
+          },
+          "Skrayump": {
+            "healing": 3588,
+            "overheal": 5463
+          },
+          "Jarbear": {
+            "healing": 3464,
+            "overheal": 950
+          },
+          "Pawmo": {
+            "healing": 2496,
+            "overheal": 0
+          },
+          "Otherz": {
+            "healing": 2185,
+            "overheal": 1186
+          }
+        }
+      },
+      "theirs": {
+        "duration_ms": 256562,
+        "duration_str": "4:16",
+        "raid_dps": 22182,
+        "raid_hps": 4434,
+        "overheal_pct": 50.1,
+        "buffs": [
+          "Arcane Brilliance",
+          "Blessing of Light",
+          "Blessing of Might",
+          "Blessing of Salvation",
+          "Divine Spirit",
+          "Elixir of Draenic Wisdom",
+          "Ferocious Inspiration",
+          "Flask of Pure Death",
+          "Flask of Relentless Assault",
+          "Gift of the Wild",
+          "Greater Blessing of Kings",
+          "Greater Blessing of Might",
+          "Greater Blessing of Salvation",
+          "Greater Blessing of Wisdom",
+          "Leader of the Pack",
+          "Mark of the Wild",
+          "Power Word: Fortitude",
+          "Prayer of Fortitude",
+          "Prayer of Shadow Protection",
+          "Prayer of Spirit",
+          "Unleashed Rage",
+          "Well Fed"
+        ],
+        "cooldowns": [
+          {
+            "spell": "Bloodlust",
+            "time_sec": 208.6,
+            "time_pct": 81.3
+          },
+          {
+            "spell": "Bloodlust",
+            "time_sec": 208.8,
+            "time_pct": 81.4
+          },
+          {
+            "spell": "Bloodlust",
+            "time_sec": 208.9,
+            "time_pct": 81.4
+          }
+        ],
+        "top_dps": [
+          [
+            "Kenboloni",
+            412779
+          ],
+          [
+            "Dungeonrogue",
+            406545
+          ],
+          [
+            "Greattotem",
+            391159
+          ],
+          [
+            "Gpain",
+            372091
+          ],
+          [
+            "Cryowolf",
+            371686
+          ]
+        ],
+        "top_healers": [
+          [
+            "Spectertiger",
+            281036
+          ],
+          [
+            "Vibecoding",
+            246402
+          ],
+          [
+            "Rootboo",
+            207623
+          ],
+          [
+            "Joarrak",
+            177066
+          ],
+          [
+            "Yono",
+            115587
+          ]
+        ],
+        "pulls": {
+          "total_pulls": 1,
+          "kills": 1,
+          "wipes": 0
+        },
+        "all_player_damage": {
+          "Kenboloni": 412779,
+          "Dungeonrogue": 406545,
+          "Greattotem": 391159,
+          "Gpain": 372091,
+          "Cryowolf": 371686,
+          "Chimbarongo": 369382,
+          "Greatvailian": 367064,
+          "Changedsham": 340906,
+          "Relampag\u00f8": 335792,
+          "Kamiguruu": 315407,
+          "Clumbo": 310682,
+          "Guaaripolo": 307527,
+          "Dronke": 261434,
+          "Griphard": 242102,
+          "Assaracus": 230163,
+          "Guerelius": 185121,
+          "Kirkc": 166767,
+          "Mightystorm": 123977,
+          "Ziiclorn": 90552,
+          "Tannali": 47402,
+          "Spectertiger": 38056,
+          "Vibecoding": 2410,
+          "Joarrak": 1996
+        },
+        "all_player_healing": {
+          "Spectertiger": {
+            "healing": 281036,
+            "overheal": 199830
+          },
+          "Vibecoding": {
+            "healing": 246402,
+            "overheal": 136841
+          },
+          "Rootboo": {
+            "healing": 207623,
+            "overheal": 290983
+          },
+          "Joarrak": {
+            "healing": 177066,
+            "overheal": 127093
+          },
+          "Yono": {
+            "healing": 115587,
+            "overheal": 180575
+          },
+          "Clumbo": {
+            "healing": 73461,
+            "overheal": 154818
+          },
+          "Griphard": {
+            "healing": 6146,
+            "overheal": 3594
+          },
+          "Mightystorm": {
+            "healing": 5970,
+            "overheal": 12533
+          },
+          "Kirkc": {
+            "healing": 5889,
+            "overheal": 11771
+          },
+          "Relampag\u00f8": {
+            "healing": 4973,
+            "overheal": 1183
+          },
+          "Dronke": {
+            "healing": 4807,
+            "overheal": 0
+          },
+          "Chimbarongo": {
+            "healing": 4403,
+            "overheal": 8848
+          },
+          "Kamiguruu": {
+            "healing": 4103,
+            "overheal": 12414
+          },
+          "Assaracus": {
+            "healing": 180,
+            "overheal": 378
+          }
+        }
+      },
+      "delta": {
+        "time_ms": 72460,
+        "time_str": "+1:12",
+        "time_favorable": false,
+        "dps_diff": -4885,
+        "hps_diff": -884,
+        "overheal_diff": -20.2,
+        "missing_buffs": [
+          "Blessing of Light",
+          "Blessing of Might",
+          "Blessing of Salvation",
+          "Divine Spirit",
+          "Leader of the Pack",
+          "Power Word: Fortitude",
+          "Prayer of Shadow Protection",
+          "Prayer of Spirit"
+        ],
+        "extra_buffs": [
+          "Blessing of Kings",
+          "Blessing of Wisdom",
+          "Elixir of Major Fortitude",
+          "Flask of Blinding Light",
+          "Flask of Fortification",
+          "Greater Blessing of Light",
+          "Moonkin Aura"
+        ]
+      }
+    },
+    {
+      "name": "Lady Vashj",
+      "ours": {
+        "duration_ms": 595768,
+        "duration_str": "9:55",
+        "raid_dps": 11844,
+        "raid_hps": 2943,
+        "overheal_pct": 34.3,
+        "buffs": [
+          "Arcane Brilliance",
+          "Blessing of Kings",
+          "Elixir of Draenic Wisdom",
+          "Elixir of Major Fortitude",
+          "Ferocious Inspiration",
+          "Flask of Blinding Light",
+          "Flask of Fortification",
+          "Flask of Pure Death",
+          "Flask of Relentless Assault",
+          "Gift of the Wild",
+          "Greater Blessing of Kings",
+          "Greater Blessing of Light",
+          "Greater Blessing of Might",
+          "Greater Blessing of Salvation",
+          "Greater Blessing of Wisdom",
+          "Mark of the Wild",
+          "Moonkin Aura",
+          "Prayer of Fortitude",
+          "Unleashed Rage",
+          "Well Fed"
+        ],
+        "cooldowns": [
+          {
+            "spell": "Bloodlust",
+            "time_sec": 448.6,
+            "time_pct": 75.3
+          }
+        ],
+        "top_dps": [
+          [
+            "Shbones",
+            604975
+          ],
+          [
+            "Gepetis",
+            566904
+          ],
+          [
+            "Jarbear",
+            546011
+          ],
+          [
+            "Leafay",
+            445813
+          ],
+          [
+            "Smegna",
+            441246
+          ]
+        ],
+        "top_healers": [
+          [
+            "Aurapole",
+            354924
+          ],
+          [
+            "Darkrazor",
+            340461
+          ],
+          [
+            "Linica",
+            315370
+          ],
+          [
+            "Peachini",
+            313947
+          ],
+          [
+            "Kayybee",
+            265194
+          ]
+        ],
+        "pulls": {
+          "total_pulls": 1,
+          "kills": 1,
+          "wipes": 0
+        },
+        "all_player_damage": {
+          "Shbones": 604975,
+          "Gepetis": 566904,
+          "Jarbear": 546011,
+          "Leafay": 445813,
+          "Smegna": 441246,
+          "Pawmo": 440062,
+          "Azurp": 428009,
+          "Rathmor": 416245,
+          "Lidets": 399687,
+          "Catpizz": 396885,
+          "Orckboi": 387937,
+          "Freefall": 386879,
+          "Tertha": 370161,
+          "Seedyshadows": 285490,
+          "Otherz": 278509,
+          "Skrayump": 217448,
+          "Eleisia": 139977,
+          "Ashimato": 114202,
+          "Vibetoteming": 85266,
+          "Playwisme": 81967,
+          "Kayybee": 20872,
+          "Darkrazor": 933,
+          "Linica": 619
+        },
+        "all_player_healing": {
+          "Aurapole": {
+            "healing": 354924,
+            "overheal": 109052
+          },
+          "Darkrazor": {
+            "healing": 340461,
+            "overheal": 85206
+          },
+          "Linica": {
+            "healing": 315370,
+            "overheal": 168495
+          },
+          "Peachini": {
+            "healing": 313947,
+            "overheal": 122239
+          },
+          "Kayybee": {
+            "healing": 265194,
+            "overheal": 223564
+          },
+          "Lidets": {
+            "healing": 57786,
+            "overheal": 152272
+          },
+          "Freefall": {
+            "healing": 15794,
+            "overheal": 0
+          },
+          "Otherz": {
+            "healing": 14524,
+            "overheal": 5924
+          },
+          "Seedyshadows": {
+            "healing": 14064,
+            "overheal": 12468
+          },
+          "Tertha": {
+            "healing": 11055,
+            "overheal": 1010
+          },
+          "Ashimato": {
+            "healing": 7381,
+            "overheal": 3230
+          },
+          "Jarbear": {
+            "healing": 7101,
+            "overheal": 3135
+          },
+          "Skrayump": {
+            "healing": 6562,
+            "overheal": 1133
+          },
+          "Azurp": {
+            "healing": 6534,
+            "overheal": 5462
+          },
+          "Playwisme": {
+            "healing": 5361,
+            "overheal": 1879
+          },
+          "Eleisia": {
+            "healing": 4482,
+            "overheal": 1781
+          },
+          "Orckboi": {
+            "healing": 3908,
+            "overheal": 4975
+          },
+          "Leafay": {
+            "healing": 2675,
+            "overheal": 1315
+          },
+          "Vibetoteming": {
+            "healing": 2431,
+            "overheal": 532
+          },
+          "Shbones": {
+            "healing": 2327,
+            "overheal": 9168
+          },
+          "Pawmo": {
+            "healing": 1248,
+            "overheal": 0
+          },
+          "Catpizz": {
+            "healing": 190,
+            "overheal": 1805
+          }
+        }
+      },
+      "theirs": {
+        "duration_ms": 493310,
+        "duration_str": "8:13",
+        "raid_dps": 13190,
+        "raid_hps": 3253,
+        "overheal_pct": 51.3,
+        "buffs": [
+          "Arcane Brilliance",
+          "Blessing of Light",
+          "Blessing of Might",
+          "Divine Spirit",
+          "Elixir of Draenic Wisdom",
+          "Ferocious Inspiration",
+          "Flask of Pure Death",
+          "Flask of Relentless Assault",
+          "Gift of the Wild",
+          "Greater Blessing of Kings",
+          "Greater Blessing of Might",
+          "Greater Blessing of Salvation",
+          "Greater Blessing of Wisdom",
+          "Leader of the Pack",
+          "Mark of the Wild",
+          "Power Word: Fortitude",
+          "Prayer of Fortitude",
+          "Prayer of Spirit",
+          "Unleashed Rage",
+          "Well Fed"
+        ],
+        "cooldowns": [
+          {
+            "spell": "Bloodlust",
+            "time_sec": 398.4,
+            "time_pct": 80.8
+          },
+          {
+            "spell": "Bloodlust",
+            "time_sec": 398.7,
+            "time_pct": 80.8
+          }
+        ],
+        "top_dps": [
+          [
+            "Kenboloni",
+            524630
+          ],
+          [
+            "Greattotem",
+            476887
+          ],
+          [
+            "Kamiguruu",
+            440757
+          ],
+          [
+            "Cryowolf",
+            438036
+          ],
+          [
+            "Relampag\u00f8",
+            414333
+          ]
+        ],
+        "top_healers": [
+          [
+            "Spectertiger",
+            408639
+          ],
+          [
+            "Rootboo",
+            307042
+          ],
+          [
+            "Joarrak",
+            267069
+          ],
+          [
+            "Vibecoding",
+            261186
+          ],
+          [
+            "Yono",
+            214751
+          ]
+        ],
+        "pulls": {
+          "total_pulls": 1,
+          "kills": 1,
+          "wipes": 0
+        },
+        "all_player_damage": {
+          "Kenboloni": 524630,
+          "Greattotem": 476887,
+          "Kamiguruu": 440757,
+          "Cryowolf": 438036,
+          "Relampag\u00f8": 414333,
+          "Chimbarongo": 403502,
+          "Clumbo": 395932,
+          "Guaaripolo": 391846,
+          "Gpain": 379517,
+          "Guerelius": 377869,
+          "Dungeonrogue": 377384,
+          "Griphard": 368845,
+          "Changedsham": 273054,
+          "Greatvailian": 270983,
+          "Assaracus": 231274,
+          "Dronke": 213565,
+          "Kirkc": 183574,
+          "Ziiclorn": 120304,
+          "Tannali": 101250,
+          "Mightystorm": 96129,
+          "Vibecoding": 16811,
+          "Yono": 8072,
+          "Joarrak": 2176
+        },
+        "all_player_healing": {
+          "Spectertiger": {
+            "healing": 408639,
+            "overheal": 372777
+          },
+          "Rootboo": {
+            "healing": 307042,
+            "overheal": 527359
+          },
+          "Joarrak": {
+            "healing": 267069,
+            "overheal": 258930
+          },
+          "Vibecoding": {
+            "healing": 261186,
+            "overheal": 127959
+          },
+          "Yono": {
+            "healing": 214751,
+            "overheal": 156364
+          },
+          "Clumbo": {
+            "healing": 52350,
+            "overheal": 188325
+          },
+          "Kirkc": {
+            "healing": 17801,
+            "overheal": 19953
+          },
+          "Gpain": {
+            "healing": 14849,
+            "overheal": 0
+          },
+          "Kamiguruu": {
+            "healing": 8186,
+            "overheal": 11141
+          },
+          "Griphard": {
+            "healing": 7813,
+            "overheal": 3506
+          },
+          "Mightystorm": {
+            "healing": 7757,
+            "overheal": 6373
+          },
+          "Changedsham": {
+            "healing": 7260,
+            "overheal": 1356
+          },
+          "Chimbarongo": {
+            "healing": 7102,
+            "overheal": 8444
+          },
+          "Guaaripolo": {
+            "healing": 6860,
+            "overheal": 1459
+          },
+          "Relampag\u00f8": {
+            "healing": 5474,
+            "overheal": 1837
+          },
+          "Greatvailian": {
+            "healing": 3770,
+            "overheal": 1101
+          },
+          "Dungeonrogue": {
+            "healing": 2496,
+            "overheal": 0
+          },
+          "Kenboloni": {
+            "healing": 2293,
+            "overheal": 2457
+          },
+          "Assaracus": {
+            "healing": 2012,
+            "overheal": 185
+          }
+        }
+      },
+      "delta": {
+        "time_ms": 102458,
+        "time_str": "+1:42",
+        "time_favorable": false,
+        "dps_diff": -1346,
+        "hps_diff": -310,
+        "overheal_diff": -17.0,
+        "missing_buffs": [
+          "Blessing of Light",
+          "Blessing of Might",
+          "Divine Spirit",
+          "Leader of the Pack",
+          "Power Word: Fortitude",
+          "Prayer of Spirit"
+        ],
+        "extra_buffs": [
+          "Blessing of Kings",
+          "Elixir of Major Fortitude",
+          "Flask of Blinding Light",
+          "Flask of Fortification",
+          "Greater Blessing of Light",
+          "Moonkin Aura"
+        ]
+      }
+    }
+  ],
+  "pacing": {
+    "ours": {
+      "total_raid_ms": 7799297,
+      "total_raid_str": "2:09:59",
+      "total_gap_ms": 5572963,
+      "total_gap_str": "1:32:52",
+      "pacing": [
+        {
+          "boss": "Hydross the Unstable",
+          "kill_time_ms": 1011362,
+          "fight_duration_ms": 185425
+        },
+        {
+          "boss": "The Lurker Below",
+          "kill_time_ms": 1916468,
+          "fight_duration_ms": 214364,
+          "gap_from_prev_ms": 690742,
+          "gap_from_prev_str": "11:30"
+        },
+        {
+          "boss": "Leotheras the Blind",
+          "kill_time_ms": 3827559,
+          "fight_duration_ms": 259772,
+          "gap_from_prev_ms": 1651319,
+          "gap_from_prev_str": "27:31"
+        },
+        {
+          "boss": "Fathom-Lord Karathress",
+          "kill_time_ms": 4639727,
+          "fight_duration_ms": 179744,
+          "gap_from_prev_ms": 632424,
+          "gap_from_prev_str": "10:32"
+        },
+        {
+          "boss": "Morogrim Tidewalker",
+          "kill_time_ms": 6469373,
+          "fight_duration_ms": 329022,
+          "gap_from_prev_ms": 1500624,
+          "gap_from_prev_str": "25:00"
+        },
+        {
+          "boss": "Lady Vashj",
+          "kill_time_ms": 8162995,
+          "fight_duration_ms": 595768,
+          "gap_from_prev_ms": 1097854,
+          "gap_from_prev_str": "18:17"
+        }
+      ],
+      "trash": {
+        "logged": true,
+        "total_time_ms": 1747969,
+        "pull_count": 44,
+        "deaths": 0,
+        "total_time_str": "29:07"
+      }
+    },
+    "theirs": {
+      "total_raid_ms": 6641543,
+      "total_raid_str": "1:50:41",
+      "total_gap_ms": 4628004,
+      "total_gap_str": "1:17:08",
+      "pacing": [
+        {
+          "boss": "Hydross the Unstable",
+          "kill_time_ms": 1227092,
+          "fight_duration_ms": 211850
+        },
+        {
+          "boss": "The Lurker Below",
+          "kill_time_ms": 2095273,
+          "fight_duration_ms": 213739,
+          "gap_from_prev_ms": 654442,
+          "gap_from_prev_str": "10:54"
+        },
+        {
+          "boss": "Leotheras the Blind",
+          "kill_time_ms": 3425071,
+          "fight_duration_ms": 238636,
+          "gap_from_prev_ms": 1091162,
+          "gap_from_prev_str": "18:11"
+        },
+        {
+          "boss": "Fathom-Lord Karathress",
+          "kill_time_ms": 4862115,
+          "fight_duration_ms": 216559,
+          "gap_from_prev_ms": 1220485,
+          "gap_from_prev_str": "20:20"
+        },
+        {
+          "boss": "Morogrim Tidewalker",
+          "kill_time_ms": 5804920,
+          "fight_duration_ms": 256562,
+          "gap_from_prev_ms": 686243,
+          "gap_from_prev_str": "11:26"
+        },
+        {
+          "boss": "Lady Vashj",
+          "kill_time_ms": 7273902,
+          "fight_duration_ms": 493310,
+          "gap_from_prev_ms": 975672,
+          "gap_from_prev_str": "16:15"
+        }
+      ],
+      "trash": {
+        "logged": true,
+        "total_time_ms": 1630808,
+        "pull_count": 39,
+        "deaths": 0,
+        "total_time_str": "27:10"
+      }
+    },
+    "delta_total_ms": 1157754,
+    "delta_gap_ms": 944959
+  },
+  "recommendations": [
+    {
+      "category": "Pacing",
+      "severity": "high",
+      "title": "Non-combat time is 15:44 longer",
+      "detail": "Time between boss kills (trash, running, rebuffing) is significantly higher. Consider: pre-positioning, faster rebuffs, pulling trash while buffing, or assigning a pull leader."
+    },
+    {
+      "category": "Kill Speed",
+      "severity": "high",
+      "title": "Morogrim Tidewalker: 1:12 slower",
+      "detail": "Their raid DPS was -4,885 compared to yours. Missing buffs: Blessing of Light, Blessing of Might, Blessing of Salvation, Divine Spirit, Leader of the Pack, Power Word: Fortitude, Prayer of Shadow Protection, Prayer of Spirit. Their overheal was -20.2% different."
+    },
+    {
+      "category": "Kill Speed",
+      "severity": "high",
+      "title": "Lady Vashj: 1:42 slower",
+      "detail": "Their raid DPS was -1,346 compared to yours. Missing buffs: Blessing of Light, Blessing of Might, Divine Spirit, Leader of the Pack, Power Word: Fortitude, Prayer of Spirit. Their overheal was -17.0% different."
+    },
+    {
+      "category": "Kill Speed",
+      "severity": "medium",
+      "title": "Leotheras the Blind: 0:21 slower",
+      "detail": "Their raid DPS was -1,358 compared to yours. Missing buffs: Blessing of Light, Blessing of Might, Divine Spirit, Leader of the Pack, Mark of the Wild, Power Word: Fortitude, Prayer of Spirit. "
+    },
+    {
+      "category": "Trash",
+      "severity": "medium",
+      "title": "Trash pulls took 1:57 longer",
+      "detail": "Your raid spent 29:07 on trash vs their 27:10. Consider bigger pulls, more AoE, or skipping optional packs."
+    },
+    {
+      "category": "Cooldowns",
+      "severity": "low",
+      "title": "The Lurker Below: Different Bloodlust timing (72% vs 5%)",
+      "detail": "You used Bloodlust at 72% of the fight, they used it at 5%. Earlier usage generally yields more total value unless there's a burn phase."
+    },
+    {
+      "category": "Cooldowns",
+      "severity": "low",
+      "title": "Fathom-Lord Karathress: Different Bloodlust timing (6% vs 64%)",
+      "detail": "You used Bloodlust at 6% of the fight, they used it at 64%. Earlier usage generally yields more total value unless there's a burn phase."
+    },
+    {
+      "category": "Cooldowns",
+      "severity": "low",
+      "title": "Morogrim Tidewalker: Different Bloodlust timing (17% vs 81%)",
+      "detail": "You used Bloodlust at 17% of the fight, they used it at 81%. Earlier usage generally yields more total value unless there's a burn phase."
+    }
+  ]
+}
