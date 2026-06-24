@@ -5145,7 +5145,7 @@
       const label = `${fight.name} (${Math.round((end - start) / 1000)}s)`;
       statusEl.textContent = `Fetching: ${label}...`;
 
-      const [deaths, enemyDeaths, interrupts, dispels, healing, casts, damageTaken, conflagEvents, damageDoneTable, buffEventsRaw] = await Promise.all([
+      const [deaths, enemyDeaths, interrupts, dispels, healing, casts, damageTaken, conflagEvents, damageDoneTable, buffEventsRaw, damageDoneEvents] = await Promise.all([
         fetchPaginatedEvents('deaths', reportId, apiKey, start, end),
         fetchPaginatedEvents('deaths', reportId, apiKey, start, end, { hostility: 1 }),
         fetchPaginatedEvents('interrupts', reportId, apiKey, start, end),
@@ -5156,6 +5156,7 @@
         fetchPaginatedEvents('damage-taken', reportId, apiKey, start, end, { filter: `ability.id=${CONFLAG_SPELL_ID}` }),
         apiFetch(`/report/tables/damage-done/${reportId}`, apiKey, { start, end }),
         fetchPaginatedEvents('buffs', reportId, apiKey, start, end),
+        fetchPaginatedEvents('damage-done', reportId, apiKey, start, end),
       ]);
 
       // Participants
@@ -5165,6 +5166,7 @@
       const damageSources = {}, damageAbilities = {}, playerDamageTaken = {}, playerDamageTakenAmounts = {};
       const healsByPlayer = {}, healDetails = {}, castsByPlayer = {}, castTimeline = {}, spellCasts = {}, damageDone = {};
       const deathsOut = [], creatureDeaths = [], interruptsOut = [], dispelsOut = [], conflagrations = [];
+      const clutchHeals = [], biggestHeals = [], biggestCrits = [];
 
       for (const ev of deaths) {
         if (ev.type !== 'death' || !ev.targetIsFriendly || !playersById[ev.targetID]) continue;
@@ -5216,13 +5218,42 @@
         if (ev.type !== 'heal' || !ev.sourceIsFriendly || !playersById[ev.sourceID]) continue;
         const player = playersById[ev.sourceID].name;
         const spell = ev.ability?.name || 'Unknown';
+        const amount = ev.amount || 0;
+        const overheal = ev.overheal || 0;
         healsByPlayer[player] = (healsByPlayer[player] || 0) + 1;
         healDetails[player] = healDetails[player] || {};
         healDetails[player][spell] = healDetails[player][spell] || { total: 0, overheal: 0, count: 0, is_hot: false };
-        healDetails[player][spell].total += (ev.amount || 0);
-        healDetails[player][spell].overheal += (ev.overheal || 0);
+        healDetails[player][spell].total += amount;
+        healDetails[player][spell].overheal += overheal;
         healDetails[player][spell].count += 1;
         if (ev.tick) healDetails[player][spell].is_hot = true;
+
+        // Clutch heal tracking
+        const targetName = playersById[ev.targetID]?.name;
+        if (amount > 0 && ev.hitPoints != null && targetName) {
+          const hpBefore = ev.hitPoints - amount;
+          if (hpBefore >= 0 && ev.hitPoints > 0) {
+            const hpPct = Math.round(hpBefore / ev.hitPoints * 1000) / 10;
+            if (hpPct < 20) {
+              clutchHeals.push({ healer: player, target: targetName, spell, amount, hp_pct: hpPct, time: relSec(start, ev.timestamp), self_heal: ev.sourceID === ev.targetID });
+            }
+          }
+        }
+        // Biggest heals
+        if (amount > 0) {
+          biggestHeals.push({ player, target: targetName || 'Unknown', spell, amount, crit: ev.hitType === 2, time: relSec(start, ev.timestamp) });
+        }
+        // Biggest crits (heal)
+        if (ev.hitType === 2 && amount > 0) {
+          biggestCrits.push({ player, spell, amount, type: 'heal', time: relSec(start, ev.timestamp) });
+        }
+      }
+      // Biggest crits (damage)
+      for (const ev of damageDoneEvents) {
+        if (ev.type !== 'damage' || !ev.sourceIsFriendly || !playersById[ev.sourceID]) continue;
+        if (ev.hitType === 2 && (ev.amount || 0) > 0) {
+          biggestCrits.push({ player: playersById[ev.sourceID].name, spell: ev.ability?.name || 'Unknown', amount: ev.amount, type: 'damage', time: relSec(start, ev.timestamp) });
+        }
       }
       for (const ev of casts) {
         if (ev.type !== 'cast' || !ev.sourceIsFriendly || !playersById[ev.sourceID]) continue;
@@ -5259,6 +5290,14 @@
         });
       }
 
+      // Sort and trim clutch/biggest tracking
+      clutchHeals.sort((a, b) => a.hp_pct - b.hp_pct);
+      biggestHeals.sort((a, b) => b.amount - a.amount);
+      biggestCrits.sort((a, b) => b.amount - a.amount);
+      const topClutchHeals = clutchHeals.slice(0, 10);
+      const topBiggestHeals = biggestHeals.slice(0, 5);
+      const topBiggestCrits = biggestCrits.slice(0, 5);
+
       return {
         pull: {
           encounter_id: fight.boss, boss_name: fight.name,
@@ -5271,7 +5310,8 @@
           heals_by_player: healsByPlayer, heal_details: healDetails,
           casts_by_player: castsByPlayer, cast_timeline: castTimeline,
           spell_casts: spellCasts, damage_done: damageDone,
-          buff_events: playerBuffEvents, consumables: {}
+          buff_events: playerBuffEvents, consumables: {},
+          clutch_heals: topClutchHeals, biggest_heals: topBiggestHeals, biggest_crits: topBiggestCrits
         },
         spellCasts, healDetails, damageDone, playerDamageTakenAmounts
       };
