@@ -90,4 +90,3 @@ Per-player deep dive available for any player in the raid:
 - **Player filter** — available in some tabs to focus on a specific player
 - **Back button** — return to the report URL input to load a different log
 
-<!-- TODO: Screenshot of tab bar and boss/pull selectors -->

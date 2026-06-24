@@ -58,7 +58,6 @@ The Awards tab displays dashboard-style cards for notable raid moments, aggregat
 | Potion Goblin | Most combat potion uses | `spell_casts` pattern match |
 | Dark Rune Enthusiast | Most Dark/Demonic Rune uses | `spell_casts` pattern match |
 | Healthstone Enjoyer | Most Healthstone uses | `spell_casts` pattern match |
-| Flask Enjoyer | Most flask buff application events | `buff_events` pattern match |
 | Prepared Gamer | Best flask + food buff consistency | `buff_events` scored per pull |
 
 ### Fun / Meme
@@ -76,7 +75,7 @@ The Awards tab displays dashboard-style cards for notable raid moments, aggregat
 
 ## Not Yet Supported
 
-These awards are defined as TODOs in the source but cannot be computed with the current data model:
+These awards are defined as TODOs in the source but cannot be computed with the current data model. I'll look to add them in the future:
 
 | Award | Reason |
 |-------|--------|

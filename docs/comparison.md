@@ -84,4 +84,3 @@ The comparison JSON (`data/comparison.json`) contains:
 - Cooldown detection is limited to the spells defined in `MAJOR_COOLDOWNS`
 - Per-player damage uses the WCL `tables/damage-done` endpoint (aggregated, not per-hit)
 
-<!-- TODO: Screenshot of compare.html showing boss comparison and recommendations -->

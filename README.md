@@ -37,13 +37,16 @@ Click the **Compare Logs** button in the top bar (visible after loading a report
 
 Works with any TBC raid boss, with enhanced mechanic tracking for:
 
+- Al'ar
+- Void Reaver
+- High Astromancer Solarian
 - Kael'thas Sunstrider (conflagration tracking, phase detection)
-- Lady Vashj
 - Hydross the Unstable
 - The Lurker Below
 - Leotheras the Blind
 - Fathom-Lord Karathress
 - Morogrim Tidewalker
+- Lady Vashj
 
 ## Documentation
 
@@ -54,10 +57,6 @@ Works with any TBC raid boss, with enhanced mechanic tracking for:
 | [Log Comparison](docs/comparison.md) | How the comparison tool works and what it reports |
 | [Data Model](docs/data-model.md) | Structure of the report JSON and what each field contains |
 | [Scripts](docs/scripts.md) | CLI tools for local fetching, parsing, and comparing (advanced/optional) |
-
-## Screenshots
-
-<!-- TODO: Add screenshots of the main UI, awards, and comparison views -->
 
 ## Running Locally (Optional)
 
