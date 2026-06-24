@@ -616,9 +616,9 @@
         <input id="logUrlInput" type="text" placeholder="https://fresh.warcraftlogs.com/reports/ABC123..." style="width:100%;padding:0.5rem;border-radius:6px;border:1px solid #444;background:#1a1e2e;color:#e0e0e0;font-size:0.95rem;">
       </div>
       <div style="margin-bottom:1rem;">
-        <label for="apiKeyInput" style="display:block;font-weight:600;margin-bottom:0.3rem;">API Key (v1)</label>
-        <input id="apiKeyInput" type="password" placeholder="Your WarcraftLogs v1 API key" style="width:100%;padding:0.5rem;border-radius:6px;border:1px solid #444;background:#1a1e2e;color:#e0e0e0;font-size:0.95rem;">
-        <div style="font-size:0.8rem;color:#888;margin-top:0.3rem;">Saved in your browser's localStorage. Never sent anywhere except WarcraftLogs.</div>
+        <label for="apiKeyInput" style="display:block;font-weight:600;margin-bottom:0.3rem;">API Key (v1) — optional</label>
+        <input id="apiKeyInput" type="password" placeholder="Leave blank for public logs, or enter your own key for unlisted logs" style="width:100%;padding:0.5rem;border-radius:6px;border:1px solid #444;background:#1a1e2e;color:#e0e0e0;font-size:0.95rem;">
+        <div style="font-size:0.8rem;color:#888;margin-top:0.3rem;">Only needed for unlisted/private logs. Public logs work without a key.</div>
       </div>
       <button id="fetchBtn" style="padding:0.6rem 1.5rem;border-radius:6px;border:none;background:#57a6ff;color:#fff;font-weight:600;cursor:pointer;font-size:0.95rem;">Analyze Report</button>
       <div id="fetchStatus" style="margin-top:1rem;font-size:0.9rem;color:#aaa;"></div>
@@ -5373,15 +5373,15 @@
     const backBtn = document.getElementById('backBtn');
 
     // Restore saved API key
+    const DEFAULT_API_KEY = '3e4330ef2d0c5aa921215259c93d38a3';
     const savedKey = localStorage.getItem('wcl_api_key');
     if (savedKey) apiKeyInput.value = savedKey;
 
     fetchBtn.addEventListener('click', async () => {
       const url = logUrlInput.value.trim();
-      const key = apiKeyInput.value.trim();
+      const key = apiKeyInput.value.trim() || DEFAULT_API_KEY;
       if (!url) { fetchStatus.textContent = 'Please enter a report URL.'; return; }
-      if (!key) { fetchStatus.textContent = 'Please enter your API key.'; return; }
-      localStorage.setItem('wcl_api_key', key);
+      if (apiKeyInput.value.trim()) localStorage.setItem('wcl_api_key', apiKeyInput.value.trim());
       fetchBtn.disabled = true;
       fetchStatus.textContent = 'Starting...';
       fetchProgress.innerHTML = '';
