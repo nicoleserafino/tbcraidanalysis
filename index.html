@@ -5228,15 +5228,16 @@
         healDetails[player][spell].count += 1;
         if (ev.tick) healDetails[player][spell].is_hot = true;
 
-        // Clutch heal tracking — only actual heals, not passive procs
-        const PASSIVE_HEAL_SPELLS = new Set([
-          'Judgement of Light', 'Vampiric Embrace', 'Spirit Link',
-          'Mana Spring', 'Healing Stream Totem', 'Mark of the Wild',
-          'Fel Armor', 'Siphon Life', 'Death Coil',
+        // Clutch heal tracking — exclude non-healing abilities that incidentally restore HP
+        const NON_HEAL_ABILITIES = new Set([
+          'Bloodthirst', 'Vampiric Embrace', 'Judgement of Light',
+          'Siphon Life', 'Drain Life', 'Death Coil', 'Fel Armor',
+          'Spirit Link', 'Second Wind', 'Cannibalize', 'Mana Drain',
+          'Touch of Weakness', 'Devour Magic', 'Lock and Load',
+          'Improved Leader of the Pack', 'Leader of the Pack',
         ]);
         const targetName = playersById[ev.targetID]?.name;
-        const isPassiveHeal = PASSIVE_HEAL_SPELLS.has(spell) || ev.tick;
-        if (amount > 0 && ev.hitPoints != null && targetName && !isPassiveHeal) {
+        if (amount > 0 && ev.hitPoints != null && targetName && !NON_HEAL_ABILITIES.has(spell)) {
           const hpBefore = ev.hitPoints - amount;
           if (hpBefore >= 0 && ev.hitPoints > 0) {
             const hpPct = Math.round(hpBefore / ev.hitPoints * 1000) / 10;
