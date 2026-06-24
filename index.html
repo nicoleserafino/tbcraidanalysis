@@ -148,6 +148,14 @@
       border-color: rgba(143, 124, 255, 0.45);
       transform: translateY(-1px);
     }
+    .tab-separator {
+      display: inline-block;
+      width: 1px;
+      height: 1.5rem;
+      background: #444;
+      margin: 0 0.5rem;
+      vertical-align: middle;
+    }
 
     .view {
       display: grid;
@@ -631,7 +639,7 @@
     <div class="topbar">
       <section class="hero">
         <h1>TBC Classic Raid Analysis</h1>
-        <div class="subtitle">Fast pull-by-pull review for raid leaders: deaths, problem sources, role performance, and Kael'thas positioning.</div>
+        <div class="subtitle">Fast pull-by-pull review for raid leaders: deaths, mechanics, role performance, and action items across SSC/TK encounters.</div>
         <div class="hero-stats" id="heroStats"></div>
       </section>
       <section class="controls" style="flex-wrap:wrap;gap:0.5rem;">
@@ -678,12 +686,13 @@
     const TABS = [
       { id: 'summary', label: 'Summary' },
       { id: 'action-items', label: 'Action Items' },
-      { id: 'awards', label: 'Awards' },
       { id: 'strategy', label: 'Strategy' },
       { id: 'tank', label: 'Tanks' },
       { id: 'healer', label: 'Healers' },
       { id: 'dps', label: 'DPS' },
-      { id: 'individual', label: 'Individual' }
+      { id: 'individual', label: 'Individual' },
+      { id: '_separator' },
+      { id: 'awards', label: 'Awards (Raid-wide)' },
     ];
 
     const KNOWN_WEAPONS = [
@@ -2441,7 +2450,10 @@
     }
 
     function renderTabs() {
-      els.tabs.innerHTML = TABS.map(tab => `<button class="tab-btn ${state.tab === tab.id ? 'active' : ''}" data-tab="${tab.id}">${tab.label}</button>`).join('');
+      els.tabs.innerHTML = TABS.map(tab => {
+        if (tab.id === '_separator') return '<span class="tab-separator"></span>';
+        return `<button class="tab-btn ${state.tab === tab.id ? 'active' : ''}" data-tab="${tab.id}">${tab.label}</button>`;
+      }).join('');
     }
 
     function getKaelPhase(pull) {
