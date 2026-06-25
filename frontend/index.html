@@ -983,7 +983,11 @@
     </div>
     <div class="card" style="max-width:600px;margin:0 auto;padding:1.5rem;">
       <div style="margin-bottom:1rem;">
-        <label for="logUrlInput" style="display:block;font-weight:600;margin-bottom:0.3rem;">WarcraftLogs Report URL</label>
+        <label style="display:block;font-weight:600;margin-bottom:0.3rem;">Select a Guild Raid</label>
+        <select id="raidSelect" style="width:100%;font-size:0.95rem;margin-bottom:0.6rem;">
+          <option value="">Loading guild raids…</option>
+        </select>
+        <label for="logUrlInput" style="display:block;font-weight:600;margin-bottom:0.3rem;margin-top:0.8rem;font-size:0.85rem;color:var(--muted);">Or paste a custom URL</label>
         <input id="logUrlInput" type="text" placeholder="https://fresh.warcraftlogs.com/reports/ABC123..." style="width:100%;font-size:0.95rem;">
       </div>
       <button id="fetchBtn" class="button primary" style="padding:0.75rem 1.5rem;font-weight:600;cursor:pointer;font-size:0.95rem;">Analyze Report</button>
@@ -5491,14 +5495,39 @@
     // Load screen logic
     const loadScreen = document.getElementById('loadScreen');
     const logUrlInput = document.getElementById('logUrlInput');
+    const raidSelect = document.getElementById('raidSelect');
     const fetchBtn = document.getElementById('fetchBtn');
     const fetchStatus = document.getElementById('fetchStatus');
     const fetchProgress = document.getElementById('fetchProgress');
     const backBtn = document.getElementById('backBtn');
 
+    // Populate guild raid dropdown
+    (async function loadGuildRaids() {
+      try {
+        const res = await fetch('/api/guild/reports?limit=50&page=1');
+        if (!res.ok) throw new Error('Failed');
+        const data = await res.json();
+        const reports = data.reports || [];
+        const options = reports.map(r => {
+          const d = new Date(r.date);
+          const label = `${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} — ${r.zone} (${r.player_count} players)`;
+          return `<option value="${r.code}">${label}</option>`;
+        });
+        raidSelect.innerHTML = '<option value="">— Select a guild raid —</option>' + options.join('');
+      } catch (e) {
+        raidSelect.innerHTML = '<option value="">Guild raids unavailable</option>';
+      }
+    })();
+
+    raidSelect.addEventListener('change', () => {
+      if (raidSelect.value) {
+        logUrlInput.value = raidSelect.value;
+      }
+    });
+
     async function loadReportFromInput() {
-      const url = logUrlInput.value.trim();
-      if (!url) { fetchStatus.textContent = 'Please enter a report URL.'; return; }
+      const url = logUrlInput.value.trim() || raidSelect.value;
+      if (!url) { fetchStatus.textContent = 'Please select a raid or enter a report URL.'; return; }
       fetchBtn.disabled = true;
       fetchStatus.textContent = 'Starting...';
       fetchProgress.innerHTML = '';
