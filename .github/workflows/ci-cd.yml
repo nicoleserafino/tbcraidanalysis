@@ -86,7 +86,7 @@ jobs:
       - name: Deploy to Azure Container Apps
         uses: azure/container-apps-deploy-action@v1
         with:
-          containerAppName: tbcraidanalysis
+          containerAppName: lcdguildanalysis
           resourceGroup: ${{ secrets.AZURE_RESOURCE_GROUP }}
           imageToDeploy: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
           environmentVariables: |
