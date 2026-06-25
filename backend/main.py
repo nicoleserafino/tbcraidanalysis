@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+import logging
 import re
 import time
+import traceback
 from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+
+logger = logging.getLogger(__name__)
 
 from backend.analysis.compare import fetch_compare_report, fetch_player_details
 from backend.analysis.guild import fetch_guild_reports, compute_attendance, fetch_gear_audit
@@ -205,6 +209,7 @@ async def get_guild_reports(
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
+        logger.error("Guild reports error: %s\n%s", e, traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Failed to fetch guild reports: {e}")
 
     _guild_reports_cache[cache_key] = (time.time(), result)
@@ -226,6 +231,7 @@ async def get_guild_attendance():
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
+        logger.error("Guild attendance error: %s\n%s", e, traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Failed to compute attendance: {e}")
 
     _guild_attendance_cache[guild_id] = (time.time(), result)
@@ -247,6 +253,7 @@ async def get_gear_audit(report_code: str):
     try:
         result = await fetch_gear_audit(code)
     except Exception as e:
+        logger.error("Gear audit error: %s\n%s", e, traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Failed to fetch gear audit: {e}")
 
     _gear_audit_cache[code] = (time.time(), result)
