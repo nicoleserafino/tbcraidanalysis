@@ -61,24 +61,29 @@ WEAPON_BUFFS = {
     "Superior Mana Oil", "Brilliant Mana Oil",
 }
 
-# Known TBC temporary weapon enchant IDs
+# Known TBC temporary weapon enchant IDs (verified via player class correlation)
 TEMP_ENCHANT_NAMES = {
-    2622: "Superior Wizard Oil",
-    2623: "Brilliant Wizard Oil",
-    2624: "Blessed Wizard Oil",
-    2625: "Superior Mana Oil",
-    2626: "Brilliant Mana Oil",
-    2627: "Adamantite Sharpening Stone",
-    2628: "Adamantite Weightstone",
-    2629: "Elemental Sharpening Stone",
-    2630: "Righteous Weapon Coating",
+    # Caster DPS oils
+    2628: "Superior Wizard Oil",       # Mage, Warlock, Druid casters
+    2678: "Brilliant Wizard Oil",      # Mage, Warlock, Paladin, Priest casters
+    # Healer oils
+    2629: "Brilliant Mana Oil",        # Druid, Priest, Paladin healers
+    2677: "Superior Mana Oil",
+    # Shaman imbues
     2636: "Windfury Weapon",
     2641: "Flametongue Weapon",
-    2677: "Savage Weapon Coating",
-    2678: "Superior Wizard Oil",
+    # Physical DPS - stones/weightstones
+    2713: "Adamantite Sharpening Stone",  # Warrior, Rogue, Hunter (sharp weapons)
+    2955: "Adamantite Weightstone",       # Hunter, others (blunt weapons)
+    3225: "Adamantite Sharpening Stone",
+    3226: "Adamantite Weightstone",
+    2679: "Elemental Sharpening Stone",
+    # Rogue poisons (also stored as temporaryEnchant)
+    2643: "Instant Poison VII",
+    2644: "Deadly Poison VII",
+    # Other
+    2630: "Righteous Weapon Coating",
     2684: "Blessed Wizard Oil",
-    2713: "Wizard Oil",
-    2955: "Adamantite Sharpening Stone",
 }
 
 
@@ -276,49 +281,77 @@ async def compute_attendance(
 async def fetch_gear_audit(report_code: str) -> dict[str, Any]:
     """Fetch gear, enchant, gem, and consumable data for all players in a report.
 
-    Uses CombatantInfo from the first boss fight to get each player's loadout.
+    Checks CombatantInfo across all boss fights and picks the best consumable
+    snapshot per player (most buffs active).
     """
     metadata = await fetch_report_metadata(report_code)
     fights = metadata.get("fights", [])
     actors = metadata.get("masterData", {}).get("actors", [])
-    ability_names = {
-        a["gameID"]: a["name"]
-        for a in metadata.get("masterData", {}).get("abilities", [])
-    }
 
     players_by_id = {a["id"]: a for a in actors if a.get("type") == "Player"}
 
     if not fights:
         return {"players": [], "report_code": report_code}
 
-    # Use first fight for gear snapshot
-    fight = fights[0]
-    fight_id = fight["id"]
-    start = fight["startTime"]
-    end = fight["endTime"]
+    # Fetch CombatantInfo from all fights in parallel
+    import asyncio as _aio
+    fight_tasks = [
+        _fetch_combatant_info(report_code, f["id"], f["startTime"], f["endTime"])
+        for f in fights
+    ]
+    all_fight_events = await _aio.gather(*fight_tasks)
 
-    combatant_events = await _fetch_combatant_info(report_code, fight_id, start, end)
+    # For each player, pick the fight snapshot with the best consumable coverage
+    # Use gear from first appearance (gear doesn't change mid-raid)
+    best_consumables: dict[int, dict] = {}  # sourceID -> best consumable audit
+    player_gear: dict[int, list] = {}       # sourceID -> gear from first seen
+    player_auras: dict[int, list] = {}      # sourceID -> auras from best fight
 
+    for fight_events in all_fight_events:
+        for ev in fight_events:
+            source_id = ev.get("sourceID")
+            if source_id not in players_by_id:
+                continue
+
+            gear_items = ev.get("gear", [])
+            auras = ev.get("auras", [])
+            player_class = players_by_id[source_id].get("subType", "")
+
+            # Keep first gear snapshot (doesn't change)
+            if source_id not in player_gear:
+                player_gear[source_id] = gear_items
+
+            # Audit consumables for this fight
+            consumable_audit = _audit_consumables(auras, gear_items, player_class)
+
+            # Score: count how many consumable slots are filled
+            score = sum([
+                bool(consumable_audit.get("flask")),
+                bool(consumable_audit.get("elixirs")),
+                bool(consumable_audit.get("food")),
+                bool(consumable_audit.get("weapon_buff")),
+            ])
+
+            prev = best_consumables.get(source_id)
+            if prev is None or score > prev["_score"]:
+                consumable_audit["_score"] = score
+                best_consumables[source_id] = consumable_audit
+
+    # Build final audit using best consumables + gear from first appearance
     player_audits = []
-    for ev in combatant_events:
-        source_id = ev.get("sourceID")
+    for source_id, gear_items in player_gear.items():
         player = players_by_id.get(source_id)
         if not player:
             continue
 
-        gear_items = ev.get("gear", [])
-        auras = ev.get("auras", [])
-
-        # Audit gear
         gear_audit = _audit_gear(gear_items)
-
-        # Audit consumables from pre-pull auras + gear temporaryEnchant
-        consumable_audit = _audit_consumables(auras, gear_items)
+        consumable_audit = best_consumables.get(source_id, {})
+        consumable_audit.pop("_score", None)
 
         player_audits.append({
             "name": player["name"],
             "class": player.get("subType", "Unknown"),
-            "spec_id": ev.get("specID", 0),
+            "spec_id": 0,
             "avg_ilvl": gear_audit["avg_ilvl"],
             "missing_enchants": gear_audit["missing_enchants"],
             "missing_gems": gear_audit["missing_gems"],
@@ -334,7 +367,7 @@ async def fetch_gear_audit(report_code: str) -> dict[str, Any]:
 
     return {
         "report_code": report_code,
-        "fight_name": fight.get("name", "Unknown"),
+        "fight_name": fights[0].get("name", "Unknown") if fights else "Unknown",
         "players": player_audits,
     }
 
@@ -412,7 +445,7 @@ def _audit_gear(gear_items: list[dict]) -> dict[str, Any]:
     }
 
 
-def _audit_consumables(auras: list[dict], gear_items: list[dict] | None = None) -> dict[str, Any]:
+def _audit_consumables(auras: list[dict], gear_items: list[dict] | None = None, player_class: str = "") -> dict[str, Any]:
     """Check pre-pull auras and gear for consumable usage."""
     has_flask = False
     has_elixir = False
@@ -440,13 +473,17 @@ def _audit_consumables(auras: list[dict], gear_items: list[dict] | None = None) 
 
     # Check weapon slots for temporaryEnchant (weapon oils, stones, etc.)
     if not has_weapon_buff and gear_items:
-        for slot_idx in (14, 15, 16):  # MH, OH, Ranged
+        for slot_idx in (15, 16):  # MH, OH in WCL gear array
             if slot_idx < len(gear_items):
                 item = gear_items[slot_idx]
                 temp_enchant = item.get("temporaryEnchant", 0)
                 if temp_enchant:
                     has_weapon_buff = True
-                    weapon_buff_name = TEMP_ENCHANT_NAMES.get(temp_enchant, f"Weapon Buff ({temp_enchant})")
+                    name = TEMP_ENCHANT_NAMES.get(temp_enchant, f"Weapon Buff ({temp_enchant})")
+                    # Resolve ambiguous IDs by class
+                    if temp_enchant == 2641 and player_class == "Rogue":
+                        name = "Poison"
+                    weapon_buff_name = name
                     break
 
     return {

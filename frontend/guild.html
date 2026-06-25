@@ -63,12 +63,6 @@
       z-index: 1;
     }
 
-    .topbar {
-      display: grid;
-      gap: 22px;
-      margin-bottom: 24px;
-    }
-
     .hero, .card, .summary-card, .filter-card {
       background: linear-gradient(180deg, rgba(24, 31, 52, 0.94), rgba(14, 19, 33, 0.86));
       border: 1px solid rgba(179, 169, 255, 0.14);
@@ -82,29 +76,6 @@
       padding: 28px;
       position: relative;
       overflow: hidden;
-    }
-
-    .guild-hero::before {
-      content: "";
-      position: absolute;
-      inset: -25% auto auto -10%;
-      width: 55%;
-      height: 160%;
-      background: linear-gradient(120deg, rgba(143,124,255,0.28), rgba(232,102,168,0.1), transparent 70%);
-      transform: rotate(-10deg);
-      pointer-events: none;
-    }
-
-    .guild-hero::after {
-      content: "";
-      position: absolute;
-      top: -40px;
-      right: -20px;
-      width: 220px;
-      height: 220px;
-      border-radius: 999px;
-      background: radial-gradient(circle, rgba(91,141,239,0.18), transparent 70%);
-      pointer-events: none;
     }
 
     .hero h1 {
@@ -132,6 +103,22 @@
       background: rgba(12, 17, 30, 0.76);
       box-shadow: 0 18px 40px rgba(0, 0, 0, 0.28);
       backdrop-filter: blur(16px);
+      transition: transform 0.3s ease, opacity 0.3s ease;
+    }
+
+    .app-nav.nav-hidden {
+      transform: translateY(-120%);
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .nav-hover-zone {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 24px;
+      z-index: 29;
     }
 
     .nav-brand {
@@ -221,7 +208,7 @@
 
     .layout {
       display: grid;
-      grid-template-columns: 290px minmax(0, 1fr);
+      grid-template-columns: 340px minmax(0, 1fr);
       gap: 20px;
       align-items: start;
       min-height: 0;
@@ -234,9 +221,11 @@
 
     .sidebar-panel {
       position: sticky;
-      top: 106px;
+      top: var(--sidebar-top, 20px);
       align-self: start;
-      max-height: calc(100vh - 130px);
+      height: calc(100vh - var(--sidebar-top, 20px) - 20px);
+      overflow: hidden;
+      transition: top 0.3s ease, height 0.3s ease;
     }
 
     .sidebar-card {
@@ -244,27 +233,36 @@
       overflow: hidden;
       background: linear-gradient(180deg, rgba(12, 17, 29, 0.98), rgba(10, 14, 24, 0.94));
       border-color: rgba(179, 169, 255, 0.12);
+      height: 100%;
+      display: flex;
+      flex-direction: column;
     }
 
     .sidebar-shell {
-      display: grid;
-      grid-template-rows: minmax(0, 1fr) auto;
-      min-height: calc(100vh - 130px);
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
     }
 
     .sidebar-rail {
-      padding: 18px;
+      padding: 14px 16px;
       border-right: 1px solid rgba(179, 169, 255, 0.08);
-      display: grid;
-      gap: 16px;
+      display: flex;
+      flex-direction: column;
+      flex: 1;
       min-height: 0;
+      gap: 10px;
     }
 
     .sidebar-section-head {
       display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      gap: 12px;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      gap: 4px;
+      flex-shrink: 0;
     }
 
     .sidebar-section-head h2,
@@ -282,15 +280,32 @@
     }
 
     .sidebar-raid-shell {
-      display: grid;
-      gap: 14px;
+      display: flex;
+      flex-direction: column;
+      flex: 1;
       min-height: 0;
+      gap: 8px;
     }
 
     .sidebar-raid-list {
+      flex: 1;
       min-height: 0;
-      overflow: auto;
+      overflow-y: auto;
       padding-right: 4px;
+    }
+
+    .sidebar-raid-list::-webkit-scrollbar {
+      width: 5px;
+    }
+    .sidebar-raid-list::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .sidebar-raid-list::-webkit-scrollbar-thumb {
+      background: rgba(143, 124, 255, 0.25);
+      border-radius: 999px;
+    }
+    .sidebar-raid-list::-webkit-scrollbar-thumb:hover {
+      background: rgba(143, 124, 255, 0.45);
     }
 
     .sidebar-raid-list .table-wrap {
@@ -406,46 +421,11 @@
       display: none;
     }
 
-    .sidebar-actions {
-      padding: 0 18px 18px;
-      border-top: 1px solid rgba(179, 169, 255, 0.08);
-      background: rgba(255, 255, 255, 0.015);
-    }
-
-    .sidebar-nav {
-      display: grid;
-      gap: 8px;
-      margin-top: 14px;
-    }
-
-    .sidebar-nav-button {
-      width: 100%;
-      justify-content: flex-start;
-      padding: 12px 14px;
-      border-radius: 14px;
-      border: 1px solid rgba(179, 169, 255, 0.08);
-      border-left: 3px solid transparent;
-      background: rgba(255, 255, 255, 0.02);
-      color: var(--muted);
-      font-weight: 600;
-      transition: 0.2s ease;
-    }
-
-    .sidebar-nav-button:hover,
-    .sidebar-nav-button.view-active {
-      color: var(--text);
-      background: rgba(143, 124, 255, 0.1);
-      border-color: rgba(143, 124, 255, 0.16);
-      border-left-color: var(--accent);
-    }
-
     .detail-panel {
       padding: 24px;
       display: grid;
       align-content: start;
-      overflow-x: hidden;
-      overflow-y: auto;
-      max-height: calc(100vh - 130px);
+      min-width: 0;
     }
 
     .detail-panel-header {
@@ -466,6 +446,36 @@
 
     .detail-panel-header .mini-note {
       max-width: 640px;
+    }
+
+    .detail-view-tabs {
+      display: flex;
+      gap: 6px;
+      align-self: center;
+    }
+
+    .detail-tab {
+      padding: 7px 16px;
+      border-radius: 999px;
+      border: 1px solid rgba(179, 169, 255, 0.12);
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--muted);
+      font-size: 0.82rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.2s, color 0.2s, border-color 0.2s;
+    }
+
+    .detail-tab:hover {
+      background: rgba(143, 124, 255, 0.1);
+      color: var(--text);
+      border-color: rgba(143, 124, 255, 0.25);
+    }
+
+    .detail-tab.view-active {
+      background: linear-gradient(135deg, rgba(143, 124, 255, 0.18), rgba(232, 102, 168, 0.14));
+      color: var(--text);
+      border-color: rgba(143, 124, 255, 0.35);
     }
 
     .detail-views {
@@ -551,7 +561,6 @@
 
     .card {
       padding: 18px;
-      overflow: hidden;
       position: relative;
       transition: transform 0.22s ease, border-color 0.22s ease, box-shadow 0.22s ease;
     }
@@ -601,6 +610,34 @@
       padding: 14px;
       border-radius: 14px;
       background: linear-gradient(180deg, rgba(255,255,255,0.07), rgba(255,255,255,0.03));
+    }
+
+    .clickable-stat {
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s, transform 0.15s;
+    }
+
+    .clickable-stat:hover {
+      border-color: rgba(143, 124, 255, 0.3);
+      background: linear-gradient(180deg, rgba(143, 124, 255, 0.12), rgba(255,255,255,0.04));
+      transform: translateY(-2px);
+    }
+
+    .clickable-stat.filter-active {
+      border-color: rgba(143, 124, 255, 0.5);
+      background: linear-gradient(180deg, rgba(143, 124, 255, 0.15), rgba(232, 102, 168, 0.08));
+      box-shadow: 0 0 12px rgba(143, 124, 255, 0.15);
+    }
+
+    .click-hint {
+      opacity: 0.5;
+      font-size: 0.72rem;
+      margin-top: 4px;
+      transition: opacity 0.2s;
+    }
+
+    .clickable-stat:hover .click-hint {
+      opacity: 1;
     }
 
     .stat-label {
@@ -759,12 +796,15 @@
     .pill {
       display: inline-flex;
       align-items: center;
+      justify-content: center;
       gap: 8px;
       padding: 8px 12px;
       border-radius: 999px;
       border: 1px solid var(--border);
       background: rgba(255, 255, 255, 0.04);
       font-size: 0.92rem;
+      text-align: center;
+      white-space: nowrap;
     }
 
     .code-pill {
@@ -1022,8 +1062,9 @@
   </style>
 </head>
 <body>
+  <div class="nav-hover-zone" id="navHoverZone"></div>
   <div class="app">
-    <header class="app-nav">
+    <header class="app-nav" id="appNav">
       <div class="nav-brand">
         <div class="brand-mark">✦</div>
         <div class="brand-copy">
@@ -1037,14 +1078,6 @@
         <a href="/compare" class="nav-link">Compare Logs</a>
       </nav>
     </header>
-    <div class="topbar">
-      <section class="hero guild-hero">
-        <div class="pill hero-kicker">Guild Dashboard</div>
-        <h1>Lower City Discotek</h1>
-        <div class="subtitle">Dreamscythe-US · elegant raid oversight for attendance, prep, and progression</div>
-      </section>
-    </div>
-
     <div class="layout">
       <aside class="sidebar-panel">
         <section class="card sidebar-card">
@@ -1052,28 +1085,18 @@
             <div class="sidebar-rail">
               <div class="sidebar-raid-shell">
                 <div class="sidebar-section-head">
-                  <div>
-                    <div class="sidebar-kicker">Raid Browser</div>
-                    <h2>Recent Raids</h2>
-                    <div class="mini-note">Pick a raid to inspect gear, enchants, and consumables.</div>
-                  </div>
-                  <div id="recentRaidMeta" class="pill muted">Loading raids</div>
+                  <div class="sidebar-kicker">Raid Browser</div>
+                  <h2>Recent Raids</h2>
+                  <div id="recentRaidMeta" class="pill muted" style="font-size: 0.78rem;">Loading raids</div>
                 </div>
                 <div class="sidebar-raid-list">
                   <div id="recentRaidsContainer" class="table-wrap">
                     <div class="status-box loading">Loading recent raids</div>
                   </div>
                 </div>
-                <div id="loadMoreWrap" style="display:none;">
+                <div id="loadMoreWrap" style="display:none; flex-shrink:0;">
                   <button id="loadMoreBtn" class="button" style="width:100%;">Load More</button>
                 </div>
-              </div>
-            </div>
-            <div class="sidebar-actions">
-              <div class="sidebar-kicker" style="margin-top:18px;">Views</div>
-              <div class="sidebar-nav" aria-label="Dashboard views">
-                <button type="button" class="button sidebar-nav-button view-active" data-view-target="attendance">Attendance</button>
-                <button type="button" class="button sidebar-nav-button" data-view-target="manual">Analyze Report</button>
               </div>
             </div>
           </div>
@@ -1083,11 +1106,13 @@
       <section class="card detail-panel">
         <div class="detail-panel-header">
           <div>
-            <div class="pill hero-kicker">Guild Operations</div>
             <h2 id="detailTitle">Attendance Overview</h2>
-            <div id="detailSubtitle" class="mini-note">Track lockout consistency first, then drill into raid prep from the sidebar.</div>
+            <div id="detailSubtitle" class="mini-note">Per-lockout attendance across SSC and TK each week.</div>
           </div>
-          <div class="pill muted">Dreamscythe-US · Lower City Discotek</div>
+          <div class="detail-view-tabs" aria-label="Dashboard views">
+            <button type="button" class="detail-tab view-active" data-view-target="attendance">Attendance</button>
+            <button type="button" class="detail-tab" data-view-target="manual">Analyze Report</button>
+          </div>
         </div>
 
         <div class="detail-views">
@@ -1219,16 +1244,16 @@
 
     const DETAIL_VIEW_META = {
       attendance: {
-        title: 'Attendance Overview',
-        subtitle: 'Track lockout consistency first, then drill into raid prep from the sidebar.'
+        title: 'Attendance',
+        subtitle: 'Per-lockout attendance across SSC and TK each week.'
       },
       prep: {
-        title: 'Raid Prep Audit',
-        subtitle: 'Inspect raid readiness with consumables, enchants, and average item level at a glance.'
+        title: 'Raid Prep',
+        subtitle: 'Consumables, enchants, and gear for the selected raid.'
       },
       manual: {
-        title: 'Manual Report Analysis',
-        subtitle: 'Open any WarcraftLogs report directly or jump to a recent guild log.'
+        title: 'Report Analysis',
+        subtitle: 'Open a WarcraftLogs report or select a recent guild log.'
       }
     };
 
@@ -1437,9 +1462,9 @@
     }
 
     function renderPrepSummary(players, report) {
-      const fullyConsumed = players.filter(player => player.consumables?.fully_consumed).length;
-      const missingEnchants = players.filter(player => (player.missing_enchants || []).length > 0).length;
-      const fullyPrepped = players.filter(player => prepStatus(player) === 'good').length;
+      const fullyConsumed = players.filter(player => player.consumables?.fully_consumed);
+      const missingEnchants = players.filter(player => (player.missing_enchants || []).length > 0);
+      const fullyPrepped = players.filter(player => prepStatus(player) === 'good');
       const summaryHtml = `
         <div class="summary-grid">
           <div class="summary-card">
@@ -1447,21 +1472,54 @@
           <div class="stat-value" style="font-size:1.1rem;">${escapeHtml(report?.zone || state.prepAudit?.fight_name || 'Unknown')}</div>
             <div class="mini-note">${escapeHtml(formatDate(report?.date))}</div>
           </div>
-          <div class="summary-card">
+          <div class="summary-card clickable-stat" data-filter="fullyConsumed">
             <div class="stat-label">Fully Consumed</div>
-            <div class="stat-value">${fullyConsumed}/${players.length}</div>
+            <div class="stat-value">${fullyConsumed.length}/${players.length}</div>
+            <div class="mini-note click-hint">Click to see who</div>
           </div>
-          <div class="summary-card">
+          <div class="summary-card clickable-stat" data-filter="missingEnchants">
             <div class="stat-label">Missing Enchants</div>
-            <div class="stat-value">${missingEnchants}</div>
+            <div class="stat-value">${missingEnchants.length}</div>
+            <div class="mini-note click-hint">Click to see who</div>
           </div>
-          <div class="summary-card">
+          <div class="summary-card clickable-stat" data-filter="fullyPrepped">
             <div class="stat-label">Fully Prepped</div>
-            <div class="stat-value">${fullyPrepped}/${players.length}</div>
+            <div class="stat-value">${fullyPrepped.length}/${players.length}</div>
+            <div class="mini-note click-hint">Click to see who</div>
           </div>
         </div>
       `;
       els.prepSummary.innerHTML = summaryHtml;
+
+      // Store filter sets for click handling
+      const filterSets = {
+        fullyConsumed: new Set(fullyConsumed.map(p => p.name)),
+        missingEnchants: new Set(missingEnchants.map(p => p.name)),
+        fullyPrepped: new Set(fullyPrepped.map(p => p.name))
+      };
+
+      els.prepSummary.querySelectorAll('.clickable-stat').forEach(card => {
+        card.addEventListener('click', () => {
+          const filter = card.dataset.filter;
+          const names = filterSets[filter];
+          const isActive = card.classList.contains('filter-active');
+
+          // Toggle off if already active
+          els.prepSummary.querySelectorAll('.clickable-stat').forEach(c => c.classList.remove('filter-active'));
+          const prepCards = document.querySelectorAll('.prep-card');
+
+          if (isActive) {
+            prepCards.forEach(c => c.style.display = '');
+            return;
+          }
+
+          card.classList.add('filter-active');
+          prepCards.forEach(c => {
+            const name = c.querySelector('.prep-name')?.textContent;
+            c.style.display = names.has(name) ? '' : 'none';
+          });
+        });
+      });
     }
 
     function renderPrepAudit() {
@@ -1685,6 +1743,41 @@
 
     loadReports();
     loadAttendance();
+
+    // Auto-hide nav on scroll, show on hover at top
+    (function() {
+      const nav = document.getElementById('appNav');
+      const hoverZone = document.getElementById('navHoverZone');
+      const root = document.documentElement;
+      const navHeight = nav.offsetHeight + 20; // nav height + gap
+      let lastScroll = 0;
+
+      function showNav() {
+        nav.classList.remove('nav-hidden');
+        root.style.setProperty('--sidebar-top', navHeight + 'px');
+      }
+      function hideNav() {
+        nav.classList.add('nav-hidden');
+        root.style.setProperty('--sidebar-top', '20px');
+      }
+
+      // Initial state
+      root.style.setProperty('--sidebar-top', navHeight + 'px');
+
+      window.addEventListener('scroll', () => {
+        const y = window.scrollY;
+        if (y > 80 && y > lastScroll) {
+          hideNav();
+        } else if (y < lastScroll) {
+          showNav();
+        }
+        if (y <= 20) showNav();
+        lastScroll = y;
+      }, { passive: true });
+
+      hoverZone.addEventListener('mouseenter', showNav);
+      nav.addEventListener('mouseenter', showNav);
+    })();
   </script>
 </body>
 </html>
