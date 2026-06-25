@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import re
+import time
 from pathlib import Path
+from typing import Any
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.staticfiles import StaticFiles
@@ -14,10 +16,16 @@ from backend.analysis.report import fetch_full_report
 
 app = FastAPI(title="TBC Raid Analysis", version="2.0.0")
 
-# In-memory cache (TTL-based, simple dict for now)
-_report_cache: dict[str, dict] = {}
-_compare_report_cache: dict[str, dict] = {}
-_player_details_cache: dict[tuple[str, int, int], dict] = {}
+CACHE_TTL = 1800  # 30 minutes
+
+# In-memory cache (timestamp, data[, extra metadata])
+_report_cache: dict[str, tuple[float, dict[str, Any]]] = {}
+_compare_report_cache: dict[str, tuple[float, dict[str, Any], dict[int, str]]] = {}
+_player_details_cache: dict[tuple[str, int, int], tuple[float, dict[str, Any]]] = {}
+
+
+def _is_cache_fresh(timestamp: float) -> bool:
+    return (time.time() - timestamp) < CACHE_TTL
 
 
 def extract_report_code(url_or_code: str) -> str:
@@ -45,8 +53,11 @@ async def get_report(report_code: str):
         raise HTTPException(status_code=400, detail=str(e))
 
     # Check cache
-    if code in _report_cache:
-        return _report_cache[code]
+    cached = _report_cache.get(code)
+    if cached and _is_cache_fresh(cached[0]):
+        return cached[1]
+    if cached:
+        _report_cache.pop(code, None)
 
     try:
         report = await fetch_full_report(code)
@@ -56,7 +67,7 @@ async def get_report(report_code: str):
         raise HTTPException(status_code=500, detail=f"Failed to fetch report: {e}")
 
     # Cache result
-    _report_cache[code] = report
+    _report_cache[code] = (time.time(), report)
     return report
 
 
@@ -77,10 +88,10 @@ async def get_report_fights(report_code: str):
 
     return {
         "title": metadata.get("title", code),
-        "fights": metadata["fights"],
+        "fights": metadata.get("fights", []) or [],
         "players": [
             {"id": a["id"], "name": a["name"], "class": a.get("subType", "")}
-            for a in metadata["masterData"]["actors"]
+            for a in metadata.get("masterData", {}).get("actors", []) or []
             if a.get("type") == "Player"
         ],
     }
@@ -94,17 +105,20 @@ async def get_compare_report(report_code: str):
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    if code in _compare_report_cache:
-        return _compare_report_cache[code]
+    cached = _compare_report_cache.get(code)
+    if cached and _is_cache_fresh(cached[0]):
+        return cached[1]
+    if cached:
+        _compare_report_cache.pop(code, None)
 
     try:
-        report = await fetch_compare_report(code)
+        report, ability_names = await fetch_compare_report(code)
     except RuntimeError as e:
         raise HTTPException(status_code=502, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch compare report: {e}")
 
-    _compare_report_cache[code] = report
+    _compare_report_cache[code] = (time.time(), report, ability_names)
     return report
 
 
@@ -121,11 +135,37 @@ async def get_player_details(
         raise HTTPException(status_code=400, detail=str(e))
 
     cache_key = (code, fight_id, player_id)
-    if cache_key in _player_details_cache:
-        return _player_details_cache[cache_key]
+    cached_details = _player_details_cache.get(cache_key)
+    if cached_details and _is_cache_fresh(cached_details[0]):
+        return cached_details[1]
+    if cached_details:
+        _player_details_cache.pop(cache_key, None)
+
+    compare_cached = _compare_report_cache.get(code)
+    if not compare_cached or not _is_cache_fresh(compare_cached[0]):
+        try:
+            report, ability_names = await fetch_compare_report(code)
+        except RuntimeError as e:
+            raise HTTPException(status_code=502, detail=str(e))
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to fetch compare report: {e}")
+        compare_cached = (time.time(), report, ability_names)
+        _compare_report_cache[code] = compare_cached
+
+    _, compare_report, ability_names = compare_cached
+    fight = next((boss for boss in compare_report.get("bosses", []) if boss.get("fight_id") == fight_id), None)
+    if fight is None:
+        raise HTTPException(status_code=404, detail=f"Fight {fight_id} was not found in report {code}.")
 
     try:
-        details = await fetch_player_details(code, fight_id, player_id)
+        details = await fetch_player_details(
+            code,
+            fight_id,
+            player_id,
+            ability_names,
+            int(fight.get("start_time", 0) or 0),
+            int(fight.get("end_time", 0) or 0),
+        )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except RuntimeError as e:
@@ -133,7 +173,7 @@ async def get_player_details(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch player details: {e}")
 
-    _player_details_cache[cache_key] = details
+    _player_details_cache[cache_key] = (time.time(), details)
     return details
 
 

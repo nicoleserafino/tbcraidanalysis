@@ -5,7 +5,8 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from backend.analysis.report import fetch_events_paginated, fetch_report_metadata, fetch_table
+from backend.analysis.utils import infer_role, spell_name
+from backend.analysis.report import fetch_events_paginated, fetch_table
 from backend.wcl.client import graphql_query
 from backend.wcl.queries import REPORT_FIGHTS_ALL
 
@@ -13,9 +14,6 @@ PLAYER_CLASSES = {
     "Warrior", "Paladin", "Hunter", "Rogue", "Priest",
     "Shaman", "Mage", "Warlock", "Druid",
 }
-PURE_DPS_CLASSES = {"Mage", "Warlock", "Rogue", "Hunter"}
-HEAL_CAPABLE_CLASSES = {"Priest", "Paladin", "Shaman", "Druid"}
-TANK_CAPABLE_CLASSES = {"Warrior", "Paladin", "Druid"}
 
 CONSUMABLE_BUFFS = {
     "Flask of Pure Death", "Flask of Blinding Light", "Flask of Supreme Power", "Flask of Relentless Assault",
@@ -51,20 +49,6 @@ def fmt_duration(ms: int) -> str:
     minutes = int(total_sec // 60)
     seconds = int(total_sec % 60)
     return f"{minutes}:{seconds:02d}"
-
-
-def spell_name(payload: dict[str, Any], ability_names: dict[int, str]) -> str:
-    """Resolve an ability name from a v2 table row or event."""
-    if payload.get("name"):
-        return str(payload["name"])
-    ability = payload.get("ability")
-    if isinstance(ability, dict) and ability.get("name"):
-        return str(ability["name"])
-    for key in ("abilityGameID", "gameID", "guid", "id"):
-        game_id = payload.get(key)
-        if isinstance(game_id, int) and game_id in ability_names:
-            return ability_names[game_id]
-    return "Unknown"
 
 
 def ability_id(payload: dict[str, Any]) -> int:
@@ -168,29 +152,6 @@ def normalize_cast_events(events: list[dict[str, Any]], ability_names: dict[int,
     return rows
 
 
-def infer_role(player_class: str, total_damage: int, total_healing: int, total_damage_taken: int) -> str:
-    """Infer a raid role from aggregated compare-report tables.
-
-    v2 DamageDone tables can inflate damage (procs, pets), so use
-    generous thresholds for healer/tank detection.
-    """
-    if player_class in PURE_DPS_CLASSES:
-        return "DPS"
-    # Tank: taking far more damage than dealing
-    if player_class in TANK_CAPABLE_CLASSES and total_damage_taken > max(total_damage * 2, total_healing * 2, 100000):
-        return "Tank"
-    # Priest: any significant healing means healer (Shadow Priests do minimal direct healing)
-    if player_class == "Priest" and total_healing > 100000:
-        return "Healer"
-    # Hybrid healers: healing is a meaningful fraction of their output
-    if player_class in HEAL_CAPABLE_CLASSES and total_healing > total_damage * 0.15 and total_healing > 50000:
-        return "Healer"
-    # Secondary tank check
-    if player_class in TANK_CAPABLE_CLASSES and total_damage_taken > max(total_damage * 1.2, 80000):
-        return "Tank"
-    return "DPS"
-
-
 async def fetch_compare_metadata(report_code: str) -> dict[str, Any]:
     data = await graphql_query(REPORT_FIGHTS_ALL, {"code": report_code})
     return data["reportData"]["report"]
@@ -210,7 +171,7 @@ async def fetch_cooldown_events(report_code: str, fight_id: int, start_time: int
         return []
 
 
-async def fetch_compare_report(report_code: str) -> dict[str, Any]:
+async def fetch_compare_report(report_code: str) -> tuple[dict[str, Any], dict[int, str]]:
     """Fetch all data needed by frontend/compare.html."""
     metadata = await fetch_compare_metadata(report_code)
     fights = metadata.get("fights", []) or []
@@ -338,9 +299,9 @@ async def fetch_compare_report(report_code: str) -> dict[str, Any]:
             "class": player_class,
             "role": infer_role(
                 player_class,
-                aggregate_damage.get(player_id, 0),
-                aggregate_healing.get(player_id, 0),
-                aggregate_damage_taken.get(player_id, 0),
+                total_healing=aggregate_healing.get(player_id, 0),
+                total_damage_done=aggregate_damage.get(player_id, 0),
+                total_damage_taken=aggregate_damage_taken.get(player_id, 0),
             ),
             "icon": "",
             "id": player_id,
@@ -403,21 +364,18 @@ async def fetch_compare_report(report_code: str) -> dict[str, Any]:
         "boss_pull_counts": boss_pull_counts,
         "trash": trash,
         "pacing": pacing,
-    }
+    }, ability_names
 
 
-async def fetch_player_details(report_code: str, fight_id: int, player_id: int) -> dict[str, Any]:
+async def fetch_player_details(
+    report_code: str,
+    fight_id: int,
+    player_id: int,
+    ability_names: dict[int, str],
+    start_time: int,
+    end_time: int,
+) -> dict[str, Any]:
     """Fetch detailed per-player tables for a single boss kill."""
-    metadata = await fetch_report_metadata(report_code)
-    fight = next((fight for fight in metadata.get("fights", []) or [] if int(fight.get("id", -1)) == fight_id), None)
-    if fight is None:
-        raise ValueError(f"Fight {fight_id} was not found in report {report_code}.")
-
-    start_time = int(fight.get("startTime", 0) or 0)
-    end_time = int(fight.get("endTime", 0) or 0)
-    abilities = metadata.get("masterData", {}).get("abilities", []) or []
-    ability_names = {ability["gameID"]: ability["name"] for ability in abilities if ability.get("gameID")}
-
     damage_table, healing_table, buff_table, cast_table, cast_events = await asyncio.gather(
         fetch_table(report_code, [fight_id], "DamageDone", start_time, end_time, source_id=player_id),
         fetch_table(report_code, [fight_id], "Healing", start_time, end_time, source_id=player_id),
