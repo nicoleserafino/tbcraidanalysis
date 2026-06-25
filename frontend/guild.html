@@ -501,13 +501,13 @@
         <section class="card">
           <div class="section-header">
             <div>
-              <h2>Attendance</h2>
+              <h2>Attendance by Lockout Week</h2>
               <div id="attendanceMeta" class="mini-note">Loading attendance</div>
             </div>
             <div class="controls-row">
               <div>
-                <label for="minRaidsInput">Minimum raids</label>
-                <input id="minRaidsInput" type="number" min="1" step="1" value="5" style="width:100px;" />
+                <label for="minRaidsInput">Min weeks seen</label>
+                <input id="minRaidsInput" type="number" min="1" step="1" value="3" style="width:100px;" />
               </div>
             </div>
           </div>
@@ -553,7 +553,7 @@
       reportsPage: 1,
       reportsHasMore: false,
       attendance: null,
-      minRaids: 5,
+      minRaids: 3,
       attendanceSort: { key: 'attendance_pct', dir: 'desc' },
       selectedReportCode: '',
       prepAudit: null
@@ -688,10 +688,10 @@
     }
 
     async function loadAttendance() {
-      els.attendanceMeta.textContent = 'Loading attendance';
+      els.attendanceMeta.textContent = 'Loading attendance (checking each report for SSC/TK)…';
       try {
         state.attendance = await fetchJson('/api/guild/attendance');
-        els.attendanceMeta.textContent = `${state.attendance.total_raids || 0} total raids across tracked logs`;
+        els.attendanceMeta.textContent = `${state.attendance.total_weeks || 0} lockout weeks tracked · SSC + TK per week`;
         renderAttendance();
       } catch (error) {
         els.attendanceMeta.textContent = 'Failed to load attendance';
@@ -700,7 +700,7 @@
     }
 
     function sortedAttendancePlayers() {
-      const players = (state.attendance?.players || []).filter(player => (player.total_raids_seen || 0) >= state.minRaids);
+      const players = (state.attendance?.players || []).filter(player => (player.total_weeks || 0) >= state.minRaids);
       const { key, dir } = state.attendanceSort;
       const sorted = [...players].sort((a, b) => {
         const left = a[key];
@@ -724,31 +724,55 @@
         return;
       }
       const players = sortedAttendancePlayers();
+      const weeks = state.attendance.weeks || [];
       if (!players.length) {
-        els.attendanceContainer.innerHTML = '<div class="empty">No players match the current minimum raids filter.</div>';
+        els.attendanceContainer.innerHTML = '<div class="empty">No players match the current minimum weeks filter.</div>';
         return;
       }
+
+      function weekLabel(w) {
+        const d = new Date(w + 'T15:00:00Z');
+        return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      }
+
+      function attendIcon(val) {
+        return val ? '<span style="color:var(--kill)">✓</span>' : '<span style="color:var(--muted);opacity:0.35">✗</span>';
+      }
+
       els.attendanceContainer.innerHTML = `
         <table>
           <thead>
             <tr>
-              <th data-sort-key="name">Player Name${sortIndicator('name')}</th>
+              <th data-sort-key="name" style="position:sticky;left:0;background:var(--panel);z-index:2;">Player${sortIndicator('name')}</th>
               <th data-sort-key="class">Class${sortIndicator('class')}</th>
-              <th data-sort-key="raids_present">Raids Present${sortIndicator('raids_present')}</th>
-              <th data-sort-key="total_raids_seen">Total Raids${sortIndicator('total_raids_seen')}</th>
-              <th data-sort-key="attendance_pct">Attendance %${sortIndicator('attendance_pct')}</th>
+              ${weeks.map(w => `<th colspan="2" style="text-align:center;font-size:0.78rem;border-bottom:none;">${weekLabel(w)}</th>`).join('')}
+              <th data-sort-key="ssc_weeks">SSC${sortIndicator('ssc_weeks')}</th>
+              <th data-sort-key="tk_weeks">TK${sortIndicator('tk_weeks')}</th>
+              <th data-sort-key="attendance_pct">%${sortIndicator('attendance_pct')}</th>
+            </tr>
+            <tr>
+              <th style="position:sticky;left:0;background:var(--panel);z-index:2;"></th>
+              <th></th>
+              ${weeks.map(() => `<th style="font-size:0.7rem;color:var(--muted);text-align:center;">S</th><th style="font-size:0.7rem;color:var(--muted);text-align:center;">T</th>`).join('')}
+              <th></th><th></th><th></th>
             </tr>
           </thead>
           <tbody>
-            ${players.map(player => `
+            ${players.map(player => {
+              const weekly = player.weekly || {};
+              return `
               <tr>
-                <td>${escapeHtml(player.name)}</td>
+                <td style="position:sticky;left:0;background:var(--panel);z-index:1;">${escapeHtml(player.name)}</td>
                 <td>${classBadge(player.class)}</td>
-                <td>${Number(player.raids_present || 0)}</td>
-                <td>${Number(player.total_raids_seen || 0)}</td>
-                <td class="${attendanceClass(Number(player.attendance_pct || 0))}">${Number(player.attendance_pct || 0).toFixed(1)}%</td>
-              </tr>
-            `).join('')}
+                ${weeks.map(w => {
+                  const att = weekly[w] || { SSC: false, TK: false };
+                  return `<td style="text-align:center;">${attendIcon(att.SSC)}</td><td style="text-align:center;">${attendIcon(att.TK)}</td>`;
+                }).join('')}
+                <td style="text-align:center;">${player.ssc_weeks}</td>
+                <td style="text-align:center;">${player.tk_weeks}</td>
+                <td class="${attendanceClass(player.attendance_pct || 0)}" style="text-align:center;">${(player.attendance_pct || 0).toFixed(0)}%</td>
+              </tr>`;
+            }).join('')}
           </tbody>
         </table>
       `;

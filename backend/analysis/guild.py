@@ -3,12 +3,20 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from backend.wcl.client import graphql_query
-from backend.wcl.queries import GUILD_ATTENDANCE, REPORT_EVENTS
+from backend.wcl.queries import GUILD_ATTENDANCE, REPORT_EVENTS, REPORT_FIGHTS
 from backend.analysis.report import fetch_report_metadata
 from backend.analysis.utils import spell_name
+
+# TBC encounter IDs by instance
+SSC_ENCOUNTER_IDS = {623, 624, 625, 626, 627, 628}  # Hydross, Lurker, Leo, Karathress, Morogrim, Vashj
+TK_ENCOUNTER_IDS = {730, 731, 732, 733}  # Al'ar, VR, Solarian, Kael'thas
+# Boss name substrings for fallback detection
+SSC_BOSS_NAMES = {"Hydross", "Lurker", "Leotheras", "Karathress", "Morogrim", "Vashj"}
+TK_BOSS_NAMES = {"Al'ar", "Void Reaver", "Solarian", "Kael'thas"}
 
 # Enchantable gear slots (index in CombatantInfo gear array)
 # 0=Head, 2=Shoulder, 4=Chest, 6=Legs, 7=Feet, 8=Wrist, 9=Hands,
@@ -101,13 +109,54 @@ async def fetch_guild_reports(
     }
 
 
+def _lockout_week(timestamp_ms: int) -> str:
+    """Return the Tuesday-reset lockout week label for a timestamp.
+
+    WoW TBC resets on Tuesday ~11am ET. We use Tuesday 15:00 UTC as the
+    boundary. A raid on Monday night belongs to the *previous* week's lockout.
+    """
+    dt = datetime.fromtimestamp(timestamp_ms / 1000, tz=timezone.utc)
+    # Find most recent Tuesday 15:00 UTC at or before this timestamp
+    days_since_tuesday = (dt.weekday() - 1) % 7
+    tuesday = dt - timedelta(days=days_since_tuesday)
+    tuesday = tuesday.replace(hour=15, minute=0, second=0, microsecond=0)
+    if dt < tuesday:
+        tuesday -= timedelta(days=7)
+    return tuesday.strftime("%Y-%m-%d")
+
+
+def _detect_instance(fights: list[dict]) -> set[str]:
+    """Determine which raid instances (SSC / TK) a report covers."""
+    instances: set[str] = set()
+    for f in fights:
+        eid = f.get("encounterID", 0)
+        name = f.get("name", "")
+        if eid in SSC_ENCOUNTER_IDS or any(b in name for b in SSC_BOSS_NAMES):
+            instances.add("SSC")
+        if eid in TK_ENCOUNTER_IDS or any(b in name for b in TK_BOSS_NAMES):
+            instances.add("TK")
+    return instances
+
+
+async def _fetch_report_instances(report_code: str) -> set[str]:
+    """Fetch fights for a report and determine which instances were run."""
+    data = await graphql_query(REPORT_FIGHTS, {"code": report_code})
+    report = data.get("reportData", {}).get("report", {})
+    fights = report.get("fights", [])
+    return _detect_instance(fights)
+
+
 async def compute_attendance(
     guild_id: int, max_pages: int = 4
 ) -> dict[str, Any]:
-    """Compute aggregated attendance across recent raids."""
+    """Compute attendance per lockout week per instance (SSC / TK).
+
+    Returns weekly attendance showing whether each character attended
+    SSC and/or TK during each Tuesday-to-Tuesday lockout period.
+    """
+    # 1. Gather all reports from guild attendance
     all_reports: list[dict] = []
     page = 1
-
     while page <= max_pages:
         result = await fetch_guild_reports(guild_id, limit=25, page=page)
         all_reports.extend(result["reports"])
@@ -115,40 +164,79 @@ async def compute_attendance(
             break
         page += 1
 
-    # Aggregate attendance per player
-    player_attendance: dict[str, dict[str, Any]] = {}
-    total_raids = len(all_reports)
+    # 2. Determine which instance each report covers (parallel)
+    instance_tasks = [_fetch_report_instances(r["code"]) for r in all_reports]
+    instance_results = await asyncio.gather(*instance_tasks, return_exceptions=True)
 
-    for report in all_reports:
-        for player in report["players"]:
-            name = player["name"]
-            if name not in player_attendance:
-                player_attendance[name] = {
-                    "name": name,
-                    "class": player["class"],
-                    "raids_present": 0,
-                    "raids_absent": 0,
-                }
-            if player["present"]:
-                player_attendance[name]["raids_present"] += 1
-            else:
-                player_attendance[name]["raids_absent"] += 1
+    # 3. Build weekly attendance: week -> instance -> set of player names
+    weeks: dict[str, dict[str, set[str]]] = {}
+    player_info: dict[str, str] = {}  # name -> class
 
-    # Calculate attendance rate and sort
-    attendance_list = []
-    for info in player_attendance.values():
-        total_seen = info["raids_present"] + info["raids_absent"]
+    for report, instances in zip(all_reports, instance_results):
+        if isinstance(instances, Exception):
+            continue
+        # Skip non-SSC/TK raids (Gruul/Mag, Kara, etc.)
+        if not instances:
+            continue
+
+        week = _lockout_week(report["date"])
+        if week not in weeks:
+            weeks[week] = {"SSC": set(), "TK": set()}
+
+        present_players = [p["name"] for p in report["players"] if p["present"]]
+        for inst in instances:
+            if inst in weeks[week]:
+                weeks[week][inst].update(present_players)
+
+        for p in report["players"]:
+            if p["name"] not in player_info:
+                player_info[p["name"]] = p["class"]
+
+    # 4. Sort weeks newest first
+    sorted_weeks = sorted(weeks.keys(), reverse=True)
+
+    # 5. Build per-player summary
+    player_summary: dict[str, dict[str, Any]] = {}
+    for week in sorted_weeks:
+        for inst in ("SSC", "TK"):
+            for name in weeks[week].get(inst, set()):
+                if name not in player_summary:
+                    player_summary[name] = {
+                        "name": name,
+                        "class": player_info.get(name, "Unknown"),
+                        "ssc_weeks": 0,
+                        "tk_weeks": 0,
+                        "total_weeks": 0,
+                        "weekly": {},
+                    }
+                if week not in player_summary[name]["weekly"]:
+                    player_summary[name]["weekly"][week] = {"SSC": False, "TK": False}
+
+        # Mark attendance
+        for name in weeks[week].get("SSC", set()):
+            player_summary[name]["weekly"][week]["SSC"] = True
+            player_summary[name]["ssc_weeks"] += 1
+        for name in weeks[week].get("TK", set()):
+            player_summary[name]["weekly"][week]["TK"] = True
+            player_summary[name]["tk_weeks"] += 1
+
+    # Count total weeks each player appeared in
+    for info in player_summary.values():
+        info["total_weeks"] = len(info["weekly"])
+        pct_weeks = len(sorted_weeks) if sorted_weeks else 1
         info["attendance_pct"] = round(
-            info["raids_present"] / total_seen * 100, 1
-        ) if total_seen > 0 else 0
-        info["total_raids_seen"] = total_seen
-        attendance_list.append(info)
+            (info["ssc_weeks"] + info["tk_weeks"]) / (pct_weeks * 2) * 100, 1
+        )
 
-    attendance_list.sort(key=lambda x: (-x["attendance_pct"], -x["raids_present"]))
+    players = sorted(
+        player_summary.values(),
+        key=lambda x: (-x["attendance_pct"], -x["total_weeks"], x["name"]),
+    )
 
     return {
-        "total_raids": total_raids,
-        "players": attendance_list,
+        "weeks": sorted_weeks,
+        "total_weeks": len(sorted_weeks),
+        "players": players,
     }
 
 
