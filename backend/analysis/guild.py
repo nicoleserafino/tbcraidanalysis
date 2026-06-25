@@ -61,6 +61,26 @@ WEAPON_BUFFS = {
     "Superior Mana Oil", "Brilliant Mana Oil",
 }
 
+# Known TBC temporary weapon enchant IDs
+TEMP_ENCHANT_NAMES = {
+    2622: "Superior Wizard Oil",
+    2623: "Brilliant Wizard Oil",
+    2624: "Blessed Wizard Oil",
+    2625: "Superior Mana Oil",
+    2626: "Brilliant Mana Oil",
+    2627: "Adamantite Sharpening Stone",
+    2628: "Adamantite Weightstone",
+    2629: "Elemental Sharpening Stone",
+    2630: "Righteous Weapon Coating",
+    2636: "Windfury Weapon",
+    2641: "Flametongue Weapon",
+    2677: "Savage Weapon Coating",
+    2678: "Superior Wizard Oil",
+    2684: "Blessed Wizard Oil",
+    2713: "Wizard Oil",
+    2955: "Adamantite Sharpening Stone",
+}
+
 
 async def fetch_guild_reports(
     guild_id: int, limit: int = 25, page: int = 1
@@ -292,8 +312,8 @@ async def fetch_gear_audit(report_code: str) -> dict[str, Any]:
         # Audit gear
         gear_audit = _audit_gear(gear_items)
 
-        # Audit consumables from pre-pull auras
-        consumable_audit = _audit_consumables(auras)
+        # Audit consumables from pre-pull auras + gear temporaryEnchant
+        consumable_audit = _audit_consumables(auras, gear_items)
 
         player_audits.append({
             "name": player["name"],
@@ -392,8 +412,8 @@ def _audit_gear(gear_items: list[dict]) -> dict[str, Any]:
     }
 
 
-def _audit_consumables(auras: list[dict]) -> dict[str, Any]:
-    """Check pre-pull auras for consumable usage."""
+def _audit_consumables(auras: list[dict], gear_items: list[dict] | None = None) -> dict[str, Any]:
+    """Check pre-pull auras and gear for consumable usage."""
     has_flask = False
     has_elixir = False
     has_food = False
@@ -417,6 +437,17 @@ def _audit_consumables(auras: list[dict]) -> dict[str, Any]:
         if name in WEAPON_BUFFS:
             has_weapon_buff = True
             weapon_buff_name = name
+
+    # Check weapon slots for temporaryEnchant (weapon oils, stones, etc.)
+    if not has_weapon_buff and gear_items:
+        for slot_idx in (14, 15, 16):  # MH, OH, Ranged
+            if slot_idx < len(gear_items):
+                item = gear_items[slot_idx]
+                temp_enchant = item.get("temporaryEnchant", 0)
+                if temp_enchant:
+                    has_weapon_buff = True
+                    weapon_buff_name = TEMP_ENCHANT_NAMES.get(temp_enchant, f"Weapon Buff ({temp_enchant})")
+                    break
 
     return {
         "flask": flask_name if has_flask else None,
