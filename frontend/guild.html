@@ -6,21 +6,25 @@
   <title>Lower City Discotek — Guild Dashboard</title>
   <style>
     :root {
-      --bg: #0b0f17;
-      --panel: #121927;
-      --panel-2: #182234;
-      --panel-3: #1f2d45;
-      --border: rgba(255, 255, 255, 0.08);
-      --text: #e8edf8;
-      --muted: #98a6c4;
+      --bg: #090b14;
+      --panel: rgba(18, 24, 40, 0.78);
+      --panel-2: rgba(26, 33, 54, 0.84);
+      --panel-3: rgba(35, 45, 74, 0.92);
+      --panel-strong: #161d32;
+      --border: rgba(179, 169, 255, 0.16);
+      --border-strong: rgba(232, 102, 168, 0.24);
+      --text: #f2f5ff;
+      --muted: #9ea8c8;
       --kill: #44d17a;
       --wipe: #ff6363;
       --tank: #57a6ff;
       --healer: #55d48f;
       --dps: #ffad42;
       --accent: #8f7cff;
+      --accent-2: #e866a8;
+      --accent-3: #5b8def;
       --warning: #ffd166;
-      --shadow: 0 18px 40px rgba(0, 0, 0, 0.25);
+      --shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
       --radius: 18px;
       --radius-sm: 12px;
       --font: Inter, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
@@ -33,71 +37,186 @@
       font-family: var(--font);
       color: var(--text);
       background:
-        radial-gradient(circle at top, rgba(143, 124, 255, 0.18), transparent 28%),
-        linear-gradient(180deg, #0a0f18 0%, #0b0f17 60%, #0d111a 100%);
+        radial-gradient(circle at top left, rgba(143, 124, 255, 0.24), transparent 30%),
+        radial-gradient(circle at top right, rgba(91, 141, 239, 0.16), transparent 28%),
+        radial-gradient(circle at 50% 120%, rgba(232, 102, 168, 0.12), transparent 35%),
+        linear-gradient(180deg, #080b13 0%, #0b0f18 50%, #0e1320 100%);
       min-height: 100vh;
+      line-height: 1.55;
+      position: relative;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background: linear-gradient(140deg, rgba(255,255,255,0.035), transparent 22%, transparent 65%, rgba(143,124,255,0.05));
+      opacity: 0.6;
     }
 
     .app {
-      max-width: 1440px;
+      max-width: 1480px;
       margin: 0 auto;
       padding: 24px;
+      position: relative;
+      z-index: 1;
     }
 
     .topbar {
-      display: flex;
-      gap: 20px;
-      flex-wrap: wrap;
-      align-items: stretch;
-      justify-content: space-between;
-      margin-bottom: 22px;
+      display: grid;
+      gap: 22px;
+      margin-bottom: 24px;
     }
 
     .hero, .card, .summary-card, .filter-card {
-      background: linear-gradient(180deg, rgba(23, 31, 48, 0.96), rgba(18, 25, 39, 0.95));
-      border: 1px solid var(--border);
+      background: linear-gradient(180deg, rgba(24, 31, 52, 0.94), rgba(14, 19, 33, 0.86));
+      border: 1px solid rgba(179, 169, 255, 0.14);
       border-radius: var(--radius);
       box-shadow: var(--shadow);
+      backdrop-filter: blur(14px);
     }
 
     .hero {
       flex: 1 1 100%;
-      padding: 22px;
-      backdrop-filter: blur(8px);
+      padding: 28px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .guild-hero::before {
+      content: "";
+      position: absolute;
+      inset: -25% auto auto -10%;
+      width: 55%;
+      height: 160%;
+      background: linear-gradient(120deg, rgba(143,124,255,0.28), rgba(232,102,168,0.1), transparent 70%);
+      transform: rotate(-10deg);
+      pointer-events: none;
+    }
+
+    .guild-hero::after {
+      content: "";
+      position: absolute;
+      top: -40px;
+      right: -20px;
+      width: 220px;
+      height: 220px;
+      border-radius: 999px;
+      background: radial-gradient(circle, rgba(91,141,239,0.18), transparent 70%);
+      pointer-events: none;
     }
 
     .hero h1 {
       margin: 0 0 8px;
-      font-size: 2rem;
+      font-size: 2.15rem;
       letter-spacing: 0.02em;
+      position: relative;
     }
 
     .subtitle, .muted { color: var(--muted); }
+
+    .app-nav {
+      position: sticky;
+      top: 14px;
+      z-index: 30;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      flex-wrap: wrap;
+      margin-bottom: 22px;
+      padding: 14px 18px;
+      border-radius: 20px;
+      border: 1px solid rgba(179, 169, 255, 0.16);
+      background: rgba(12, 17, 30, 0.76);
+      box-shadow: 0 18px 40px rgba(0, 0, 0, 0.28);
+      backdrop-filter: blur(16px);
+    }
+
+    .nav-brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .brand-mark {
+      width: 40px;
+      height: 40px;
+      border-radius: 14px;
+      display: grid;
+      place-items: center;
+      font-size: 1rem;
+      color: #fff;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2) 58%, var(--accent-3));
+      box-shadow: 0 14px 28px rgba(143, 124, 255, 0.28);
+    }
+
+    .brand-copy {
+      display: grid;
+      gap: 2px;
+      line-height: 1.15;
+    }
+
+    .brand-copy strong {
+      font-size: 0.98rem;
+      letter-spacing: 0.01em;
+    }
+
+    .brand-eyebrow {
+      color: var(--muted);
+      font-size: 0.74rem;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+    }
 
     .nav-links {
       display: flex;
       flex-wrap: wrap;
       gap: 10px;
-      margin-top: 16px;
+      margin-top: 0;
     }
 
     .nav-link {
+      position: relative;
       display: inline-flex;
       align-items: center;
       gap: 8px;
       padding: 10px 16px;
       border-radius: 999px;
-      border: 1px solid var(--border);
+      border: 1px solid transparent;
       background: rgba(255, 255, 255, 0.04);
-      color: var(--text);
+      color: var(--muted);
       text-decoration: none;
-      transition: 0.2s ease;
+      font-weight: 600;
+      transition: 0.24s ease;
+    }
+
+    .nav-link::after {
+      content: "";
+      position: absolute;
+      left: 16px;
+      right: 16px;
+      bottom: 5px;
+      height: 2px;
+      border-radius: 999px;
+      background: linear-gradient(90deg, var(--accent), var(--accent-2), var(--accent-3));
+      opacity: 0;
+      transform: scaleX(0.45);
+      transition: 0.24s ease;
     }
 
     .nav-link:hover, .nav-link.active {
-      background: linear-gradient(180deg, rgba(143, 124, 255, 0.35), rgba(65, 86, 160, 0.25));
-      border-color: rgba(143, 124, 255, 0.45);
+      color: var(--text);
+      background: linear-gradient(135deg, rgba(143, 124, 255, 0.18), rgba(232, 102, 168, 0.12), rgba(91, 141, 239, 0.16));
+      border-color: rgba(179, 169, 255, 0.22);
       transform: translateY(-1px);
+    }
+
+    .nav-link:hover::after, .nav-link.active::after {
+      opacity: 1;
+      transform: scaleX(1);
     }
 
     .layout {
@@ -115,6 +234,14 @@
     .card {
       padding: 18px;
       overflow: hidden;
+      position: relative;
+      transition: transform 0.22s ease, border-color 0.22s ease, box-shadow 0.22s ease;
+    }
+
+    .card:hover, .summary-card:hover {
+      transform: translateY(-2px);
+      border-color: rgba(232, 102, 168, 0.22);
+      box-shadow: 0 24px 52px rgba(0, 0, 0, 0.34);
     }
 
     .section-header {
@@ -123,12 +250,26 @@
       align-items: flex-start;
       gap: 12px;
       flex-wrap: wrap;
-      margin-bottom: 14px;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid rgba(179, 169, 255, 0.1);
     }
 
     .section-header h2, .section-header h3, .card h3 {
       margin: 0;
       font-weight: 700;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .section-header h2::before, .section-header h3::before, .card > h3::before {
+      content: "";
+      width: 4px;
+      height: 1.1em;
+      border-radius: 999px;
+      background: linear-gradient(180deg, var(--accent), var(--accent-2), var(--accent-3));
+      box-shadow: 0 0 18px rgba(143, 124, 255, 0.35);
     }
 
     .summary-grid {
@@ -141,7 +282,7 @@
     .summary-card {
       padding: 14px;
       border-radius: 14px;
-      background: rgba(255, 255, 255, 0.04);
+      background: linear-gradient(180deg, rgba(255,255,255,0.07), rgba(255,255,255,0.03));
     }
 
     .stat-label {
@@ -159,17 +300,21 @@
 
     .table-wrap {
       overflow-x: auto;
+      border: 1px solid rgba(179, 169, 255, 0.1);
+      border-radius: 16px;
+      background: rgba(9, 13, 24, 0.38);
     }
 
     table {
       width: 100%;
-      border-collapse: collapse;
+      border-collapse: separate;
+      border-spacing: 0;
       min-width: 640px;
     }
 
     th, td {
       padding: 12px 10px;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
       text-align: left;
       vertical-align: middle;
     }
@@ -181,14 +326,24 @@
       color: var(--muted);
       cursor: pointer;
       user-select: none;
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      background: rgba(17, 22, 38, 0.94);
+      backdrop-filter: blur(16px);
+      box-shadow: inset 0 -1px 0 rgba(143, 124, 255, 0.25);
+    }
+
+    tbody tr:nth-child(even) td {
+      background: rgba(255,255,255,0.015);
     }
 
     tr:hover td {
-      background: rgba(255, 255, 255, 0.03);
+      background: rgba(143, 124, 255, 0.08);
     }
 
     .raid-row.active td {
-      background: rgba(87, 166, 255, 0.08);
+      background: rgba(91, 141, 239, 0.12);
     }
 
     .link-btn, .button, button {
@@ -199,34 +354,40 @@
       background: none;
       border: none;
       padding: 0;
-      color: #9ac6ff;
+      color: #adc8ff;
       cursor: pointer;
       font-weight: 700;
       text-align: left;
     }
 
-    .link-btn:hover { color: #cbe2ff; }
+    .link-btn:hover { color: #d9e7ff; }
 
     .button {
-      border: 1px solid var(--border);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      border: 1px solid rgba(179, 169, 255, 0.18);
       background: rgba(255, 255, 255, 0.04);
       color: var(--text);
-      padding: 10px 14px;
-      border-radius: 12px;
+      padding: 10px 16px;
+      border-radius: 14px;
       cursor: pointer;
-      transition: 0.2s ease;
+      transition: 0.22s ease;
     }
 
     .button:hover:not(:disabled) {
-      background: rgba(255, 255, 255, 0.08);
+      background: rgba(255, 255, 255, 0.09);
+      border-color: rgba(143, 124, 255, 0.28);
       transform: translateY(-1px);
     }
 
     .button.primary {
-      background: linear-gradient(180deg, #57a6ff, #3f82df);
-      border-color: rgba(87, 166, 255, 0.45);
+      background: linear-gradient(135deg, var(--accent), var(--accent-2) 58%, var(--accent-3));
+      border-color: transparent;
       color: white;
       font-weight: 700;
+      box-shadow: 0 14px 28px rgba(143, 124, 255, 0.24);
     }
 
     .button:disabled {
@@ -254,10 +415,18 @@
     input {
       width: 100%;
       padding: 12px 14px;
-      border-radius: 12px;
-      border: 1px solid var(--border);
-      background: var(--panel-2);
+      border-radius: 14px;
+      border: 1px solid rgba(179, 169, 255, 0.16);
+      background: rgba(11, 15, 26, 0.78);
       color: var(--text);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
+      transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+    }
+
+    input:focus {
+      outline: none;
+      border-color: rgba(91, 141, 239, 0.5);
+      box-shadow: 0 0 0 3px rgba(91, 141, 239, 0.14), inset 0 1px 0 rgba(255,255,255,0.04);
       outline: none;
     }
 
@@ -289,26 +458,55 @@
       text-align: center;
       padding: 24px;
       color: var(--muted);
-      border: 1px dashed rgba(255,255,255,0.16);
-      border-radius: 14px;
-      background: rgba(255,255,255,0.025);
+      border: 1px dashed rgba(179,169,255,0.18);
+      border-radius: 16px;
+      background: rgba(255,255,255,0.03);
     }
 
     .status-box.error {
-      color: #ffb4b4;
-      border-color: rgba(255, 99, 99, 0.35);
-      background: rgba(255, 99, 99, 0.06);
+      color: #ffc1c1;
+      border-color: rgba(255, 99, 99, 0.28);
+      background: rgba(255, 99, 99, 0.08);
+    }
+
+    .status-box.loading {
+      position: relative;
+      overflow: hidden;
+    }
+
+    .status-box.loading::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(90deg, transparent, rgba(143,124,255,0.18), transparent);
+      transform: translateX(-100%);
+      animation: sweep 1.9s infinite;
     }
 
     .status-box.loading::after {
-      content: '...';
-      animation: blink 1.1s infinite;
+      content: '';
+      display: inline-block;
+      width: 0.9rem;
+      height: 0.9rem;
+      margin-left: 10px;
+      border-radius: 999px;
+      background: radial-gradient(circle, rgba(143,124,255,0.95), rgba(143,124,255,0.1));
+      animation: pulse 1.4s ease-in-out infinite;
     }
 
     @keyframes blink {
       0%, 20% { opacity: 0.2; }
       50% { opacity: 1; }
       100% { opacity: 0.2; }
+    }
+
+    @keyframes sweep {
+      to { transform: translateX(100%); }
+    }
+
+    @keyframes pulse {
+      0%, 100% { transform: scale(0.88); opacity: 0.45; }
+      50% { transform: scale(1.1); opacity: 1; }
     }
 
     .attendance-good { color: var(--kill); font-weight: 700; }
@@ -345,14 +543,18 @@
     .prep-card {
       padding: 16px;
       border-radius: 16px;
-      border: 1px solid var(--border);
-      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(179, 169, 255, 0.14);
+      border-left: 4px solid var(--prep-role, rgba(143,124,255,0.45));
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.03));
       box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
     }
 
-    .prep-card.good { border-left: 4px solid var(--kill); }
-    .prep-card.warn { border-left: 4px solid var(--warning); }
-    .prep-card.bad { border-left: 4px solid var(--wipe); }
+    .prep-card.tank { --prep-role: var(--tank); }
+    .prep-card.healer { --prep-role: var(--healer); }
+    .prep-card.dps { --prep-role: var(--dps); }
+    .prep-card.good { box-shadow: inset 0 1px 0 rgba(255,255,255,0.03), 0 0 0 1px rgba(68,209,122,0.08); }
+    .prep-card.warn { box-shadow: inset 0 1px 0 rgba(255,255,255,0.03), 0 0 0 1px rgba(255,209,102,0.08); }
+    .prep-card.bad { box-shadow: inset 0 1px 0 rgba(255,255,255,0.03), 0 0 0 1px rgba(255,99,99,0.08); }
 
     .prep-top {
       display: flex;
@@ -435,6 +637,20 @@
       margin-top: 4px;
     }
 
+    .attendance-cell.attended {
+      background: rgba(68, 209, 122, 0.08);
+    }
+
+    .attendance-cell.missed {
+      background: rgba(255,255,255,0.012);
+    }
+
+    .hero-kicker {
+      margin-bottom: 14px;
+      background: linear-gradient(135deg, rgba(143,124,255,0.22), rgba(232,102,168,0.14));
+      border-color: rgba(179, 169, 255, 0.18);
+    }
+
     @media (max-width: 1080px) {
       .layout { grid-template-columns: 1fr; }
     }
@@ -445,21 +661,34 @@
       .manual-form { grid-template-columns: 1fr; }
       table { min-width: 540px; }
       .prep-top { align-items: flex-start; flex-direction: column; }
+      .app-nav {
+        top: 8px;
+        padding: 12px 14px;
+      }
     }
   </style>
 </head>
 <body>
   <div class="app">
+    <header class="app-nav">
+      <div class="nav-brand">
+        <div class="brand-mark">✦</div>
+        <div class="brand-copy">
+          <span class="brand-eyebrow">Lower City Discotek</span>
+          <strong>Raid Analysis Suite</strong>
+        </div>
+      </div>
+      <nav class="nav-links" aria-label="Primary navigation">
+        <a href="/" class="nav-link active">Guild Dashboard</a>
+        <a href="/report" class="nav-link">Report Analysis</a>
+        <a href="/compare" class="nav-link">Compare Logs</a>
+      </nav>
+    </header>
     <div class="topbar">
-      <section class="hero">
-        <div class="pill">Guild Dashboard</div>
+      <section class="hero guild-hero">
+        <div class="pill hero-kicker">Guild Dashboard</div>
         <h1>Lower City Discotek</h1>
-        <div class="subtitle">Dreamscythe-US</div>
-        <nav class="nav-links" aria-label="Primary navigation">
-          <a href="/" class="nav-link active">Guild Dashboard</a>
-          <a href="/report" class="nav-link">Report Analysis</a>
-          <a href="/compare" class="nav-link">Compare Logs</a>
-        </nav>
+        <div class="subtitle">Dreamscythe-US · elegant raid oversight for attendance, prep, and progression</div>
       </section>
     </div>
 
@@ -766,7 +995,7 @@
                 <td>${classBadge(player.class)}</td>
                 ${weeks.map(w => {
                   const att = weekly[w] || { SSC: false, TK: false };
-                  return `<td style="text-align:center;">${attendIcon(att.SSC)}</td><td style="text-align:center;">${attendIcon(att.TK)}</td>`;
+                  return `<td class="attendance-cell ${att.SSC ? 'attended' : 'missed'}" style="text-align:center;">${attendIcon(att.SSC)}</td><td class="attendance-cell ${att.TK ? 'attended' : 'missed'}" style="text-align:center;">${attendIcon(att.TK)}</td>`;
                 }).join('')}
                 <td style="text-align:center;">${player.ssc_weeks}</td>
                 <td style="text-align:center;">${player.tk_weeks}</td>
@@ -818,12 +1047,13 @@
         <div class="prep-grid">
           ${players.map(player => {
             const status = prepStatus(player);
+            const roleClass = String(player.role || '').toLowerCase();
             const consume = player.consumables || {};
             const consumeText = consume.flask || (consume.elixirs || []).join(', ') || 'Missing flask/elixirs';
             const foodText = consume.food ? 'Well Fed present' : 'Missing food buff';
             const weaponText = consume.weapon_buff || 'Missing weapon buff';
             return `
-              <article class="prep-card ${status}">
+              <article class="prep-card ${status} ${escapeHtml(roleClass)}">
                 <div class="prep-top">
                   <div>
                     <div class="prep-name">${escapeHtml(player.name)}</div>
