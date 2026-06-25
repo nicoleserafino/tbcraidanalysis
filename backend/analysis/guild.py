@@ -65,7 +65,7 @@ WEAPON_BUFFS = {
 async def fetch_guild_reports(
     guild_id: int, limit: int = 25, page: int = 1
 ) -> dict[str, Any]:
-    """Fetch guild attendance/report list."""
+    """Fetch guild attendance/report list with resolved zone names."""
     data = await graphql_query(GUILD_ATTENDANCE, {
         "guildID": guild_id,
         "limit": limit,
@@ -76,13 +76,26 @@ async def fetch_guild_reports(
         raise ValueError(f"Guild {guild_id} not found")
 
     attendance = guild.get("attendance", {})
+    raw_reports = attendance.get("data", [])
+
+    # Resolve actual instances for each report in parallel
+    codes = [entry["code"] for entry in raw_reports]
+    instance_tasks = [_fetch_report_instances(code) for code in codes]
+    instance_results = await asyncio.gather(*instance_tasks, return_exceptions=True)
+
     reports = []
-    for entry in attendance.get("data", []):
+    for entry, instances in zip(raw_reports, instance_results):
         players = entry.get("players", [])
+        # Determine zone from actual encounters
+        if isinstance(instances, Exception) or not instances:
+            zone = (entry.get("zone") or {}).get("name", "Unknown")
+        else:
+            zone = " / ".join(sorted(instances))
+
         reports.append({
             "code": entry["code"],
             "date": entry["startTime"],
-            "zone": (entry.get("zone") or {}).get("name", "Unknown"),
+            "zone": zone,
             "player_count": len(players),
             "players": [
                 {
