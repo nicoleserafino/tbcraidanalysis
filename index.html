@@ -846,7 +846,10 @@
       LEO: 'leo',
       KARATHRESS: 'karathress',
       MOROGRIM: 'morogrim',
-      VASHJ: 'vashj'
+      VASHJ: 'vashj',
+      VOID_REAVER: 'void_reaver',
+      ALAR: 'alar',
+      SOLARIAN: 'solarian'
     });
 
     function getBossKey(name = state.boss || '') {
@@ -857,6 +860,9 @@
       if (/Karathress/i.test(name)) return BOSS_KEYS.KARATHRESS;
       if (/Morogrim/i.test(name)) return BOSS_KEYS.MOROGRIM;
       if (/Lady Vashj/i.test(name)) return BOSS_KEYS.VASHJ;
+      if (/Void Reaver/i.test(name)) return BOSS_KEYS.VOID_REAVER;
+      if (/Al.ar/i.test(name)) return BOSS_KEYS.ALAR;
+      if (/Solarian/i.test(name)) return BOSS_KEYS.SOLARIAN;
       return '';
     }
 
@@ -1861,8 +1867,9 @@
         }
 
         // --- DEEP TANK ANALYSIS ---
-        // Shield Block uptime (Warrior)
-        if (playerClass === 'Warrior') {
+        // Shield Block uptime (Warrior) — skip for unblockable bosses (elementals like Hydross, Void Reaver)
+        const UNBLOCKABLE_BOSSES = new Set([BOSS_KEYS.HYDROSS, BOSS_KEYS.VOID_REAVER]);
+        if (playerClass === 'Warrior' && !UNBLOCKABLE_BOSSES.has(bossKey)) {
           const sbCasts = spellCasts['Shield Block'] || 0;
           const sbBuffs = buffEvts.filter(b => b.spell === 'Shield Block');
           const activeTime = deaths.length ? deaths[0].relative_time : pull.duration_sec;
@@ -2291,13 +2298,17 @@
       const isFeral = playerClass === 'Druid' && role === 'DPS';
       const skipCastGaps = isMeleeDPS || isFeral; // These classes use auto-attacks primarily
 
+      // KT has extensive forced downtime (weapon phase, transitions, MC, gravity lapse)
+      const gapThreshold = bossKey === BOSS_KEYS.KAEL ? 20 : 8;
+      const gapIdleCritical = bossKey === BOSS_KEYS.KAEL ? 35 : 20;
+
       const castTimeline = pull.cast_timeline?.[player] || [];
       if (!skipCastGaps && castTimeline.length > 5) {
         const deathTime = deaths.length ? deaths[0].relative_time : pull.duration_sec;
         const gaps = [];
         for (let i = 1; i < castTimeline.length; i++) {
           const gap = castTimeline[i] - castTimeline[i - 1];
-          if (gap > 8 && castTimeline[i] <= deathTime) {
+          if (gap > gapThreshold && castTimeline[i] <= deathTime) {
             const gapStart = castTimeline[i - 1];
             const gapEnd = castTimeline[i];
             const conflagDuring = (pull.conflagrations || []).some(c =>
@@ -2322,7 +2333,7 @@
           gaps.push({ start: lastCast, end: deathTime, duration: deathTime - lastCast, context: ' (before death)' });
         }
 
-        const significantGaps = gaps.filter(g => g.duration > 8 && !g.context.includes('before death'));
+        const significantGaps = gaps.filter(g => g.duration > gapThreshold && !g.context.includes('before death'));
         const totalIdleTime = significantGaps.reduce((s, g) => s + g.duration, 0);
         const activeTime = Math.min(deathTime, pull.duration_sec);
         const idlePct = activeTime > 0 ? (totalIdleTime / activeTime * 100) : 0;
@@ -2344,7 +2355,7 @@
               body: unexplained.slice(0, 4).map(g =>
                 `${g.duration.toFixed(0)}s gap from ${g.start.toFixed(0)}s-${g.end.toFixed(0)}s`
               ).join('; ') + `. ${classAdvice}`,
-              severity: idlePct > 20 ? 'critical' : 'warning'
+              severity: idlePct > gapIdleCritical ? 'critical' : 'warning'
             });
           }
         }

@@ -223,7 +223,7 @@
       </div>
       <div style="margin-bottom:1rem;">
         <label style="display:block;font-weight:600;margin-bottom:0.3rem;">API Key (v1)</label>
-        <input id="apiKeyInput" type="password" placeholder="Your WarcraftLogs v1 API key" style="width:100%;padding:0.5rem;border-radius:6px;border:1px solid #444;background:#1a1e2e;color:#e0e0e0;font-size:0.95rem;">
+        <input id="apiKeyInput" type="password" placeholder="API key (optional — uses default for public logs)" style="width:100%;padding:0.5rem;border-radius:6px;border:1px solid #444;background:#1a1e2e;color:#e0e0e0;font-size:0.95rem;">
         <div style="font-size:0.8rem;color:#888;margin-top:0.3rem;">Saved in localStorage. Never sent anywhere except WarcraftLogs.</div>
       </div>
       <button id="compareBtn" style="padding:0.6rem 1.5rem;border-radius:6px;border:none;background:var(--accent);color:#fff;font-weight:600;cursor:pointer;font-size:0.95rem;">⚔️ Compare Reports</button>
@@ -1616,16 +1616,17 @@
         return;
       }
 
+      const DEFAULT_API_KEY = '3e4330ef2d0c5aa921215259c93d38a3';
+
       compareBtn.addEventListener('click', async () => {
         const ourUrl = document.getElementById('ourUrlInput').value.trim();
         const theirUrl = document.getElementById('theirUrlInput').value.trim();
-        const apiKey = apiKeyInput.value.trim();
+        const apiKey = apiKeyInput.value.trim() || DEFAULT_API_KEY;
 
         if (!ourUrl) { statusEl.textContent = 'Please enter your report URL.'; return; }
         if (!theirUrl) { statusEl.textContent = 'Please enter their report URL.'; return; }
-        if (!apiKey) { statusEl.textContent = 'Please enter your API key.'; return; }
 
-        localStorage.setItem('wcl_api_key', apiKey);
+        if (apiKeyInput.value.trim()) localStorage.setItem('wcl_api_key', apiKeyInput.value.trim());
         compareBtn.disabled = true;
         statusEl.textContent = 'Starting comparison...';
         progressEl.textContent = '';
