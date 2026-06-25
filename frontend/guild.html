@@ -221,14 +221,329 @@
 
     .layout {
       display: grid;
-      grid-template-columns: minmax(0, 1.2fr) minmax(340px, 0.8fr);
-      gap: 18px;
+      grid-template-columns: 290px minmax(0, 1fr);
+      gap: 20px;
       align-items: start;
     }
 
     .stack {
       display: grid;
       gap: 18px;
+    }
+
+    .sidebar-panel {
+      position: sticky;
+      top: 106px;
+      align-self: start;
+      max-height: calc(100vh - 130px);
+    }
+
+    .sidebar-card {
+      padding: 0;
+      overflow: hidden;
+      background: linear-gradient(180deg, rgba(12, 17, 29, 0.98), rgba(10, 14, 24, 0.94));
+      border-color: rgba(179, 169, 255, 0.12);
+    }
+
+    .sidebar-shell {
+      display: grid;
+      grid-template-rows: minmax(0, 1fr) auto;
+      min-height: calc(100vh - 130px);
+    }
+
+    .sidebar-rail {
+      padding: 18px;
+      border-right: 1px solid rgba(179, 169, 255, 0.08);
+      display: grid;
+      gap: 16px;
+      min-height: 0;
+    }
+
+    .sidebar-section-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+    }
+
+    .sidebar-section-head h2,
+    .sidebar-section-head h3 {
+      margin: 0;
+      font-size: 1rem;
+    }
+
+    .sidebar-kicker {
+      font-size: 0.72rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+
+    .sidebar-raid-shell {
+      display: grid;
+      gap: 14px;
+      min-height: 0;
+    }
+
+    .sidebar-raid-list {
+      min-height: 0;
+      overflow: auto;
+      padding-right: 4px;
+    }
+
+    .sidebar-raid-list .table-wrap {
+      border-radius: 18px;
+      border-color: rgba(179, 169, 255, 0.08);
+      background: rgba(255, 255, 255, 0.02);
+      overflow: visible;
+    }
+
+    .sidebar-raid-list table,
+    .sidebar-raid-list tbody,
+    .sidebar-raid-list tr,
+    .sidebar-raid-list td {
+      display: block;
+      width: 100%;
+      min-width: 0;
+    }
+
+    .sidebar-raid-list thead {
+      display: none;
+    }
+
+    .sidebar-raid-list tbody {
+      padding: 8px;
+    }
+
+    .sidebar-raid-list .raid-row {
+      position: relative;
+      padding: 12px 14px 12px 18px;
+      margin-bottom: 8px;
+      border-radius: 16px;
+      border: 1px solid rgba(179, 169, 255, 0.08);
+      background: rgba(255, 255, 255, 0.02);
+      cursor: pointer;
+      transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+    }
+
+    .sidebar-raid-list .raid-row::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 10px;
+      bottom: 10px;
+      width: 3px;
+      border-radius: 999px;
+      background: linear-gradient(180deg, rgba(143, 124, 255, 0.2), rgba(232, 102, 168, 0.18), rgba(91, 141, 239, 0.18));
+      opacity: 0;
+      transition: opacity 0.2s ease, transform 0.2s ease;
+    }
+
+    .sidebar-raid-list .raid-row:hover {
+      background: rgba(143, 124, 255, 0.08);
+      border-color: rgba(143, 124, 255, 0.18);
+      transform: translateX(2px);
+    }
+
+    .sidebar-raid-list .raid-row:hover::before,
+    .sidebar-raid-list .raid-row.active::before {
+      opacity: 1;
+    }
+
+    .sidebar-raid-list .raid-row.active {
+      background: linear-gradient(135deg, rgba(143, 124, 255, 0.16), rgba(232, 102, 168, 0.08), rgba(91, 141, 239, 0.08));
+      border-color: rgba(143, 124, 255, 0.22);
+    }
+
+    .sidebar-raid-list .raid-row td {
+      border: 0;
+      padding: 0;
+      background: transparent !important;
+      text-align: left;
+    }
+
+    .sidebar-raid-list .raid-row td:nth-child(1) {
+      margin-bottom: 6px;
+    }
+
+    .sidebar-raid-list .raid-row td:nth-child(1) .link-btn {
+      width: 100%;
+      font-size: 0.9rem;
+      color: var(--text);
+    }
+
+    .sidebar-raid-list .raid-row td:nth-child(2),
+    .sidebar-raid-list .raid-row td:nth-child(3) {
+      display: inline-flex;
+      align-items: center;
+      font-size: 0.78rem;
+      color: var(--muted);
+      margin-right: 10px;
+    }
+
+    .sidebar-raid-list .raid-row td:nth-child(2)::before {
+      content: "Zone";
+      margin-right: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-size: 0.68rem;
+      color: rgba(255, 255, 255, 0.45);
+    }
+
+    .sidebar-raid-list .raid-row td:nth-child(3)::before {
+      content: "Raid";
+      margin-right: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-size: 0.68rem;
+      color: rgba(255, 255, 255, 0.45);
+    }
+
+    .sidebar-raid-list .raid-row td:nth-child(4),
+    .sidebar-raid-list .raid-row td:nth-child(5) {
+      display: none;
+    }
+
+    .sidebar-actions {
+      padding: 0 18px 18px;
+      border-top: 1px solid rgba(179, 169, 255, 0.08);
+      background: rgba(255, 255, 255, 0.015);
+    }
+
+    .sidebar-nav {
+      display: grid;
+      gap: 8px;
+      margin-top: 14px;
+    }
+
+    .sidebar-nav-button {
+      width: 100%;
+      justify-content: flex-start;
+      padding: 12px 14px;
+      border-radius: 14px;
+      border: 1px solid rgba(179, 169, 255, 0.08);
+      border-left: 3px solid transparent;
+      background: rgba(255, 255, 255, 0.02);
+      color: var(--muted);
+      font-weight: 600;
+      transition: 0.2s ease;
+    }
+
+    .sidebar-nav-button:hover,
+    .sidebar-nav-button.view-active {
+      color: var(--text);
+      background: rgba(143, 124, 255, 0.1);
+      border-color: rgba(143, 124, 255, 0.16);
+      border-left-color: var(--accent);
+    }
+
+    .detail-panel {
+      min-height: calc(100vh - 130px);
+      padding: 24px;
+      display: grid;
+      align-content: start;
+      overflow: hidden;
+    }
+
+    .detail-panel-header {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      align-items: flex-start;
+      flex-wrap: wrap;
+      margin-bottom: 20px;
+      padding-bottom: 14px;
+      border-bottom: 1px solid rgba(179, 169, 255, 0.08);
+    }
+
+    .detail-panel-header h2 {
+      margin: 6px 0 4px;
+      font-size: 1.55rem;
+    }
+
+    .detail-panel-header .mini-note {
+      max-width: 640px;
+    }
+
+    .detail-views {
+      position: relative;
+      min-height: 420px;
+    }
+
+    .detail-view {
+      display: none;
+      opacity: 0;
+      transform: translateY(10px);
+      transition: opacity 0.22s ease, transform 0.22s ease;
+    }
+
+    .detail-view.view-active {
+      display: block;
+      opacity: 1;
+      transform: translateY(0);
+      animation: viewFade 0.22s ease;
+    }
+
+    .detail-view-header {
+      display: flex;
+      justify-content: space-between;
+      gap: 14px;
+      align-items: flex-start;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+
+    .detail-view-header h3 {
+      margin: 0;
+    }
+
+    .detail-view-actions {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .detail-note-card {
+      margin-bottom: 18px;
+      padding: 16px 18px;
+      border-radius: 16px;
+      border: 1px solid rgba(179, 169, 255, 0.12);
+      background: linear-gradient(135deg, rgba(143, 124, 255, 0.1), rgba(91, 141, 239, 0.06));
+    }
+
+    .manual-helper {
+      margin-top: 18px;
+      padding-top: 18px;
+      border-top: 1px solid rgba(179, 169, 255, 0.1);
+    }
+
+    .manual-helper-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: end;
+      margin-top: 10px;
+    }
+
+    .manual-select {
+      appearance: none;
+      width: 100%;
+      padding: 12px 14px;
+      border-radius: 14px;
+      border: 1px solid rgba(179, 169, 255, 0.16);
+      background: rgba(11, 15, 26, 0.78);
+      color: var(--text);
+    }
+
+    .view-hidden {
+      display: none !important;
+    }
+
+    @keyframes viewFade {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
     }
 
     .card {
@@ -652,13 +967,47 @@
     }
 
     @media (max-width: 1080px) {
-      .layout { grid-template-columns: 1fr; }
+      .layout { grid-template-columns: 260px minmax(0, 1fr); }
+    }
+
+    @media (max-width: 767px) {
+      .layout {
+        grid-template-columns: 1fr;
+      }
+
+      .sidebar-panel,
+      .detail-panel {
+        position: static;
+        max-height: none;
+        min-height: 0;
+      }
+
+      .sidebar-shell {
+        min-height: 0;
+      }
+
+      .sidebar-rail {
+        padding-bottom: 14px;
+      }
+
+      .sidebar-raid-list {
+        max-height: 280px;
+      }
+
+      .sidebar-nav {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .detail-panel {
+        padding: 20px;
+      }
     }
 
     @media (max-width: 720px) {
       .app { padding: 16px; }
       .hero h1 { font-size: 1.6rem; }
       .manual-form { grid-template-columns: 1fr; }
+      .manual-helper-grid { grid-template-columns: 1fr; }
       table { min-width: 540px; }
       .prep-top { align-items: flex-start; flex-direction: column; }
       .app-nav {
@@ -693,74 +1042,119 @@
     </div>
 
     <div class="layout">
-      <div class="stack">
-        <section class="card">
-          <div class="section-header">
-            <div>
-              <h2>Recent Raids</h2>
-              <div class="mini-note">Click a report to open full analysis. Use Prep Audit to inspect raid readiness.</div>
+      <aside class="sidebar-panel">
+        <section class="card sidebar-card">
+          <div class="sidebar-shell">
+            <div class="sidebar-rail">
+              <div class="sidebar-raid-shell">
+                <div class="sidebar-section-head">
+                  <div>
+                    <div class="sidebar-kicker">Raid Browser</div>
+                    <h2>Recent Raids</h2>
+                    <div class="mini-note">Pick a raid to inspect gear, enchants, and consumables.</div>
+                  </div>
+                  <div id="recentRaidMeta" class="pill muted">Loading raids</div>
+                </div>
+                <div class="sidebar-raid-list">
+                  <div id="recentRaidsContainer" class="table-wrap">
+                    <div class="status-box loading">Loading recent raids</div>
+                  </div>
+                </div>
+                <div id="loadMoreWrap" style="display:none;">
+                  <button id="loadMoreBtn" class="button" style="width:100%;">Load More</button>
+                </div>
+              </div>
             </div>
-            <div id="recentRaidMeta" class="pill muted">Loading raids</div>
-          </div>
-          <div id="recentRaidsContainer" class="table-wrap">
-            <div class="status-box loading">Loading recent raids</div>
-          </div>
-          <div id="loadMoreWrap" style="margin-top:14px;display:none;">
-            <button id="loadMoreBtn" class="button">Load More</button>
-          </div>
-        </section>
-
-        <section class="card">
-          <div class="section-header">
-            <div>
-              <h3>Or analyze any report</h3>
-              <div class="mini-note">Paste any WarcraftLogs report URL or raw code.</div>
-            </div>
-          </div>
-          <form id="manualForm" class="manual-form">
-            <div>
-              <label for="manualUrlInput">WarcraftLogs Report URL</label>
-              <input id="manualUrlInput" type="text" placeholder="https://fresh.warcraftlogs.com/reports/ABC123..." />
-            </div>
-            <button type="submit" class="button primary">Analyze Report</button>
-          </form>
-          <div id="manualError" class="mini-note" style="margin-top:10px;"></div>
-        </section>
-
-        <section class="card">
-          <div class="section-header">
-            <div>
-              <h2>Attendance by Lockout Week</h2>
-              <div id="attendanceMeta" class="mini-note">Loading attendance</div>
-            </div>
-            <div class="controls-row">
-              <div>
-                <label for="minRaidsInput">Min weeks seen</label>
-                <input id="minRaidsInput" type="number" min="1" step="1" value="3" style="width:100px;" />
+            <div class="sidebar-actions">
+              <div class="sidebar-kicker" style="margin-top:18px;">Views</div>
+              <div class="sidebar-nav" aria-label="Dashboard views">
+                <button type="button" class="button sidebar-nav-button view-active" data-view-target="attendance">Attendance</button>
+                <button type="button" class="button sidebar-nav-button" data-view-target="manual">Analyze Report</button>
               </div>
             </div>
           </div>
-          <div id="attendanceContainer" class="table-wrap">
-            <div class="status-box loading">Loading attendance</div>
-          </div>
-        </section>
-      </div>
-
-      <aside class="stack">
-        <section class="card">
-          <div class="section-header">
-            <div>
-              <h2>Raid Prep Audit</h2>
-              <div id="prepMeta" class="mini-note">Most recent raid selected by default.</div>
-            </div>
-            <div id="selectedRaidPill" class="pill code-pill">No raid selected</div>
-          </div>
-          <div id="prepSummary"></div>
-          <div id="prepContainer">
-            <div class="status-box">Select a raid to load prep audit.</div>
-          </div>
         </section>
       </aside>
+
+      <section class="card detail-panel">
+        <div class="detail-panel-header">
+          <div>
+            <div class="pill hero-kicker">Guild Operations</div>
+            <h2 id="detailTitle">Attendance Overview</h2>
+            <div id="detailSubtitle" class="mini-note">Track lockout consistency first, then drill into raid prep from the sidebar.</div>
+          </div>
+          <div class="pill muted">Dreamscythe-US · Lower City Discotek</div>
+        </div>
+
+        <div class="detail-views">
+          <section class="detail-view view-active" data-view="attendance">
+            <div class="detail-note-card">
+              Attendance is the default command center view. Use the raid list to jump into a specific prep audit when you need details.
+            </div>
+            <div class="detail-view-header">
+              <div>
+                <h3>Attendance by Lockout Week</h3>
+                <div id="attendanceMeta" class="mini-note">Loading attendance</div>
+              </div>
+              <div class="controls-row">
+                <div>
+                  <label for="minRaidsInput">Min weeks seen</label>
+                  <input id="minRaidsInput" type="number" min="1" step="1" value="3" style="width:100px;" />
+                </div>
+              </div>
+            </div>
+            <div id="attendanceContainer" class="table-wrap">
+              <div class="status-box loading">Loading attendance</div>
+            </div>
+          </section>
+
+          <section class="detail-view" data-view="prep">
+            <div class="detail-view-header">
+              <div>
+                <h3>Raid Prep Audit</h3>
+                <div id="prepMeta" class="mini-note">Most recent raid selected by default.</div>
+              </div>
+              <div class="detail-view-actions">
+                <div id="selectedRaidPill" class="pill code-pill">No raid selected</div>
+                <a id="prepOpenReportLink" class="button" href="/report">Open Full Analysis →</a>
+              </div>
+            </div>
+            <div id="prepSummary"></div>
+            <div id="prepContainer">
+              <div class="status-box">Select a raid to load prep audit.</div>
+            </div>
+          </section>
+
+          <section class="detail-view" data-view="manual">
+            <div class="detail-note-card">
+              Paste any WarcraftLogs URL or jump straight into a recent guild report from the dropdown.
+            </div>
+            <div class="detail-view-header">
+              <div>
+                <h3>Analyze Any Report</h3>
+                <div class="mini-note">Manual report entry for ad-hoc analysis outside the recent guild list.</div>
+              </div>
+            </div>
+            <form id="manualForm" class="manual-form">
+              <div>
+                <label for="manualUrlInput">WarcraftLogs Report URL</label>
+                <input id="manualUrlInput" type="text" placeholder="https://fresh.warcraftlogs.com/reports/ABC123..." />
+              </div>
+              <button type="submit" class="button primary">Analyze Report</button>
+            </form>
+            <div id="manualError" class="mini-note" style="margin-top:10px;"></div>
+            <div class="manual-helper">
+              <label for="manualRaidSelect">Recent guild raids</label>
+              <div class="manual-helper-grid">
+                <select id="manualRaidSelect" class="manual-select">
+                  <option value="">Loading recent raids…</option>
+                </select>
+                <button id="manualRaidOpenBtn" type="button" class="button">Open Selected Raid</button>
+              </div>
+            </div>
+          </section>
+        </div>
+      </section>
     </div>
   </div>
 
@@ -804,6 +1198,37 @@
       prepSummary: document.getElementById('prepSummary'),
       prepContainer: document.getElementById('prepContainer')
     };
+
+    const detailEls = {
+      title: document.getElementById('detailTitle'),
+      subtitle: document.getElementById('detailSubtitle'),
+      prepOpenReportLink: document.getElementById('prepOpenReportLink'),
+      manualRaidSelect: document.getElementById('manualRaidSelect'),
+      manualRaidOpenBtn: document.getElementById('manualRaidOpenBtn'),
+      navButtons: Array.from(document.querySelectorAll('[data-view-target]')),
+      views: {
+        attendance: document.querySelector('[data-view="attendance"]'),
+        prep: document.querySelector('[data-view="prep"]'),
+        manual: document.querySelector('[data-view="manual"]')
+      }
+    };
+
+    const DETAIL_VIEW_META = {
+      attendance: {
+        title: 'Attendance Overview',
+        subtitle: 'Track lockout consistency first, then drill into raid prep from the sidebar.'
+      },
+      prep: {
+        title: 'Raid Prep Audit',
+        subtitle: 'Inspect raid readiness with consumables, enchants, and average item level at a glance.'
+      },
+      manual: {
+        title: 'Manual Report Analysis',
+        subtitle: 'Open any WarcraftLogs report directly or jump to a recent guild log.'
+      }
+    };
+
+    let activeDetailView = 'attendance';
 
     function escapeHtml(value) {
       return String(value ?? '')
@@ -1115,6 +1540,52 @@
       window.location.href = `/report?code=${encodeURIComponent(code)}`;
     }
 
+    function setActiveDetailView(view) {
+      activeDetailView = DETAIL_VIEW_META[view] ? view : 'attendance';
+      Object.entries(detailEls.views).forEach(([key, node]) => {
+        if (!node) return;
+        node.classList.toggle('view-active', key === activeDetailView);
+        node.classList.toggle('view-hidden', key !== activeDetailView);
+      });
+      detailEls.navButtons.forEach(button => {
+        button.classList.toggle('view-active', button.dataset.viewTarget === activeDetailView);
+      });
+      const meta = DETAIL_VIEW_META[activeDetailView];
+      detailEls.title.textContent = meta.title;
+      detailEls.subtitle.textContent = meta.subtitle;
+    }
+
+    function syncPrepOpenLink(code = state.selectedReportCode) {
+      const safeCode = code || '';
+      detailEls.prepOpenReportLink.href = safeCode ? `/report?code=${encodeURIComponent(safeCode)}` : '/report';
+      detailEls.prepOpenReportLink.setAttribute('aria-disabled', safeCode ? 'false' : 'true');
+      detailEls.prepOpenReportLink.style.opacity = safeCode ? '1' : '0.55';
+      detailEls.prepOpenReportLink.style.pointerEvents = safeCode ? '' : 'none';
+    }
+
+    function syncManualRaidOptions() {
+      if (!detailEls.manualRaidSelect) return;
+      if (!state.reports.length) {
+        detailEls.manualRaidSelect.innerHTML = '<option value="">No recent raids available</option>';
+        return;
+      }
+      detailEls.manualRaidSelect.innerHTML = `
+        <option value="">Choose a recent guild raid</option>
+        ${state.reports.map(report => `
+          <option value="${escapeHtml(report.code)}">${escapeHtml(formatDate(report.date))} · ${escapeHtml(report.zone || 'Unknown')} · ${Number(report.player_count || 0)} players</option>
+        `).join('')}
+      `;
+    }
+
+    function enhanceSidebarRaids() {
+      const rows = els.recentRaidsContainer.querySelectorAll('.raid-row');
+      rows.forEach(row => {
+        row.tabIndex = 0;
+        row.setAttribute('role', 'button');
+        row.setAttribute('aria-label', `Show prep audit for ${row.dataset.openReport || 'raid report'}`);
+      });
+    }
+
     els.loadMoreBtn.addEventListener('click', () => loadReports(state.reportsPage + 1));
 
     els.manualForm.addEventListener('submit', event => {
@@ -1130,6 +1601,28 @@
     els.minRaidsInput.addEventListener('input', event => {
       state.minRaids = Math.max(1, Number(event.target.value || 1));
       renderAttendance();
+    });
+
+    els.recentRaidsContainer.addEventListener('click', event => {
+      const targetRow = event.target.closest('.raid-row');
+      if (!targetRow || !els.recentRaidsContainer.contains(targetRow)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const code = targetRow.dataset.openReport || targetRow.dataset.selectReport;
+      if (code) {
+        selectRaidForPrep(code, { fromUser: true });
+      }
+    }, true);
+
+    els.recentRaidsContainer.addEventListener('keydown', event => {
+      const targetRow = event.target.closest('.raid-row');
+      if (!targetRow) return;
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      event.preventDefault();
+      const code = targetRow.dataset.openReport || targetRow.dataset.selectReport;
+      if (code) {
+        selectRaidForPrep(code, { fromUser: true });
+      }
     });
 
     els.recentRaidsContainer.addEventListener('click', event => {
@@ -1155,6 +1648,36 @@
       }
       renderAttendance();
     });
+
+    detailEls.navButtons.forEach(button => {
+      button.addEventListener('click', () => setActiveDetailView(button.dataset.viewTarget));
+    });
+
+    detailEls.manualRaidOpenBtn.addEventListener('click', () => {
+      if (detailEls.manualRaidSelect.value) {
+        goToReport(detailEls.manualRaidSelect.value);
+      }
+    });
+
+    const originalRenderReports = renderReports;
+    renderReports = function(...args) {
+      originalRenderReports.apply(this, args);
+      syncManualRaidOptions();
+      enhanceSidebarRaids();
+    };
+
+    const originalSelectRaidForPrep = selectRaidForPrep;
+    selectRaidForPrep = async function(code, options = {}) {
+      syncPrepOpenLink(code);
+      await originalSelectRaidForPrep(code);
+      syncPrepOpenLink(code);
+      if (options.fromUser) {
+        setActiveDetailView('prep');
+      }
+    };
+
+    setActiveDetailView('attendance');
+    syncPrepOpenLink();
 
     loadReports();
     loadAttendance();
