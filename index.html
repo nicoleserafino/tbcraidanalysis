@@ -1901,21 +1901,23 @@
             });
           }
 
-          // Devastate/Shield Slam usage for threat
-          const devastate = spellCasts['Devastate'] || 0;
-          const shieldSlam = spellCasts['Shield Slam'] || 0;
-          const threatCasts = devastate + shieldSlam;
-          if (threatCasts < activeTime / 4 && activeTime > 30) {
-            findings.push({
-              title: `Low threat rotation activity: ${threatCasts} threat casts in ${activeTime.toFixed(0)}s`,
-              body: `Devastate (${devastate}) + Shield Slam (${shieldSlam}) should be constantly pressed. Target ~1 threat cast every 1.5s GCD. Low threat means DPS must throttle, which extends the fight and strains healers.`,
-              severity: 'warning'
-            });
+          // Devastate/Shield Slam usage for threat — skip on unblockable bosses (likely DW tanking)
+          if (!UNBLOCKABLE_BOSSES.has(bossKey)) {
+            const devastate = spellCasts['Devastate'] || 0;
+            const shieldSlam = spellCasts['Shield Slam'] || 0;
+            const threatCasts = devastate + shieldSlam;
+            if (threatCasts < activeTime / 4 && activeTime > 30) {
+              findings.push({
+                title: `Low threat rotation activity: ${threatCasts} threat casts in ${activeTime.toFixed(0)}s`,
+                body: `Devastate (${devastate}) + Shield Slam (${shieldSlam}) should be constantly pressed. Target ~1 threat cast every 1.5s GCD. Low threat means DPS must throttle, which extends the fight and strains healers.`,
+                severity: 'warning'
+              });
+            }
           }
         }
 
-        // Holy Shield uptime (Paladin)
-        if (playerClass === 'Paladin') {
+        // Holy Shield uptime (Paladin) — skip for unblockable bosses
+        if (playerClass === 'Paladin' && !UNBLOCKABLE_BOSSES.has(bossKey)) {
           const hsCasts = spellCasts['Holy Shield'] || 0;
           const activeTime = deaths.length ? deaths[0].relative_time : pull.duration_sec;
           // Holy Shield lasts 10s, 8 charges, 10s CD
@@ -2298,9 +2300,13 @@
       const isFeral = playerClass === 'Druid' && role === 'DPS';
       const skipCastGaps = isMeleeDPS || isFeral; // These classes use auto-attacks primarily
 
-      // KT has extensive forced downtime (weapon phase, transitions, MC, gravity lapse)
-      const gapThreshold = bossKey === BOSS_KEYS.KAEL ? 20 : 8;
-      const gapIdleCritical = bossKey === BOSS_KEYS.KAEL ? 35 : 20;
+      // Bosses with significant forced downtime — raise gap/severity thresholds
+      const HEAVY_DOWNTIME_BOSSES = new Set([BOSS_KEYS.KAEL, BOSS_KEYS.LURKER, BOSS_KEYS.VASHJ, BOSS_KEYS.ALAR, BOSS_KEYS.SOLARIAN]);
+      const MODERATE_DOWNTIME_BOSSES = new Set([BOSS_KEYS.LEO, BOSS_KEYS.MOROGRIM]);
+      const gapThreshold = HEAVY_DOWNTIME_BOSSES.has(bossKey) ? 20 :
+                           MODERATE_DOWNTIME_BOSSES.has(bossKey) ? 12 : 8;
+      const gapIdleCritical = HEAVY_DOWNTIME_BOSSES.has(bossKey) ? 35 :
+                              MODERATE_DOWNTIME_BOSSES.has(bossKey) ? 28 : 20;
 
       const castTimeline = pull.cast_timeline?.[player] || [];
       if (!skipCastGaps && castTimeline.length > 5) {
@@ -2361,6 +2367,9 @@
         }
 
         // CPM comparison (only vs same class or similar casters)
+        // On heavy downtime bosses, be less aggressive since peer averages are also noisy
+        const cpmThreshold = HEAVY_DOWNTIME_BOSSES.has(bossKey) ? 0.50 :
+                             MODERATE_DOWNTIME_BOSSES.has(bossKey) ? 0.55 : 0.65;
         const cpm = castTimeline.length / (activeTime / 60);
         const sameRole = getPullPlayers().filter(p => getPlayerRole(p) === role && p !== player && !['Warrior', 'Rogue'].includes(getAllPlayers()[p]?.class));
         const roleCpms = sameRole.map(p => {
@@ -2371,7 +2380,7 @@
         }).filter(x => x > 0);
         const avgCpm = roleCpms.length ? roleCpms.reduce((a,b) => a+b, 0) / roleCpms.length : 0;
 
-        if (avgCpm > 0 && cpm < avgCpm * 0.65) {
+        if (avgCpm > 0 && cpm < avgCpm * cpmThreshold) {
           findings.push({
             title: `Low activity: ${cpm.toFixed(1)} casts/min vs avg ${avgCpm.toFixed(1)}`,
             body: `Cast frequency is ${((1 - cpm/avgCpm) * 100).toFixed(0)}% below peers. Significant downtime detected — review if movement or mechanics are causing this, or if there are periods where you simply stop pressing buttons.`,
