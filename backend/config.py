@@ -7,6 +7,8 @@ class Settings(BaseSettings):
     wcl_client_secret: str
     # Legacy v1 key for fallback
     api_key: str = ""
+    # Guild config
+    guild_id: int = 821862  # Lower City Discotek on Dreamscythe
     # Azure OpenAI (Phase 3)
     azure_openai_endpoint: str = ""
     azure_openai_key: str = ""

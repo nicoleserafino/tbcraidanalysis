@@ -115,7 +115,37 @@ query ReportTable($code: String!, $fightIDs: [Int]!, $dataType: TableDataType!, 
 
 # v2 dataTypes for events:
 # DamageDone, DamageTaken, Healing, Casts, Buffs, Debuffs,
-# Deaths, Threat, Resources, Interrupts, Dispels
+# Deaths, Threat, Resources, Interrupts, Dispels, CombatantInfo
 
 # v2 dataTypes for tables:
 # DamageDone, DamageTaken, Healing, Casts, Buffs, Debuffs, Deaths, Threat
+
+# ─── Guild Queries ────────────────────────────────────────────────────
+
+GUILD_ATTENDANCE = """
+query GuildAttendance($guildID: Int!, $limit: Int, $page: Int) {
+  guildData {
+    guild(id: $guildID) {
+      id
+      name
+      server { name slug region { compactName } }
+      attendance(limit: $limit, page: $page) {
+        data {
+          code
+          startTime
+          zone { name }
+          players {
+            name
+            type
+            presence
+          }
+        }
+        has_more_pages
+        total
+        current_page
+        last_page
+      }
+    }
+  }
+}
+"""

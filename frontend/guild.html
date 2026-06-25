@@ -1,0 +1,909 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lower City Discotek — Guild Dashboard</title>
+  <style>
+    :root {
+      --bg: #0b0f17;
+      --panel: #121927;
+      --panel-2: #182234;
+      --panel-3: #1f2d45;
+      --border: rgba(255, 255, 255, 0.08);
+      --text: #e8edf8;
+      --muted: #98a6c4;
+      --kill: #44d17a;
+      --wipe: #ff6363;
+      --tank: #57a6ff;
+      --healer: #55d48f;
+      --dps: #ffad42;
+      --accent: #8f7cff;
+      --warning: #ffd166;
+      --shadow: 0 18px 40px rgba(0, 0, 0, 0.25);
+      --radius: 18px;
+      --radius-sm: 12px;
+      --font: Inter, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+      --mono: ui-monospace, SFMono-Regular, SFMono-Regular, Menlo, Consolas, Liberation Mono, monospace;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: var(--font);
+      color: var(--text);
+      background:
+        radial-gradient(circle at top, rgba(143, 124, 255, 0.18), transparent 28%),
+        linear-gradient(180deg, #0a0f18 0%, #0b0f17 60%, #0d111a 100%);
+      min-height: 100vh;
+    }
+
+    .app {
+      max-width: 1440px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    .topbar {
+      display: flex;
+      gap: 20px;
+      flex-wrap: wrap;
+      align-items: stretch;
+      justify-content: space-between;
+      margin-bottom: 22px;
+    }
+
+    .hero, .card, .summary-card, .filter-card {
+      background: linear-gradient(180deg, rgba(23, 31, 48, 0.96), rgba(18, 25, 39, 0.95));
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+
+    .hero {
+      flex: 1 1 100%;
+      padding: 22px;
+      backdrop-filter: blur(8px);
+    }
+
+    .hero h1 {
+      margin: 0 0 8px;
+      font-size: 2rem;
+      letter-spacing: 0.02em;
+    }
+
+    .subtitle, .muted { color: var(--muted); }
+
+    .nav-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 16px;
+    }
+
+    .nav-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 16px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--text);
+      text-decoration: none;
+      transition: 0.2s ease;
+    }
+
+    .nav-link:hover, .nav-link.active {
+      background: linear-gradient(180deg, rgba(143, 124, 255, 0.35), rgba(65, 86, 160, 0.25));
+      border-color: rgba(143, 124, 255, 0.45);
+      transform: translateY(-1px);
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1.2fr) minmax(340px, 0.8fr);
+      gap: 18px;
+      align-items: start;
+    }
+
+    .stack {
+      display: grid;
+      gap: 18px;
+    }
+
+    .card {
+      padding: 18px;
+      overflow: hidden;
+    }
+
+    .section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+    }
+
+    .section-header h2, .section-header h3, .card h3 {
+      margin: 0;
+      font-weight: 700;
+    }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+
+    .summary-card {
+      padding: 14px;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.04);
+    }
+
+    .stat-label {
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+
+    .stat-value {
+      font-size: 1.45rem;
+      font-weight: 700;
+    }
+
+    .table-wrap {
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 640px;
+    }
+
+    th, td {
+      padding: 12px 10px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      text-align: left;
+      vertical-align: middle;
+    }
+
+    th {
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      cursor: pointer;
+      user-select: none;
+    }
+
+    tr:hover td {
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    .raid-row.active td {
+      background: rgba(87, 166, 255, 0.08);
+    }
+
+    .link-btn, .button, button {
+      font: inherit;
+    }
+
+    .link-btn {
+      background: none;
+      border: none;
+      padding: 0;
+      color: #9ac6ff;
+      cursor: pointer;
+      font-weight: 700;
+      text-align: left;
+    }
+
+    .link-btn:hover { color: #cbe2ff; }
+
+    .button {
+      border: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--text);
+      padding: 10px 14px;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: 0.2s ease;
+    }
+
+    .button:hover:not(:disabled) {
+      background: rgba(255, 255, 255, 0.08);
+      transform: translateY(-1px);
+    }
+
+    .button.primary {
+      background: linear-gradient(180deg, #57a6ff, #3f82df);
+      border-color: rgba(87, 166, 255, 0.45);
+      color: white;
+      font-weight: 700;
+    }
+
+    .button:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .controls-row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    label {
+      display: block;
+      font-size: 0.84rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+
+    input {
+      width: 100%;
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: var(--panel-2);
+      color: var(--text);
+      outline: none;
+    }
+
+    .manual-form {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+      align-items: end;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.04);
+      font-size: 0.92rem;
+    }
+
+    .code-pill {
+      font-family: var(--mono);
+      font-size: 0.85rem;
+      color: #c7dcff;
+    }
+
+    .empty, .status-box {
+      text-align: center;
+      padding: 24px;
+      color: var(--muted);
+      border: 1px dashed rgba(255,255,255,0.16);
+      border-radius: 14px;
+      background: rgba(255,255,255,0.025);
+    }
+
+    .status-box.error {
+      color: #ffb4b4;
+      border-color: rgba(255, 99, 99, 0.35);
+      background: rgba(255, 99, 99, 0.06);
+    }
+
+    .status-box.loading::after {
+      content: '...';
+      animation: blink 1.1s infinite;
+    }
+
+    @keyframes blink {
+      0%, 20% { opacity: 0.2; }
+      50% { opacity: 1; }
+      100% { opacity: 0.2; }
+    }
+
+    .attendance-good { color: var(--kill); font-weight: 700; }
+    .attendance-mid { color: var(--warning); font-weight: 700; }
+    .attendance-low { color: var(--wipe); font-weight: 700; }
+
+    .class-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 4px 9px;
+      border-radius: 999px;
+      font-size: 0.78rem;
+      font-weight: 700;
+      border: 1px solid rgba(255,255,255,0.08);
+      color: #111;
+    }
+
+    .class-warrior { background: #c79c6e; }
+    .class-paladin { background: #f58cba; }
+    .class-hunter { background: #abd473; }
+    .class-rogue { background: #fff569; }
+    .class-priest { background: #f0f0f0; }
+    .class-shaman { background: #0070de; color: #f7fbff; }
+    .class-mage { background: #69ccf0; }
+    .class-warlock { background: #9482c9; }
+    .class-druid { background: #ff7d0a; }
+
+    .prep-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 14px;
+    }
+
+    .prep-card {
+      padding: 16px;
+      border-radius: 16px;
+      border: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.04);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
+    }
+
+    .prep-card.good { border-left: 4px solid var(--kill); }
+    .prep-card.warn { border-left: 4px solid var(--warning); }
+    .prep-card.bad { border-left: 4px solid var(--wipe); }
+
+    .prep-top {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+
+    .prep-name {
+      font-size: 1.05rem;
+      font-weight: 700;
+      margin: 0 0 6px;
+    }
+
+    .prep-meta, .mini-note {
+      font-size: 0.88rem;
+      color: var(--muted);
+    }
+
+    .audit-line {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      margin: 8px 0;
+      font-size: 0.9rem;
+    }
+
+    .audit-label {
+      color: var(--muted);
+      min-width: 110px;
+    }
+
+    .audit-value {
+      text-align: right;
+      flex: 1;
+    }
+
+    .audit-list {
+      margin-top: 8px;
+      font-size: 0.82rem;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    .badge-stack {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .status-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 999px;
+      display: inline-block;
+      margin-right: 8px;
+    }
+
+    .dot-good { background: var(--kill); }
+    .dot-warn { background: var(--warning); }
+    .dot-bad { background: var(--wipe); }
+
+    .subtle-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 12px;
+    }
+
+    .small-stat {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px;
+    }
+
+    .small-stat .value {
+      font-size: 1.15rem;
+      font-weight: 700;
+      margin-top: 4px;
+    }
+
+    @media (max-width: 1080px) {
+      .layout { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 720px) {
+      .app { padding: 16px; }
+      .hero h1 { font-size: 1.6rem; }
+      .manual-form { grid-template-columns: 1fr; }
+      table { min-width: 540px; }
+      .prep-top { align-items: flex-start; flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="topbar">
+      <section class="hero">
+        <div class="pill">Guild Dashboard</div>
+        <h1>Lower City Discotek</h1>
+        <div class="subtitle">Dreamscythe-US</div>
+        <nav class="nav-links" aria-label="Primary navigation">
+          <a href="/" class="nav-link active">Guild Dashboard</a>
+          <a href="/report" class="nav-link">Report Analysis</a>
+          <a href="/compare" class="nav-link">Compare Logs</a>
+        </nav>
+      </section>
+    </div>
+
+    <div class="layout">
+      <div class="stack">
+        <section class="card">
+          <div class="section-header">
+            <div>
+              <h2>Recent Raids</h2>
+              <div class="mini-note">Click a report to open full analysis. Use Prep Audit to inspect raid readiness.</div>
+            </div>
+            <div id="recentRaidMeta" class="pill muted">Loading raids</div>
+          </div>
+          <div id="recentRaidsContainer" class="table-wrap">
+            <div class="status-box loading">Loading recent raids</div>
+          </div>
+          <div id="loadMoreWrap" style="margin-top:14px;display:none;">
+            <button id="loadMoreBtn" class="button">Load More</button>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="section-header">
+            <div>
+              <h3>Or analyze any report</h3>
+              <div class="mini-note">Paste any WarcraftLogs report URL or raw code.</div>
+            </div>
+          </div>
+          <form id="manualForm" class="manual-form">
+            <div>
+              <label for="manualUrlInput">WarcraftLogs Report URL</label>
+              <input id="manualUrlInput" type="text" placeholder="https://fresh.warcraftlogs.com/reports/ABC123..." />
+            </div>
+            <button type="submit" class="button primary">Analyze Report</button>
+          </form>
+          <div id="manualError" class="mini-note" style="margin-top:10px;"></div>
+        </section>
+
+        <section class="card">
+          <div class="section-header">
+            <div>
+              <h2>Attendance</h2>
+              <div id="attendanceMeta" class="mini-note">Loading attendance</div>
+            </div>
+            <div class="controls-row">
+              <div>
+                <label for="minRaidsInput">Minimum raids</label>
+                <input id="minRaidsInput" type="number" min="1" step="1" value="5" style="width:100px;" />
+              </div>
+            </div>
+          </div>
+          <div id="attendanceContainer" class="table-wrap">
+            <div class="status-box loading">Loading attendance</div>
+          </div>
+        </section>
+      </div>
+
+      <aside class="stack">
+        <section class="card">
+          <div class="section-header">
+            <div>
+              <h2>Raid Prep Audit</h2>
+              <div id="prepMeta" class="mini-note">Most recent raid selected by default.</div>
+            </div>
+            <div id="selectedRaidPill" class="pill code-pill">No raid selected</div>
+          </div>
+          <div id="prepSummary"></div>
+          <div id="prepContainer">
+            <div class="status-box">Select a raid to load prep audit.</div>
+          </div>
+        </section>
+      </aside>
+    </div>
+  </div>
+
+  <script>
+    const CLASS_COLORS = {
+      Warrior: 'class-warrior',
+      Paladin: 'class-paladin',
+      Hunter: 'class-hunter',
+      Rogue: 'class-rogue',
+      Priest: 'class-priest',
+      Shaman: 'class-shaman',
+      Mage: 'class-mage',
+      Warlock: 'class-warlock',
+      Druid: 'class-druid'
+    };
+
+    const state = {
+      reports: [],
+      reportsPage: 1,
+      reportsHasMore: false,
+      attendance: null,
+      minRaids: 5,
+      attendanceSort: { key: 'attendance_pct', dir: 'desc' },
+      selectedReportCode: '',
+      prepAudit: null
+    };
+
+    const els = {
+      recentRaidMeta: document.getElementById('recentRaidMeta'),
+      recentRaidsContainer: document.getElementById('recentRaidsContainer'),
+      loadMoreWrap: document.getElementById('loadMoreWrap'),
+      loadMoreBtn: document.getElementById('loadMoreBtn'),
+      manualForm: document.getElementById('manualForm'),
+      manualUrlInput: document.getElementById('manualUrlInput'),
+      manualError: document.getElementById('manualError'),
+      attendanceMeta: document.getElementById('attendanceMeta'),
+      attendanceContainer: document.getElementById('attendanceContainer'),
+      minRaidsInput: document.getElementById('minRaidsInput'),
+      prepMeta: document.getElementById('prepMeta'),
+      selectedRaidPill: document.getElementById('selectedRaidPill'),
+      prepSummary: document.getElementById('prepSummary'),
+      prepContainer: document.getElementById('prepContainer')
+    };
+
+    function escapeHtml(value) {
+      return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function formatDate(timestamp) {
+      if (!timestamp) return 'Unknown';
+      return new Date(timestamp).toLocaleString(undefined, {
+        year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
+      });
+    }
+
+    function extractReportCode(value) {
+      const input = (value || '').trim();
+      const match = input.match(/\/reports\/([A-Za-z0-9]+)/);
+      if (match) return match[1];
+      if (/^[A-Za-z0-9]+$/.test(input)) return input;
+      throw new Error('Could not extract report code from URL');
+    }
+
+    function classBadge(className) {
+      const cls = CLASS_COLORS[className] || '';
+      return `<span class="class-badge ${cls}">${escapeHtml(className || 'Unknown')}</span>`;
+    }
+
+    function attendanceClass(value) {
+      if (value >= 90) return 'attendance-good';
+      if (value >= 70) return 'attendance-mid';
+      return 'attendance-low';
+    }
+
+    function prepStatus(player) {
+      const missingEnchantCount = (player.missing_enchants || []).length;
+      const hasMainConsume = !!(player.consumables?.flask || (player.consumables?.elixirs || []).length);
+      const hasFood = !!player.consumables?.food;
+      const hasWeapon = !!player.consumables?.weapon_buff;
+      const majorIssues = missingEnchantCount >= 3 || !hasMainConsume || !hasFood;
+      const minorIssues = missingEnchantCount > 0 || !hasWeapon;
+      if (!majorIssues && !minorIssues) return 'good';
+      if (majorIssues) return 'bad';
+      return 'warn';
+    }
+
+    function fetchJson(url) {
+      return fetch(url).then(async response => {
+        if (!response.ok) {
+          const body = await response.json().catch(() => ({ detail: response.statusText }));
+          throw new Error(body.detail || `Request failed (${response.status})`);
+        }
+        return response.json();
+      });
+    }
+
+    async function loadReports(page = 1) {
+      els.recentRaidMeta.textContent = page === 1 ? 'Loading raids' : 'Loading more raids';
+      els.loadMoreBtn.disabled = true;
+      try {
+        const data = await fetchJson(`/api/guild/reports?limit=10&page=${page}`);
+        state.reportsPage = data.page || page;
+        state.reportsHasMore = !!data.has_more;
+        state.reports = page === 1 ? (data.reports || []) : state.reports.concat(data.reports || []);
+        els.recentRaidMeta.textContent = `${state.reports.length} recent raids loaded`;
+        renderReports();
+        if (!state.selectedReportCode && state.reports.length) {
+          selectRaidForPrep(state.reports[0].code);
+        }
+      } catch (error) {
+        els.recentRaidMeta.textContent = 'Failed to load raids';
+        els.recentRaidsContainer.innerHTML = `<div class="status-box error">${escapeHtml(error.message)}</div>`;
+      } finally {
+        els.loadMoreWrap.style.display = state.reportsHasMore ? '' : 'none';
+        els.loadMoreBtn.disabled = false;
+      }
+    }
+
+    function renderReports() {
+      if (!state.reports.length) {
+        els.recentRaidsContainer.innerHTML = '<div class="empty">No guild raids found.</div>';
+        return;
+      }
+
+      els.recentRaidsContainer.innerHTML = `
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Zone</th>
+              <th>Players</th>
+              <th>Report</th>
+              <th style="width:130px;">Prep Audit</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${state.reports.map(report => `
+              <tr class="raid-row ${state.selectedReportCode === report.code ? 'active' : ''}" data-open-report="${escapeHtml(report.code)}">
+                <td><button class="link-btn" data-open-report="${escapeHtml(report.code)}">${escapeHtml(formatDate(report.date))}</button></td>
+                <td>${escapeHtml(report.zone || 'Unknown')}</td>
+                <td>${Number(report.player_count || 0)}</td>
+                <td><span class="pill code-pill">${escapeHtml(report.code)}</span></td>
+                <td><button class="button" data-select-report="${escapeHtml(report.code)}">${state.selectedReportCode === report.code ? 'Selected' : 'Prep Audit'}</button></td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      `;
+    }
+
+    async function loadAttendance() {
+      els.attendanceMeta.textContent = 'Loading attendance';
+      try {
+        state.attendance = await fetchJson('/api/guild/attendance');
+        els.attendanceMeta.textContent = `${state.attendance.total_raids || 0} total raids across tracked logs`;
+        renderAttendance();
+      } catch (error) {
+        els.attendanceMeta.textContent = 'Failed to load attendance';
+        els.attendanceContainer.innerHTML = `<div class="status-box error">${escapeHtml(error.message)}</div>`;
+      }
+    }
+
+    function sortedAttendancePlayers() {
+      const players = (state.attendance?.players || []).filter(player => (player.total_raids_seen || 0) >= state.minRaids);
+      const { key, dir } = state.attendanceSort;
+      const sorted = [...players].sort((a, b) => {
+        const left = a[key];
+        const right = b[key];
+        if (typeof left === 'string' || typeof right === 'string') {
+          return String(left).localeCompare(String(right));
+        }
+        return Number(left || 0) - Number(right || 0);
+      });
+      return dir === 'asc' ? sorted : sorted.reverse();
+    }
+
+    function sortIndicator(key) {
+      if (state.attendanceSort.key !== key) return '';
+      return state.attendanceSort.dir === 'asc' ? ' ▲' : ' ▼';
+    }
+
+    function renderAttendance() {
+      if (!state.attendance) {
+        els.attendanceContainer.innerHTML = '<div class="empty">Attendance data unavailable.</div>';
+        return;
+      }
+      const players = sortedAttendancePlayers();
+      if (!players.length) {
+        els.attendanceContainer.innerHTML = '<div class="empty">No players match the current minimum raids filter.</div>';
+        return;
+      }
+      els.attendanceContainer.innerHTML = `
+        <table>
+          <thead>
+            <tr>
+              <th data-sort-key="name">Player Name${sortIndicator('name')}</th>
+              <th data-sort-key="class">Class${sortIndicator('class')}</th>
+              <th data-sort-key="raids_present">Raids Present${sortIndicator('raids_present')}</th>
+              <th data-sort-key="total_raids_seen">Total Raids${sortIndicator('total_raids_seen')}</th>
+              <th data-sort-key="attendance_pct">Attendance %${sortIndicator('attendance_pct')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${players.map(player => `
+              <tr>
+                <td>${escapeHtml(player.name)}</td>
+                <td>${classBadge(player.class)}</td>
+                <td>${Number(player.raids_present || 0)}</td>
+                <td>${Number(player.total_raids_seen || 0)}</td>
+                <td class="${attendanceClass(Number(player.attendance_pct || 0))}">${Number(player.attendance_pct || 0).toFixed(1)}%</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      `;
+    }
+
+    function renderPrepSummary(players, report) {
+      const fullyConsumed = players.filter(player => player.consumables?.fully_consumed).length;
+      const missingEnchants = players.filter(player => (player.missing_enchants || []).length > 0).length;
+      const fullyPrepped = players.filter(player => prepStatus(player) === 'good').length;
+      const summaryHtml = `
+        <div class="summary-grid">
+          <div class="summary-card">
+            <div class="stat-label">Selected Raid</div>
+          <div class="stat-value" style="font-size:1.1rem;">${escapeHtml(report?.zone || state.prepAudit?.fight_name || 'Unknown')}</div>
+            <div class="mini-note">${escapeHtml(formatDate(report?.date))}</div>
+          </div>
+          <div class="summary-card">
+            <div class="stat-label">Fully Consumed</div>
+            <div class="stat-value">${fullyConsumed}/${players.length}</div>
+          </div>
+          <div class="summary-card">
+            <div class="stat-label">Missing Enchants</div>
+            <div class="stat-value">${missingEnchants}</div>
+          </div>
+          <div class="summary-card">
+            <div class="stat-label">Fully Prepped</div>
+            <div class="stat-value">${fullyPrepped}/${players.length}</div>
+          </div>
+        </div>
+      `;
+      els.prepSummary.innerHTML = summaryHtml;
+    }
+
+    function renderPrepAudit() {
+      const report = state.reports.find(item => item.code === state.selectedReportCode);
+      const players = state.prepAudit?.players || [];
+      if (!players.length) {
+        els.prepContainer.innerHTML = '<div class="empty">No gear audit data available for this raid.</div>';
+        return;
+      }
+      renderPrepSummary(players, report);
+      els.prepContainer.innerHTML = `
+        <div class="prep-grid">
+          ${players.map(player => {
+            const status = prepStatus(player);
+            const consume = player.consumables || {};
+            const consumeText = consume.flask || (consume.elixirs || []).join(', ') || 'Missing flask/elixirs';
+            const foodText = consume.food ? 'Well Fed present' : 'Missing food buff';
+            const weaponText = consume.weapon_buff || 'Missing weapon buff';
+            return `
+              <article class="prep-card ${status}">
+                <div class="prep-top">
+                  <div>
+                    <div class="prep-name">${escapeHtml(player.name)}</div>
+                    <div class="badge-stack">
+                      ${classBadge(player.class)}
+                      <span class="pill">Avg ilvl ${Number(player.avg_ilvl || 0)}</span>
+                    </div>
+                  </div>
+                  <div class="pill">
+                    <span class="status-dot ${status === 'good' ? 'dot-good' : status === 'warn' ? 'dot-warn' : 'dot-bad'}"></span>
+                    ${status === 'good' ? 'Ready' : status === 'warn' ? 'Minor issues' : 'Needs prep'}
+                  </div>
+                </div>
+                <div class="audit-line">
+                  <span class="audit-label">Enchants</span>
+                  <span class="audit-value">${Number(player.enchant_count || 0)}/${Number(player.total_enchantable || 0)} enchanted</span>
+                </div>
+                <div class="audit-list">${(player.missing_enchants || []).length ? `Missing: ${escapeHtml(player.missing_enchants.join(', '))}` : 'All tracked enchant slots covered.'}</div>
+                <div class="audit-line">
+                  <span class="audit-label">Flask / Elixir</span>
+                  <span class="audit-value ${consume.flask || (consume.elixirs || []).length ? 'attendance-good' : 'attendance-low'}">${escapeHtml(consumeText)}</span>
+                </div>
+                <div class="audit-line">
+                  <span class="audit-label">Food</span>
+                  <span class="audit-value ${consume.food ? 'attendance-good' : 'attendance-low'}">${escapeHtml(foodText)}</span>
+                </div>
+                <div class="audit-line">
+                  <span class="audit-label">Weapon Buff</span>
+                  <span class="audit-value ${consume.weapon_buff ? 'attendance-good' : 'attendance-mid'}">${escapeHtml(weaponText)}</span>
+                </div>
+              </article>
+            `;
+          }).join('')}
+        </div>
+      `;
+    }
+
+    async function selectRaidForPrep(code) {
+      if (!code) return;
+      state.selectedReportCode = code;
+      state.prepAudit = null;
+      renderReports();
+      els.selectedRaidPill.textContent = code;
+      els.prepMeta.textContent = 'Loading prep audit';
+      els.prepSummary.innerHTML = '';
+      els.prepContainer.innerHTML = '<div class="status-box loading">Loading raid prep audit</div>';
+      try {
+        state.prepAudit = await fetchJson(`/api/report/${code}/gear`);
+        const report = state.reports.find(item => item.code === code);
+        els.prepMeta.textContent = `${report?.zone || state.prepAudit.fight_name || 'Raid'} • ${formatDate(report?.date)}`;
+        renderPrepAudit();
+      } catch (error) {
+        els.prepMeta.textContent = 'Failed to load prep audit';
+        els.prepContainer.innerHTML = `<div class="status-box error">${escapeHtml(error.message)}</div>`;
+      }
+    }
+
+    function goToReport(code) {
+      window.location.href = `/report?code=${encodeURIComponent(code)}`;
+    }
+
+    els.loadMoreBtn.addEventListener('click', () => loadReports(state.reportsPage + 1));
+
+    els.manualForm.addEventListener('submit', event => {
+      event.preventDefault();
+      els.manualError.textContent = '';
+      try {
+        goToReport(extractReportCode(els.manualUrlInput.value));
+      } catch (error) {
+        els.manualError.textContent = error.message;
+      }
+    });
+
+    els.minRaidsInput.addEventListener('input', event => {
+      state.minRaids = Math.max(1, Number(event.target.value || 1));
+      renderAttendance();
+    });
+
+    els.recentRaidsContainer.addEventListener('click', event => {
+      const selectButton = event.target.closest('[data-select-report]');
+      if (selectButton) {
+        selectRaidForPrep(selectButton.dataset.selectReport);
+        return;
+      }
+      const openButton = event.target.closest('[data-open-report]');
+      if (openButton) {
+        goToReport(openButton.dataset.openReport);
+      }
+    });
+
+    els.attendanceContainer.addEventListener('click', event => {
+      const header = event.target.closest('[data-sort-key]');
+      if (!header) return;
+      const key = header.dataset.sortKey;
+      if (state.attendanceSort.key === key) {
+        state.attendanceSort.dir = state.attendanceSort.dir === 'asc' ? 'desc' : 'asc';
+      } else {
+        state.attendanceSort = { key, dir: key === 'name' || key === 'class' ? 'asc' : 'desc' };
+      }
+      renderAttendance();
+    });
+
+    loadReports();
+    loadAttendance();
+  </script>
+</body>
+</html>

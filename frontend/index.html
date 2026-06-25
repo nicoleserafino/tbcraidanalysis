@@ -612,13 +612,10 @@
 <body>
   <!-- Load screen: URL + API key input -->
   <div id="loadScreen" class="app" style="padding:2rem;">
-    <div class="topbar">
-      <section class="hero">
-        <h1>TBC Classic Raid Analysis</h1>
-        <div class="subtitle">Paste a WarcraftLogs report URL to analyze mechanics, deaths, and wipe causes.</div>
-      </section>
+    <div style="max-width:600px;margin:0 auto 1rem;">
+      <a href="/" style="display:inline-flex;align-items:center;gap:8px;color:var(--muted);text-decoration:none;font-size:0.95rem;">← Back to Guild Dashboard</a>
     </div>
-    <div class="card" style="max-width:600px;margin:2rem auto;padding:1.5rem;">
+    <div class="card" style="max-width:600px;margin:0 auto;padding:1.5rem;">
       <div style="margin-bottom:1rem;">
         <label for="logUrlInput" style="display:block;font-weight:600;margin-bottom:0.3rem;">WarcraftLogs Report URL</label>
         <input id="logUrlInput" type="text" placeholder="https://fresh.warcraftlogs.com/reports/ABC123..." style="width:100%;padding:0.5rem;border-radius:6px;border:1px solid #444;background:#1a1e2e;color:#e0e0e0;font-size:0.95rem;">
@@ -640,7 +637,7 @@
       <section class="controls" style="flex-wrap:wrap;gap:0.5rem;">
         <div>
           <button id="backBtn" title="Load a different report" style="padding:0.4rem 0.8rem;border-radius:6px;border:1px solid #444;background:#2a2e3e;color:#e0e0e0;cursor:pointer;font-size:0.85rem;">← New Report</button>
-          <a href="compare.html" style="margin-left:8px;padding:0.4rem 0.8rem;border-radius:6px;border:1px solid #444;background:#2a2e3e;color:#e0e0e0;text-decoration:none;font-size:0.85rem;" title="Compare two raid logs">⚔️ Compare Logs</a>
+          <a href="/compare" style="margin-left:8px;padding:0.4rem 0.8rem;border-radius:6px;border:1px solid #444;background:#2a2e3e;color:#e0e0e0;text-decoration:none;font-size:0.85rem;" title="Compare two raid logs">⚔️ Compare Logs</a>
         </div>
         <div>
           <label for="bossSelect">Boss</label>
@@ -5102,6 +5099,12 @@
       state.player = getPullPlayers()[0] || Object.keys(getAllPlayers())[0] || '';
       document.getElementById('loadScreen').style.display = 'none';
       document.getElementById('analysisApp').style.display = '';
+      const reportCode = report?.code || extractReportId(logUrlInput.value.trim());
+      if (reportCode) {
+        const url = new URL(window.location.href);
+        url.searchParams.set('code', reportCode);
+        window.history.replaceState({}, '', url);
+      }
       render();
     }
 
@@ -5113,7 +5116,7 @@
     const fetchProgress = document.getElementById('fetchProgress');
     const backBtn = document.getElementById('backBtn');
 
-    fetchBtn.addEventListener('click', async () => {
+    async function loadReportFromInput() {
       const url = logUrlInput.value.trim();
       if (!url) { fetchStatus.textContent = 'Please enter a report URL.'; return; }
       fetchBtn.disabled = true;
@@ -5128,6 +5131,14 @@
       } finally {
         fetchBtn.disabled = false;
       }
+    }
+
+    fetchBtn.addEventListener('click', loadReportFromInput);
+    logUrlInput.addEventListener('keydown', event => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        loadReportFromInput();
+      }
     });
 
     backBtn.addEventListener('click', () => {
@@ -5135,7 +5146,16 @@
       loadScreen.style.display = '';
       fetchStatus.textContent = '';
       fetchProgress.innerHTML = '';
+      const url = new URL(window.location.href);
+      url.searchParams.delete('code');
+      window.history.replaceState({}, '', url);
     });
+
+    const initialCode = new URLSearchParams(window.location.search).get('code');
+    if (initialCode) {
+      logUrlInput.value = initialCode;
+      loadReportFromInput();
+    }
 
     els.bossSelect.addEventListener('change', event => {
       state.boss = event.target.value;

@@ -12,7 +12,9 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
 from backend.analysis.compare import fetch_compare_report, fetch_player_details
+from backend.analysis.guild import fetch_guild_reports, compute_attendance, fetch_gear_audit
 from backend.analysis.report import fetch_full_report
+from backend.config import get_settings
 
 app = FastAPI(title="TBC Raid Analysis", version="2.0.0")
 
@@ -177,12 +179,91 @@ async def get_player_details(
     return details
 
 
+# ─── Guild Endpoints ─────────────────────────────────────────────────
+
+_guild_reports_cache: dict[int, tuple[float, dict[str, Any]]] = {}
+_guild_attendance_cache: dict[int, tuple[float, dict[str, Any]]] = {}
+_gear_audit_cache: dict[str, tuple[float, dict[str, Any]]] = {}
+
+
+@app.get("/api/guild/reports")
+async def get_guild_reports(
+    page: int = Query(1, ge=1),
+    limit: int = Query(25, ge=1, le=50),
+):
+    """Fetch guild report list with attendance."""
+    settings = get_settings()
+    guild_id = settings.guild_id
+
+    cache_key = guild_id * 1000 + page
+    cached = _guild_reports_cache.get(cache_key)
+    if cached and _is_cache_fresh(cached[0]):
+        return cached[1]
+
+    try:
+        result = await fetch_guild_reports(guild_id, limit=limit, page=page)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch guild reports: {e}")
+
+    _guild_reports_cache[cache_key] = (time.time(), result)
+    return result
+
+
+@app.get("/api/guild/attendance")
+async def get_guild_attendance():
+    """Fetch aggregated attendance across recent raids."""
+    settings = get_settings()
+    guild_id = settings.guild_id
+
+    cached = _guild_attendance_cache.get(guild_id)
+    if cached and _is_cache_fresh(cached[0]):
+        return cached[1]
+
+    try:
+        result = await compute_attendance(guild_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to compute attendance: {e}")
+
+    _guild_attendance_cache[guild_id] = (time.time(), result)
+    return result
+
+
+@app.get("/api/report/{report_code}/gear")
+async def get_gear_audit(report_code: str):
+    """Fetch gear/enchant/consumable audit for a report."""
+    try:
+        code = extract_report_code(report_code)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    cached = _gear_audit_cache.get(code)
+    if cached and _is_cache_fresh(cached[0]):
+        return cached[1]
+
+    try:
+        result = await fetch_gear_audit(code)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch gear audit: {e}")
+
+    _gear_audit_cache[code] = (time.time(), result)
+    return result
+
+
 # Serve frontend static files
 FRONTEND_DIR = Path(__file__).parent.parent / "frontend"
 
 
 @app.get("/")
-async def serve_index():
+async def serve_guild():
+    return FileResponse(FRONTEND_DIR / "guild.html")
+
+
+@app.get("/report")
+async def serve_report():
     return FileResponse(FRONTEND_DIR / "index.html")
 
 
