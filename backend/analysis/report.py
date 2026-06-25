@@ -84,14 +84,36 @@ async def fetch_full_report(report_code: str) -> dict:
     players = [a for a in actors if a["type"] == "Player"]
     players_by_id = {p["id"]: p for p in players}
 
-    bosses = {}
+    # Build ability name lookup (v2 uses abilityGameID instead of ability.name)
+    abilities = metadata.get("masterData", {}).get("abilities", [])
+    ability_names = {a["gameID"]: a["name"] for a in abilities}
+
+    # Aggregate spell casts, healing, damage for role inference
+    TANK_SPELLS = {
+        "Shield Slam", "Devastate", "Revenge", "Shield Block", "Taunt",
+        "Thunder Clap", "Holy Shield", "Righteous Defense", "Avenger's Shield",
+        "Maul", "Lacerate", "Mangle (Bear)", "Swipe", "Growl", "Challenging Roar",
+    }
+    HEAL_SPELLS = {
+        "Flash of Light", "Holy Light", "Flash Heal", "Greater Heal",
+        "Prayer of Healing", "Prayer of Mending", "Circle of Healing",
+        "Chain Heal", "Healing Wave", "Lesser Healing Wave", "Rejuvenation",
+        "Lifebloom", "Regrowth", "Swiftmend", "Earth Shield", "Binding Heal", "Renew",
+    }
+
+    agg_spell_casts: dict[str, dict[str, int]] = {}
+    agg_healing: dict[str, int] = {}
+    agg_damage_done: dict[str, int] = {}
+    agg_damage_taken: dict[str, int] = {}
+
+    bosses: dict[str, dict] = {}
     for fight in fights:
         boss_name = fight["name"]
         fight_id = fight["id"]
         start = fight["startTime"]
         end = fight["endTime"]
 
-        # Fetch events in parallel-ish (sequentially for now, can optimize later)
+        # Fetch events
         deaths = await fetch_events_paginated(report_code, [fight_id], "Deaths", start, end)
         interrupts = await fetch_events_paginated(report_code, [fight_id], "Interrupts", start, end)
         dispels = await fetch_events_paginated(report_code, [fight_id], "Dispels", start, end)
@@ -102,28 +124,89 @@ async def fetch_full_report(report_code: str) -> dict:
         buffs = await fetch_events_paginated(report_code, [fight_id], "Buffs", start, end)
         threat = await fetch_events_paginated(report_code, [fight_id], "Threat", start, end)
 
-        # Fetch tables
         dmg_table = await fetch_table(report_code, [fight_id], "DamageDone", start, end)
         heal_table = await fetch_table(report_code, [fight_id], "Healing", start, end)
 
         pull = build_pull_data(
-            fight, actors_by_id, players_by_id,
+            fight, actors_by_id, players_by_id, ability_names,
             deaths, interrupts, dispels, healing, casts,
             damage_taken, damage_done, buffs, threat,
-            dmg_table, heal_table, metadata["startTime"],
+            metadata["startTime"], dmg_table, heal_table,
         )
 
+        # Aggregate for role inference
+        for player, spells in pull.get("spell_casts", {}).items():
+            agg_spell_casts.setdefault(player, {})
+            for spell, count in spells.items():
+                agg_spell_casts[player][spell] = agg_spell_casts[player].get(spell, 0) + count
+
+        for player, details in pull.get("heal_details", {}).items():
+            for info in details.values():
+                agg_healing[player] = agg_healing.get(player, 0) + info.get("total", 0)
+
+        for player, spells in pull.get("damage_done", {}).items():
+            for total in spells.values():
+                agg_damage_done[player] = agg_damage_done.get(player, 0) + total
+
+        for player, sources in pull.get("player_damage_taken", {}).items():
+            for count in sources.values():
+                agg_damage_taken[player] = agg_damage_taken.get(player, 0) + count
+
         if boss_name not in bosses:
-            bosses[boss_name] = {"name": boss_name, "pulls": []}
-        bosses[boss_name]["pulls"].append(pull)
+            bosses[boss_name] = {"total_pulls": 0, "kills": 0, "wipes": 0, "pulls": []}
+        entry = bosses[boss_name]
+        entry["pulls"].append(pull)
+        entry["total_pulls"] += 1
+        if pull["kill"]:
+            entry["kills"] += 1
+        else:
+            entry["wipes"] += 1
+
+    # Infer roles
+    def infer_role(player_class: str, spell_counts: dict, total_healing: int, total_damage_taken: int, total_damage_done: int) -> str:
+        tank_score = sum(c for s, c in spell_counts.items() if s in TANK_SPELLS)
+        heal_score = sum(c for s, c in spell_counts.items() if s in HEAL_SPELLS)
+
+        if player_class in ("Mage", "Rogue", "Hunter", "Warlock"):
+            return "DPS"
+        if player_class in ("Warrior", "Paladin", "Druid") and tank_score > 20 and total_damage_taken > total_damage_done:
+            return "Tank"
+        if player_class in ("Paladin", "Priest", "Shaman", "Druid") and total_healing > total_damage_done * 3:
+            return "Healer"
+        if player_class in ("Warrior", "Paladin", "Druid") and total_damage_taken > total_damage_done * 3 and total_damage_taken > 50000:
+            return "Tank"
+        return "DPS"
+
+    player_info = {}
+    for p in sorted(players, key=lambda x: x["name"]):
+        name = p["name"]
+        player_class = p["subType"]
+        role = infer_role(
+            player_class,
+            agg_spell_casts.get(name, {}),
+            agg_healing.get(name, 0),
+            agg_damage_taken.get(name, 0),
+            agg_damage_done.get(name, 0),
+        )
+        player_info[name] = {"role": role, "class": player_class}
+
+    # Attach roles to each pull
+    for boss_entry in bosses.values():
+        for pull in boss_entry["pulls"]:
+            pull["roles"] = {}
+            for name in pull.get("players", []):
+                if name in player_info:
+                    pull["roles"][name] = player_info[name]["role"]
 
     return {
-        "title": metadata.get("title", report_code),
-        "report_id": report_code,
-        "start_time": metadata["startTime"],
-        "end_time": metadata["endTime"],
+        "log_info": {
+            "file": report_code,
+            "total_encounters": len(fights),
+            "report_id": report_code,
+            "title": metadata.get("title", report_code),
+        },
+        "players": player_info,
         "bosses": bosses,
-        "players": {p["name"]: {"id": p["id"], "class": p["subType"]} for p in players},
     }
 
 
@@ -131,6 +214,7 @@ def build_pull_data(
     fight: dict,
     actors_by_id: dict,
     players_by_id: dict,
+    ability_names: dict,
     deaths: list,
     interrupts: list,
     dispels: list,
@@ -152,6 +236,16 @@ def build_pull_data(
     def actor_name(actor_id: int) -> str:
         a = actors_by_id.get(actor_id)
         return a["name"] if a else f"Unknown ({actor_id})"
+
+    def spell_name(ev: dict) -> str:
+        """Resolve ability name from v2 event (abilityGameID or ability.name)."""
+        ab = ev.get("ability")
+        if ab and isinstance(ab, dict) and ab.get("name"):
+            return ab["name"]
+        game_id = ev.get("abilityGameID")
+        if game_id and game_id in ability_names:
+            return ability_names[game_id]
+        return f"Spell {game_id}" if game_id else "Unknown"
 
     def rel_sec(ts: int) -> float:
         return round((ts - start) / 1000, 1)
@@ -177,7 +271,7 @@ def build_pull_data(
         if source_id in players_by_id:
             interrupts_out.append({
                 "source": players_by_id[source_id]["name"],
-                "ability": ev.get("ability", {}).get("name", "Unknown"),
+                "ability": spell_name(ev),
                 "relative_time": rel_sec(ev["timestamp"]),
             })
 
@@ -215,7 +309,7 @@ def build_pull_data(
         if source_id not in players_by_id:
             continue
         player = players_by_id[source_id]["name"]
-        spell = ev.get("ability", {}).get("name", "Unknown")
+        spell = spell_name(ev)
         amount = ev.get("amount", 0)
         overheal = ev.get("overheal", 0)
 
@@ -269,7 +363,7 @@ def build_pull_data(
         if ev.get("hitType") == 2 and (ev.get("amount", 0)) > 0:
             biggest_crits.append({
                 "player": players_by_id[source_id]["name"],
-                "spell": ev.get("ability", {}).get("name", "Unknown"),
+                "spell": spell_name(ev),
                 "amount": ev["amount"], "type": "damage",
                 "time": rel_sec(ev["timestamp"]),
             })
@@ -285,7 +379,7 @@ def build_pull_data(
         if source_id not in players_by_id:
             continue
         player = players_by_id[source_id]["name"]
-        spell = ev.get("ability", {}).get("name", "Unknown")
+        spell = spell_name(ev)
         casts_by_player[player] = casts_by_player.get(player, 0) + 1
         cast_timeline.setdefault(player, []).append(rel_sec(ev["timestamp"]))
         spell_casts.setdefault(player, {})
@@ -301,7 +395,7 @@ def build_pull_data(
         if target_id not in players_by_id:
             continue
         player = players_by_id[target_id]["name"]
-        source = ev.get("ability", {}).get("name", "Unknown")
+        source = spell_name(ev)
         player_damage_taken.setdefault(player, {})
         player_damage_taken[player][source] = player_damage_taken[player].get(source, 0) + 1
         damage_sources[source] = damage_sources.get(source, 0) + 1
@@ -331,7 +425,7 @@ def build_pull_data(
             continue
         player = players_by_id[target_id]["name"]
         buff_events.setdefault(player, []).append({
-            "spell": ev.get("ability", {}).get("name", "Unknown"),
+            "spell": spell_name(ev),
             "type": ev["type"],
             "time": rel_sec(ev["timestamp"]),
         })

@@ -76,8 +76,9 @@ async def get_report_fights(report_code: str):
         "title": metadata.get("title", code),
         "fights": metadata["fights"],
         "players": [
-            {"id": a["id"], "name": a["name"], "class": a["subType"]}
+            {"id": a["id"], "name": a["name"], "class": a.get("subType", "")}
             for a in metadata["masterData"]["actors"]
+            if a.get("type") == "Player"
         ],
     }
 

@@ -623,11 +623,6 @@
         <label for="logUrlInput" style="display:block;font-weight:600;margin-bottom:0.3rem;">WarcraftLogs Report URL</label>
         <input id="logUrlInput" type="text" placeholder="https://fresh.warcraftlogs.com/reports/ABC123..." style="width:100%;padding:0.5rem;border-radius:6px;border:1px solid #444;background:#1a1e2e;color:#e0e0e0;font-size:0.95rem;">
       </div>
-      <div style="margin-bottom:1rem;">
-        <label for="apiKeyInput" style="display:block;font-weight:600;margin-bottom:0.3rem;">API Key (v1) — optional</label>
-        <input id="apiKeyInput" type="password" placeholder="Leave blank for public logs, or enter your own key for unlisted logs" style="width:100%;padding:0.5rem;border-radius:6px;border:1px solid #444;background:#1a1e2e;color:#e0e0e0;font-size:0.95rem;">
-        <div style="font-size:0.8rem;color:#888;margin-top:0.3rem;">Only needed for unlisted/private logs. Public logs work without a key.</div>
-      </div>
       <button id="fetchBtn" style="padding:0.6rem 1.5rem;border-radius:6px;border:none;background:#57a6ff;color:#fff;font-weight:600;cursor:pointer;font-size:0.95rem;">Analyze Report</button>
       <div id="fetchStatus" style="margin-top:1rem;font-size:0.9rem;color:#aaa;"></div>
       <div id="fetchProgress" style="margin-top:0.5rem;"></div>
@@ -5071,349 +5066,30 @@
       return bosses.includes("Kael'thas Sunstrider") ? "Kael'thas Sunstrider" : bosses[0] || '';
     }
 
-    // ─── Client-side WarcraftLogs v1 API Fetcher ───────────────────────
-    const CONFLAG_SPELL_ID = 37018;
-    const WCL_API_BASE = 'https://fresh.warcraftlogs.com/v1';
-    const PLAYER_CLASSES = new Set(['Warrior','Paladin','Hunter','Rogue','Priest','Shaman','Mage','Warlock','Druid']);
-
-    const TANK_SPELLS = new Set(['Shield Slam','Devastate','Revenge','Shield Block','Taunt','Thunder Clap','Holy Shield','Righteous Defense',"Avenger's Shield",'Maul','Lacerate','Mangle (Bear)','Swipe','Growl','Challenging Roar']);
-    const HEAL_SPELLS = new Set(['Flash of Light','Holy Light','Flash Heal','Greater Heal','Prayer of Healing','Prayer of Mending','Circle of Healing','Chain Heal','Healing Wave','Lesser Healing Wave','Rejuvenation','Lifebloom','Regrowth','Swiftmend','Earth Shield','Binding Heal','Renew']);
-    const DPS_SPELLS = new Set(['Fireball','Frostbolt','Arcane Blast','Arcane Missiles','Shadow Bolt','Incinerate','Seed of Corruption','Corruption','Mind Blast','Shadow Word: Pain','Mind Flay','Vampiric Touch','Sinister Strike','Backstab','Eviscerate','Steady Shot','Arcane Shot','Multi-Shot','Kill Command','Lightning Bolt','Chain Lightning','Earth Shock','Stormstrike','Wrath','Starfire','Moonfire','Mortal Strike','Bloodthirst','Whirlwind','Slam','Crusader Strike','Heroic Strike','Execute','Shred','Ferocious Bite','Rip','Mangle (Cat)']);
+    // ─── Backend API Fetcher ────────────────────────────────────────────
 
     function extractReportId(url) {
       const m = url.match(/\/reports\/([A-Za-z0-9]+)/);
       if (m) return m[1];
+      if (/^[A-Za-z0-9]+$/.test(url)) return url;
       throw new Error('Could not extract report ID from URL');
     }
 
-    async function apiFetch(path, apiKey, params = {}) {
-      const query = new URLSearchParams({ api_key: apiKey, ...params });
-      const resp = await fetch(`${WCL_API_BASE}${path}?${query}`);
-      if (!resp.ok) {
-        const text = await resp.text();
-        throw new Error(`API error ${resp.status}: ${text}`);
-      }
-      return resp.json();
-    }
-
-    async function fetchPaginatedEvents(eventType, reportId, apiKey, start, end, extraParams = {}) {
-      const events = [];
-      let nextStart = start;
-      while (true) {
-        const payload = await apiFetch(`/report/events/${eventType}/${reportId}`, apiKey, { start: nextStart, end, ...extraParams });
-        const pageEvents = payload.events || [];
-        events.push(...pageEvents);
-        const nextPage = payload.nextPageTimestamp;
-        if (!nextPage || nextPage >= end || nextPage === nextStart) break;
-        nextStart = nextPage;
-      }
-      return events;
-    }
-
-    function roleFromIcon(playerClass, icon) {
-      icon = icon || '';
-      // Explicit spec suffixes are authoritative
-      if (icon.includes('-Holy') || icon.includes('-Restoration') || icon.includes('-Discipline')) return 'Healer';
-      if (icon.includes('-Protection') || icon.includes('-Guardian')) return 'Tank';
-      if (icon.includes('-Shadow') || icon.includes('-Balance') || icon.includes('-Feral') ||
-          icon.includes('-Enhancement') || icon.includes('-Elemental') || icon.includes('-Retribution') ||
-          icon.includes('-Arms') || icon.includes('-Fury') || icon.includes('-Combat') ||
-          icon.includes('-Assassination') || icon.includes('-Subtlety') || icon.includes('-Frost') ||
-          icon.includes('-Fire') || icon.includes('-Arcane') || icon.includes('-Marksmanship') ||
-          icon.includes('-BeastMastery') || icon.includes('-Survival') ||
-          icon.includes('-Affliction') || icon.includes('-Demonology') || icon.includes('-Destruction')) return 'DPS';
-      // Pure DPS classes with no spec suffix are always DPS
-      if (['Mage','Rogue','Hunter','Warlock'].includes(playerClass)) return 'DPS';
-      return null;
-    }
-
-    function inferRole(playerClass, icon, spellCounts, totalHealing, totalDamageTaken, totalDamageDone) {
-      const iconRole = roleFromIcon(playerClass, icon);
-      if (iconRole) return iconRole;
-      // No spec suffix — use actual combat data to determine role
-      let tankScore = 0, healScore = 0, dpsScore = 0;
-      for (const [spell, count] of Object.entries(spellCounts)) {
-        if (TANK_SPELLS.has(spell)) tankScore += count;
-        if (HEAL_SPELLS.has(spell)) healScore += count;
-        if (DPS_SPELLS.has(spell)) dpsScore += count;
-      }
-      // Tank detection: significant tank spell usage AND taking much more damage than dealing
-      if (['Warrior','Paladin','Druid'].includes(playerClass) && tankScore > 20 && totalDamageTaken > totalDamageDone) return 'Tank';
-      // Healer detection: healing output significantly exceeds damage output (3x threshold avoids Shadow Priest/Feral misclassification)
-      if (['Paladin','Priest','Shaman','Druid'].includes(playerClass) && totalHealing > totalDamageDone * 3) return 'Healer';
-      // Secondary tank check: damage taken is overwhelmingly higher than damage done
-      if (['Warrior','Paladin','Druid'].includes(playerClass) && totalDamageTaken > totalDamageDone * 3 && totalDamageTaken > 50000) return 'Tank';
-      return 'DPS';
-    }
-
-    function actorName(actorId, actorsById) {
-      if (actorId === -1) return 'Environment';
-      if (actorId != null && actorsById[actorId]) return actorsById[actorId].name || `ID ${actorId}`;
-      return actorId != null ? `ID ${actorId}` : 'Unknown';
-    }
-
-    function formatTs(reportStartMs, offsetMs) {
-      const d = new Date(reportStartMs + offsetMs);
-      return d.toTimeString().slice(0, 8) + '.' + String(d.getMilliseconds()).padStart(3, '0');
-    }
-
-    function relSec(startMs, ts) { return Math.round((ts - startMs) / 100) / 10; }
-
-    async function analyzePull(client, reportId, apiKey, reportStartMs, fight, actorsById, playersById, friendlies, statusEl) {
-      const start = fight.start_time, end = fight.end_time;
-      const label = `${fight.name} (${Math.round((end - start) / 1000)}s)`;
-      statusEl.textContent = `Fetching: ${label}...`;
-
-      const [deaths, enemyDeaths, interrupts, dispels, healing, casts, damageTaken, conflagEvents, damageDoneTable, buffEventsRaw, damageDoneEvents] = await Promise.all([
-        fetchPaginatedEvents('deaths', reportId, apiKey, start, end),
-        fetchPaginatedEvents('deaths', reportId, apiKey, start, end, { hostility: 1 }),
-        fetchPaginatedEvents('interrupts', reportId, apiKey, start, end),
-        fetchPaginatedEvents('dispels', reportId, apiKey, start, end),
-        fetchPaginatedEvents('healing', reportId, apiKey, start, end),
-        fetchPaginatedEvents('casts', reportId, apiKey, start, end),
-        fetchPaginatedEvents('damage-taken', reportId, apiKey, start, end),
-        fetchPaginatedEvents('damage-taken', reportId, apiKey, start, end, { filter: `ability.id=${CONFLAG_SPELL_ID}` }),
-        apiFetch(`/report/tables/damage-done/${reportId}`, apiKey, { start, end }),
-        fetchPaginatedEvents('buffs', reportId, apiKey, start, end),
-        fetchPaginatedEvents('damage-done', reportId, apiKey, start, end),
-      ]);
-
-      // Participants
-      const participants = friendlies.filter(f => PLAYER_CLASSES.has(f.type) && f.fights.some(fi => fi.id === fight.id)).sort((a, b) => a.name.localeCompare(b.name));
-      const pullPlayerNames = participants.map(p => p.name);
-
-      const damageSources = {}, damageAbilities = {}, playerDamageTaken = {}, playerDamageTakenAmounts = {};
-      const healsByPlayer = {}, healDetails = {}, castsByPlayer = {}, castTimeline = {}, spellCasts = {}, damageDone = {};
-      const deathsOut = [], creatureDeaths = [], interruptsOut = [], dispelsOut = [], conflagrations = [];
-      const clutchHeals = [], biggestHeals = [], biggestCrits = [];
-
-      for (const ev of deaths) {
-        if (ev.type !== 'death' || !ev.targetIsFriendly || !playersById[ev.targetID]) continue;
-        deathsOut.push({ time: formatTs(reportStartMs, ev.timestamp), relative_time: relSec(start, ev.timestamp), player: playersById[ev.targetID].name });
-      }
-      for (const ev of enemyDeaths) {
-        if (ev.type !== 'death' || ev.targetIsFriendly) continue;
-        creatureDeaths.push({ time: formatTs(reportStartMs, ev.timestamp), relative_time: relSec(start, ev.timestamp), name: actorName(ev.targetID, actorsById) });
-      }
-      for (const ev of damageTaken) {
-        if (ev.type !== 'damage' || !ev.targetIsFriendly || !playersById[ev.targetID]) continue;
-        const source = actorName(ev.sourceID, actorsById);
-        const target = playersById[ev.targetID].name;
-        const ability = ev.ability?.name || 'Unknown';
-        damageSources[source] = damageSources[source] || {};
-        damageSources[source][target] = (damageSources[source][target] || 0) + 1;
-        damageAbilities[ability] = (damageAbilities[ability] || 0) + 1;
-        playerDamageTaken[target] = playerDamageTaken[target] || {};
-        const key = `${source}: ${ability}`;
-        playerDamageTaken[target][key] = (playerDamageTaken[target][key] || 0) + 1;
-        playerDamageTakenAmounts[target] = (playerDamageTakenAmounts[target] || 0) + (ev.amount || 0);
-      }
-
-      // Conflagration dedup
-      const lastConflagByTarget = {};
-      const seenConflagKeys = new Set();
-      const sortedConflag = [...conflagEvents].sort((a, b) => (a.timestamp - b.timestamp) || ((a.targetID || 0) - (b.targetID || 0)));
-      for (const ev of sortedConflag) {
-        if (ev.type !== 'damage' || !ev.targetIsFriendly || !playersById[ev.targetID]) continue;
-        const target = playersById[ev.targetID].name;
-        const last = lastConflagByTarget[target];
-        if (last != null && ev.timestamp - last <= 5000) continue;
-        const k = `${Math.round((ev.timestamp - start) / 1000)}_${target}`;
-        if (seenConflagKeys.has(k)) continue;
-        seenConflagKeys.add(k);
-        lastConflagByTarget[target] = ev.timestamp;
-        conflagrations.push({ time: formatTs(reportStartMs, ev.timestamp), relative_time: relSec(start, ev.timestamp), target });
-      }
-
-      for (const ev of interrupts) {
-        if (ev.type !== 'interrupt' || !ev.sourceIsFriendly) continue;
-        interruptsOut.push({ time: formatTs(reportStartMs, ev.timestamp), relative_time: relSec(start, ev.timestamp), source: actorName(ev.sourceID, actorsById), target: actorName(ev.targetID, actorsById) });
-      }
-      for (const ev of dispels) {
-        if (ev.type !== 'dispel' || !ev.sourceIsFriendly) continue;
-        dispelsOut.push({ time: formatTs(reportStartMs, ev.timestamp), relative_time: relSec(start, ev.timestamp), source: actorName(ev.sourceID, actorsById) });
-      }
-      for (const ev of healing) {
-        if (ev.type !== 'heal' || !ev.sourceIsFriendly || !playersById[ev.sourceID]) continue;
-        const player = playersById[ev.sourceID].name;
-        const spell = ev.ability?.name || 'Unknown';
-        const amount = ev.amount || 0;
-        const overheal = ev.overheal || 0;
-        healsByPlayer[player] = (healsByPlayer[player] || 0) + 1;
-        healDetails[player] = healDetails[player] || {};
-        healDetails[player][spell] = healDetails[player][spell] || { total: 0, overheal: 0, count: 0, is_hot: false };
-        healDetails[player][spell].total += amount;
-        healDetails[player][spell].overheal += overheal;
-        healDetails[player][spell].count += 1;
-        if (ev.tick) healDetails[player][spell].is_hot = true;
-
-        // Clutch heal tracking — exclude non-healing abilities that incidentally restore HP
-        const NON_HEAL_ABILITIES = new Set([
-          'Bloodthirst', 'Vampiric Embrace', 'Judgement of Light',
-          'Siphon Life', 'Drain Life', 'Death Coil', 'Fel Armor',
-          'Spirit Link', 'Second Wind', 'Cannibalize', 'Mana Drain',
-          'Touch of Weakness', 'Devour Magic', 'Lock and Load',
-          'Improved Leader of the Pack', 'Leader of the Pack',
-        ]);
-        const targetName = playersById[ev.targetID]?.name;
-        if (amount > 0 && ev.hitPoints != null && targetName && !NON_HEAL_ABILITIES.has(spell)) {
-          const hpBefore = ev.hitPoints - amount;
-          if (hpBefore >= 0 && ev.hitPoints > 0) {
-            const hpPct = Math.round(hpBefore / ev.hitPoints * 1000) / 10;
-            if (hpPct < 20) {
-              clutchHeals.push({ healer: player, target: targetName, spell, amount, hp_pct: hpPct, time: relSec(start, ev.timestamp), self_heal: ev.sourceID === ev.targetID });
-            }
-          }
-        }
-        // Biggest heals
-        if (amount > 0) {
-          biggestHeals.push({ player, target: targetName || 'Unknown', spell, amount, crit: ev.hitType === 2, time: relSec(start, ev.timestamp) });
-        }
-        // Biggest crits (heal)
-        if (ev.hitType === 2 && amount > 0) {
-          biggestCrits.push({ player, spell, amount, type: 'heal', time: relSec(start, ev.timestamp) });
-        }
-      }
-      // Biggest crits (damage)
-      for (const ev of damageDoneEvents) {
-        if (ev.type !== 'damage' || !ev.sourceIsFriendly || !playersById[ev.sourceID]) continue;
-        if (ev.hitType === 2 && (ev.amount || 0) > 0) {
-          biggestCrits.push({ player: playersById[ev.sourceID].name, spell: ev.ability?.name || 'Unknown', amount: ev.amount, type: 'damage', time: relSec(start, ev.timestamp) });
-        }
-      }
-      for (const ev of casts) {
-        if (ev.type !== 'cast' || !ev.sourceIsFriendly || !playersById[ev.sourceID]) continue;
-        const player = playersById[ev.sourceID].name;
-        const spell = ev.ability?.name || 'Unknown';
-        castsByPlayer[player] = (castsByPlayer[player] || 0) + 1;
-        castTimeline[player] = castTimeline[player] || [];
-        castTimeline[player].push(relSec(start, ev.timestamp));
-        spellCasts[player] = spellCasts[player] || {};
-        spellCasts[player][spell] = (spellCasts[player][spell] || 0) + 1;
-      }
-      for (const entry of (damageDoneTable.entries || [])) {
-        if (!playersById[entry.id]) continue;
-        const player = playersById[entry.id].name;
-        damageDone[player] = {};
-        for (const ab of (entry.abilities || [])) {
-          damageDone[player][ab.name === 'Melee' ? 'Melee (Auto Attack)' : ab.name] = ab.total || 0;
-        }
-      }
-
-      // Process buff events
-      const playerBuffEvents = {};
-      for (const ev of buffEventsRaw) {
-        if (!['applybuff', 'removebuff', 'refreshbuff', 'applydebuff', 'removedebuff'].includes(ev.type)) continue;
-        const targetId = ev.targetID;
-        if (!playersById[targetId]) continue;
-        const player = playersById[targetId].name;
-        const spell = ev.ability?.name || 'Unknown';
-        if (!playerBuffEvents[player]) playerBuffEvents[player] = [];
-        playerBuffEvents[player].push({
-          spell,
-          type: ev.type,
-          time: relSec(start, ev.timestamp),
-        });
-      }
-
-      // Sort and trim clutch/biggest tracking
-      clutchHeals.sort((a, b) => a.hp_pct - b.hp_pct);
-      biggestHeals.sort((a, b) => b.amount - a.amount);
-      biggestCrits.sort((a, b) => b.amount - a.amount);
-      const topClutchHeals = clutchHeals.slice(0, 10);
-      const topBiggestHeals = biggestHeals.slice(0, 5);
-      const topBiggestCrits = biggestCrits.slice(0, 5);
-
-      return {
-        pull: {
-          encounter_id: fight.boss, boss_name: fight.name,
-          start_time: formatTs(reportStartMs, start), end_time: formatTs(reportStartMs, end),
-          duration_sec: Math.round((end - start) / 10) / 100, kill: !!fight.kill,
-          deaths: deathsOut, damage_sources: damageSources, damage_abilities: damageAbilities,
-          player_damage_taken: playerDamageTaken, player_positions: {},
-          creature_deaths: creatureDeaths, interrupts: interruptsOut, dispels: dispelsOut,
-          conflagrations, players: pullPlayerNames,
-          heals_by_player: healsByPlayer, heal_details: healDetails,
-          casts_by_player: castsByPlayer, cast_timeline: castTimeline,
-          spell_casts: spellCasts, damage_done: damageDone,
-          buff_events: playerBuffEvents, consumables: {},
-          clutch_heals: topClutchHeals, biggest_heals: topBiggestHeals, biggest_crits: topBiggestCrits
-        },
-        spellCasts, healDetails, damageDone, playerDamageTakenAmounts
-      };
-    }
-
-    async function fetchReport(reportUrl, apiKey, statusEl, progressEl) {
+    async function fetchReport(reportUrl, statusEl, progressEl) {
       const reportId = extractReportId(reportUrl);
-      statusEl.textContent = 'Fetching report metadata...';
+      statusEl.textContent = 'Fetching report from server...';
+      progressEl.innerHTML = `<div style="background:#1a1e2e;border-radius:6px;overflow:hidden;height:8px;"><div id="progBar" style="height:100%;width:30%;background:#57a6ff;transition:width 0.3s;"></div></div>`;
 
-      const fightsPayload = await apiFetch(`/report/fights/${reportId}`, apiKey);
-      const bossFights = (fightsPayload.fights || []).filter(f => f.boss > 0);
-      const reportStartMs = fightsPayload.start;
+      const resp = await fetch(`/api/report/${reportId}`);
+      if (!resp.ok) {
+        const body = await resp.json().catch(() => ({ detail: resp.statusText }));
+        throw new Error(body.detail || `Server error ${resp.status}`);
+      }
 
-      // Build actor maps
-      const actorsById = {}, playersById = {};
-      const allActors = [...(fightsPayload.friendlies || []), ...(fightsPayload.friendlyPets || []), ...(fightsPayload.enemies || []), ...(fightsPayload.enemyPets || [])];
-      for (const a of allActors) { if (a.id != null) actorsById[a.id] = a; }
-      const friendlies = (fightsPayload.friendlies || []).filter(f => PLAYER_CLASSES.has(f.type));
-      for (const f of friendlies) { playersById[f.id] = f; }
-
-      statusEl.textContent = `Found ${bossFights.length} boss encounters. Fetching events...`;
-      progressEl.innerHTML = `<div style="background:#1a1e2e;border-radius:6px;overflow:hidden;height:8px;"><div id="progBar" style="height:100%;width:0%;background:#57a6ff;transition:width 0.3s;"></div></div>`;
       const progBar = document.getElementById('progBar');
+      if (progBar) progBar.style.width = '100%';
 
-      const bosses = {};
-      const aggSpellCasts = {}, aggHealing = {}, aggDamageDone = {}, aggDamageTaken = {};
-
-      for (let i = 0; i < bossFights.length; i++) {
-        const fight = bossFights[i];
-        const result = await analyzePull('', reportId, apiKey, reportStartMs, fight, actorsById, playersById, friendlies, statusEl);
-        const { pull, spellCasts: sc, healDetails: hd, damageDone: dd, playerDamageTakenAmounts: pdta } = result;
-
-        // Aggregate for role inference
-        for (const [player, spells] of Object.entries(sc || {})) {
-          aggSpellCasts[player] = aggSpellCasts[player] || {};
-          for (const [spell, count] of Object.entries(spells)) aggSpellCasts[player][spell] = (aggSpellCasts[player][spell] || 0) + count;
-        }
-        for (const [player, spells] of Object.entries(hd || {})) {
-          for (const info of Object.values(spells)) aggHealing[player] = (aggHealing[player] || 0) + (info.total || 0);
-        }
-        for (const [player, spells] of Object.entries(dd || {})) {
-          for (const total of Object.values(spells)) aggDamageDone[player] = (aggDamageDone[player] || 0) + total;
-        }
-        for (const [player, amount] of Object.entries(pdta || {})) {
-          aggDamageTaken[player] = (aggDamageTaken[player] || 0) + amount;
-        }
-
-        const entry = bosses[fight.name] = bosses[fight.name] || { total_pulls: 0, kills: 0, wipes: 0, pulls: [] };
-        entry.pulls.push(pull);
-        entry.total_pulls++;
-        if (pull.kill) entry.kills++; else entry.wipes++;
-
-        progBar.style.width = `${Math.round(((i + 1) / bossFights.length) * 100)}%`;
-      }
-
-      // Build players with roles
-      const players = {};
-      for (const f of friendlies.sort((a, b) => a.name.localeCompare(b.name))) {
-        players[f.name] = {
-          role: inferRole(f.type, f.icon, aggSpellCasts[f.name] || {}, aggHealing[f.name] || 0, aggDamageTaken[f.name] || 0, aggDamageDone[f.name] || 0),
-          class: f.type
-        };
-      }
-      // Attach roles to each pull
-      for (const bossEntry of Object.values(bosses)) {
-        for (const pull of bossEntry.pulls) {
-          pull.roles = {};
-          for (const name of pull.players) { if (players[name]) pull.roles[name] = players[name].role; }
-        }
-      }
-
-      return {
-        log_info: { file: reportUrl, total_lines: 0, total_encounters: bossFights.length, report_id: reportId, title: fightsPayload.title || '' },
-        players,
-        bosses
-      };
+      return await resp.json();
     }
 
     // ─── Init & Event Handlers ──────────────────────────────────────────
@@ -5432,27 +5108,19 @@
     // Load screen logic
     const loadScreen = document.getElementById('loadScreen');
     const logUrlInput = document.getElementById('logUrlInput');
-    const apiKeyInput = document.getElementById('apiKeyInput');
     const fetchBtn = document.getElementById('fetchBtn');
     const fetchStatus = document.getElementById('fetchStatus');
     const fetchProgress = document.getElementById('fetchProgress');
     const backBtn = document.getElementById('backBtn');
 
-    // Restore saved API key
-    const DEFAULT_API_KEY = '3e4330ef2d0c5aa921215259c93d38a3';
-    const savedKey = localStorage.getItem('wcl_api_key');
-    if (savedKey) apiKeyInput.value = savedKey;
-
     fetchBtn.addEventListener('click', async () => {
       const url = logUrlInput.value.trim();
-      const key = apiKeyInput.value.trim() || DEFAULT_API_KEY;
       if (!url) { fetchStatus.textContent = 'Please enter a report URL.'; return; }
-      if (apiKeyInput.value.trim()) localStorage.setItem('wcl_api_key', apiKeyInput.value.trim());
       fetchBtn.disabled = true;
       fetchStatus.textContent = 'Starting...';
       fetchProgress.innerHTML = '';
       try {
-        const report = await fetchReport(url, key, fetchStatus, fetchProgress);
+        const report = await fetchReport(url, fetchStatus, fetchProgress);
         initAnalysis(report);
       } catch (err) {
         fetchStatus.textContent = `Error: ${err.message}`;

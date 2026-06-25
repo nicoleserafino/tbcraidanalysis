@@ -18,12 +18,17 @@ query ReportFights($code: String!) {
         fightPercentage
       }
       masterData {
-        actors(type: "Player") {
+        actors {
           id
           name
           type
           subType
           server
+        }
+        abilities {
+          gameID
+          name
+          type
         }
       }
     }
