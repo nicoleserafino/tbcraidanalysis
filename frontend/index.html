@@ -5284,88 +5284,94 @@
     function renderThreatView() {
       const pull = getPull();
       if (!pull) {
-        return '<div class="card empty">Select a specific pull to view threat data.</div>';
+        return '<div class="card empty">Select a specific pull to view threat/aggro data.</div>';
+      }
+      const fightId = pull.fight_id;
+      if (!fightId) {
+        return '<div class="card empty">No fight ID available for this pull.</div>';
       }
 
-      // Use damage_done data as threat proxy (damage ≈ threat for most classes)
-      const damageDone = pull.damage_done || {};
-      if (Object.keys(damageDone).length === 0) {
-        return '<div class="card empty">No damage/threat data available for this pull.</div>';
+      const cacheKey = `threat_${state.reportCode}_${fightId}`;
+      if (state._threatCache && state._threatCache[cacheKey]) {
+        return renderThreatCards(state._threatCache[cacheKey]);
       }
 
-      // Aggregate total damage per player
-      const playerTotals = {};
-      for (const [name, spells] of Object.entries(damageDone)) {
-        let total = 0;
-        for (const val of Object.values(spells)) {
-          total += (typeof val === 'number' ? val : 0);
-        }
-        playerTotals[name] = total;
+      fetchThreatData(fightId, cacheKey);
+      return '<div class="card"><div class="loading-spinner"></div> Loading threat/aggro data...</div>';
+    }
+
+    async function fetchThreatData(fightId, cacheKey) {
+      try {
+        const resp = await fetch(`/api/report/${state.reportCode}/threat?fight_id=${fightId}`);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json();
+        if (!state._threatCache) state._threatCache = {};
+        state._threatCache[cacheKey] = data;
+        renderContent();
+      } catch (e) {
+        console.error('Threat fetch failed:', e);
+        if (!state._threatCache) state._threatCache = {};
+        state._threatCache[cacheKey] = { error: e.message, players: [] };
+        renderContent();
+      }
+    }
+
+    function renderThreatCards(data) {
+      if (data.error && (!data.players || data.players.length === 0)) {
+        return `<div class="card empty">Failed to load threat data: ${data.error}</div>`;
+      }
+      if (!data.players || data.players.length === 0) {
+        return '<div class="card empty">No aggro data available for this fight.</div>';
       }
 
-      // Sort descending, take top 10
-      const sorted = Object.entries(playerTotals)
-        .filter(([_, v]) => v > 0)
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 10);
-
-      if (sorted.length === 0) {
-        return '<div class="card empty">No threat data for this pull.</div>';
-      }
-
-      const maxVal = sorted[0][1];
+      const maxUptime = Math.max(...data.players.map(p => p.total_uptime_ms));
       const players = getAllPlayers();
-      const duration = pull.duration_sec || 1;
 
       let html = `<div class="card">
-        <h3>Threat Ranking — ${pull.boss_name} (${pull.duration_sec}s)</h3>
-        <p class="card-subtitle">Damage-based threat estimate · Top players</p>
+        <h3>Aggro / Threat — ${data.fight_name} (${data.duration_s}s)</h3>
+        <p class="card-subtitle">Who held aggro and for how long (from WCL threat table)</p>
         <div class="threat-ranking">`;
 
-      sorted.forEach(([name, total], i) => {
-        const pct = (total / maxVal * 100);
-        const playerClass = players[name]?.class || '';
-        const classColor = CLASS_COLORS[playerClass] || '#999';
-        const tps = Math.round(total / duration);
-        const role = getPlayerRole(name);
-        const roleTag = role === 'Tank' ? ' <span style="color:#f5a623;font-size:0.75rem">[Tank]</span>' : '';
+      data.players.forEach((p, i) => {
+        const pct = maxUptime > 0 ? (p.total_uptime_ms / maxUptime * 100) : 0;
+        const classColor = CLASS_COLORS[p.class] || '#999';
+        const role = getPlayerRole(p.name);
+        const roleTag = role === 'Tank' ? ' <span style="color:#f5a623;font-size:0.7rem;font-weight:700">[TANK]</span>' : '';
+        const targetNames = (p.targets || []).map(t => t.name).join(', ');
         html += `
           <div class="threat-row">
             <span class="threat-rank">#${i + 1}</span>
-            <span class="threat-name" style="color:${classColor}">${name}${roleTag}</span>
+            <span class="threat-name" style="color:${classColor}">${p.name}${roleTag}</span>
             <div class="threat-bar-wrap">
               <div class="threat-bar" style="width:${pct}%;background:${classColor}"></div>
             </div>
-            <span class="threat-value">${formatNumber(total)}</span>
-            <span class="threat-tps">${formatNumber(tps)} TPS</span>
+            <span class="threat-value">${p.uptime_sec}s</span>
+            <span class="threat-tps">${p.uptime_pct}%</span>
           </div>`;
       });
       html += `</div></div>`;
 
-      // Per-player ability breakdown (top 5 players)
-      html += '<div class="threat-details-grid">';
-      sorted.slice(0, 5).forEach(([name]) => {
-        const spells = damageDone[name] || {};
-        const playerClass = players[name]?.class || '';
-        const classColor = CLASS_COLORS[playerClass] || '#999';
-        const abilities = Object.entries(spells)
-          .map(([spell, total]) => ({ spell, total: typeof total === 'number' ? total : 0 }))
-          .filter(a => a.total > 0)
-          .sort((a, b) => b.total - a.total)
-          .slice(0, 8);
-
-        if (abilities.length === 0) return;
-        html += `<div class="card threat-detail-card">
-          <h4 style="color:${classColor}">${name} — Ability Breakdown</h4>
-          <table class="mini-table">
-            <thead><tr><th>Ability</th><th>Damage</th></tr></thead>
-            <tbody>`;
-        abilities.forEach(a => {
-          html += `<tr><td>${a.spell}</td><td>${formatNumber(a.total)}</td></tr>`;
+      // Per-player breakdown: what they tanked
+      const tankers = data.players.filter(p => p.targets && p.targets.length > 0).slice(0, 8);
+      if (tankers.length > 0) {
+        html += '<div class="threat-details-grid">';
+        tankers.forEach(p => {
+          const classColor = CLASS_COLORS[p.class] || '#999';
+          html += `<div class="card threat-detail-card">
+            <h4 style="color:${classColor}">${p.name} — Aggro Targets</h4>
+            <table class="mini-table">
+              <thead><tr><th>Enemy</th><th>Uptime</th></tr></thead>
+              <tbody>`;
+          const sorted = (p.targets || []).sort((a, b) => b.uptime_ms - a.uptime_ms);
+          sorted.forEach(t => {
+            const secs = (t.uptime_ms / 1000).toFixed(1);
+            const pctOfFight = (t.uptime_ms / data.total_time_ms * 100).toFixed(1);
+            html += `<tr><td>${t.name}</td><td>${secs}s (${pctOfFight}%)</td></tr>`;
+          });
+          html += `</tbody></table></div>`;
         });
-        html += `</tbody></table></div>`;
-      });
-      html += '</div>';
+        html += '</div>';
+      }
 
       return html;
     }

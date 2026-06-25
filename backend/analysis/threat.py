@@ -1,4 +1,4 @@
-"""Threat data fetching for raid analysis."""
+"""Threat/aggro data fetching for raid analysis."""
 
 from __future__ import annotations
 
@@ -9,90 +9,86 @@ from backend.analysis.report import fetch_report_metadata, fetch_table
 
 
 async def fetch_threat_data(report_code: str, fight_id: int) -> dict[str, Any]:
-    """Fetch threat rankings for top 5 DPS on a specific fight.
+    """Fetch aggro/threat data from the WCL Threat table for a fight.
     
-    Returns threat totals and per-ability breakdown for the highest-threat players.
+    The Threat table shows who held aggro on each enemy and for how long.
+    Returns per-player aggro uptime and per-enemy breakdown.
     """
     metadata = await fetch_report_metadata(report_code)
     fights = metadata.get("fights", [])
-    actors = metadata.get("masterData", {}).get("actors", [])
-    
-    players_by_id = {a["id"]: a for a in actors if a.get("type") == "Player"}
     
     fight = next((f for f in fights if f["id"] == fight_id), None)
     if not fight:
-        return {"error": "Fight not found", "players": []}
+        return {"error": "Fight not found", "players": [], "enemies": []}
     
     start = fight["startTime"]
     end = fight["endTime"]
+    total_time_ms = end - start
     
-    # First get DamageDone table to identify top DPS players
-    damage_table = await fetch_table(
-        report_code, [fight_id], "DamageDone", start, end
+    # Fetch threat table (gives aggro assignments)
+    from backend.wcl.client import graphql_query
+    from backend.wcl.queries import REPORT_TABLE
+    
+    variables = {
+        "code": report_code,
+        "fightIDs": [fight_id],
+        "dataType": "Threat",
+        "startTime": start,
+        "endTime": end,
+    }
+    data = await graphql_query(REPORT_TABLE, variables)
+    table = data["reportData"]["report"]["table"]
+    if isinstance(table, dict) and "data" in table:
+        table = table["data"]
+    
+    threats = table.get("threat", [])
+    total_time = table.get("totalTime", total_time_ms) or total_time_ms
+    
+    # Aggregate per-player: total aggro uptime across all enemies
+    player_aggro: dict[str, dict] = {}
+    enemies_tanked: list[dict] = []
+    
+    for entry in threats:
+        player_name = entry.get("name", "Unknown")
+        player_class = entry.get("type", "Unknown")
+        uptime = entry.get("totalUptime", 0)
+        targets = entry.get("targets", [])
+        
+        # Each entry is a player, targets are NPCs they tanked
+        target_list = []
+        for t in targets:
+            target_list.append({
+                "name": t.get("name", "Unknown"),
+                "uptime_ms": t.get("totalUptime", 0),
+            })
+        
+        if player_name not in player_aggro:
+            player_aggro[player_name] = {
+                "name": player_name,
+                "class": player_class,
+                "total_uptime_ms": 0,
+                "targets": [],
+            }
+        player_aggro[player_name]["total_uptime_ms"] += uptime
+        player_aggro[player_name]["targets"].extend(target_list)
+    
+    # Sort players by total aggro uptime
+    players_sorted = sorted(
+        player_aggro.values(),
+        key=lambda x: x["total_uptime_ms"],
+        reverse=True,
     )
     
-    entries = damage_table.get("entries", [])
-    # Filter to players only and sort by total damage
-    player_damage = []
-    for entry in entries:
-        actor_id = entry.get("id")
-        if actor_id in players_by_id:
-            player_damage.append({
-                "id": actor_id,
-                "name": players_by_id[actor_id]["name"],
-                "class": players_by_id[actor_id].get("subType", "Unknown"),
-                "total_damage": entry.get("total", 0),
-            })
-    
-    player_damage.sort(key=lambda x: x["total_damage"], reverse=True)
-    top_players = player_damage[:5]
-    
-    # Fetch threat table for each top player in parallel
-    async def get_player_threat(player: dict) -> dict:
-        try:
-            threat_data = await fetch_table(
-                report_code, [fight_id], "Threat", start, end,
-                source_id=player["id"]
-            )
-            threat_entries = threat_data.get("entries", [])
-            total_threat = sum(e.get("total", 0) for e in threat_entries)
-            
-            # Get per-ability threat breakdown
-            abilities = []
-            for e in sorted(threat_entries, key=lambda x: x.get("total", 0), reverse=True)[:10]:
-                abilities.append({
-                    "name": e.get("name", "Unknown"),
-                    "total": e.get("total", 0),
-                    "hitCount": e.get("hitCount", 0),
-                })
-            
-            return {
-                "name": player["name"],
-                "class": player["class"],
-                "total_threat": total_threat,
-                "total_damage": player["total_damage"],
-                "tps": round(total_threat / max((end - start) / 1000, 1), 1),
-                "abilities": abilities,
-            }
-        except Exception:
-            return {
-                "name": player["name"],
-                "class": player["class"],
-                "total_threat": 0,
-                "total_damage": player["total_damage"],
-                "tps": 0,
-                "abilities": [],
-                "error": "Failed to fetch threat data",
-            }
-    
-    threat_results = await asyncio.gather(*[get_player_threat(p) for p in top_players])
-    
-    # Sort by total threat descending
-    threat_results.sort(key=lambda x: x["total_threat"], reverse=True)
+    # Add percentage and formatted values
+    for p in players_sorted:
+        p["uptime_pct"] = round(p["total_uptime_ms"] / max(total_time, 1) * 100, 1)
+        p["uptime_sec"] = round(p["total_uptime_ms"] / 1000, 1)
     
     return {
         "fight_name": fight.get("name", "Unknown"),
         "fight_id": fight_id,
-        "duration_s": round((end - start) / 1000, 1),
-        "players": threat_results,
+        "duration_s": round(total_time_ms / 1000, 1),
+        "total_time_ms": total_time,
+        "players": players_sorted,
     }
+
