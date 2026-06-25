@@ -1,0 +1,1777 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TBC Raid Comparison</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>window.__COMPARE_DATA__ = null;</script>
+
+  <style>
+    :root {
+      --bg: #0b0f17;
+      --panel: #121927;
+      --panel-2: #182234;
+      --panel-3: #1f2d45;
+      --border: rgba(255, 255, 255, 0.08);
+      --text: #e8edf8;
+      --muted: #98a6c4;
+      --kill: #44d17a;
+      --wipe: #ff6363;
+      --tank: #57a6ff;
+      --healer: #55d48f;
+      --dps: #ffad42;
+      --accent: #8f7cff;
+      --warning: #ffd166;
+      --faster: #44d17a;
+      --slower: #ff6363;
+      --neutral: #98a6c4;
+      --shadow: 0 18px 40px rgba(0, 0, 0, 0.25);
+      --radius: 18px;
+      --radius-sm: 12px;
+      --font: Inter, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: var(--font);
+      color: var(--text);
+      background:
+        radial-gradient(circle at top, rgba(143, 124, 255, 0.18), transparent 28%),
+        linear-gradient(180deg, #0a0f18 0%, #0b0f17 60%, #0d111a 100%);
+      min-height: 100vh;
+    }
+
+    .app {
+      max-width: 1440px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    h1 { font-size: 1.8rem; margin: 0 0 4px; }
+    h2 { font-size: 1.2rem; margin: 0 0 12px; color: var(--accent); }
+    h3 { font-size: 1rem; margin: 0 0 8px; }
+
+    .subtitle { color: var(--muted); font-size: 0.9rem; margin-bottom: 20px; }
+
+    .hero {
+      text-align: center;
+      padding: 32px 0 24px;
+    }
+
+    /* Summary cards */
+    .summary-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+    .summary-card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 16px;
+      text-align: center;
+    }
+    .summary-card .label { color: var(--muted); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.5px; }
+    .summary-card .value { font-size: 1.4rem; font-weight: 700; margin-top: 4px; }
+    .summary-card .delta { font-size: 0.82rem; margin-top: 4px; }
+    .delta.faster { color: var(--faster); }
+    .delta.slower { color: var(--slower); }
+    .delta.neutral { color: var(--neutral); }
+
+    /* Panels */
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      margin-bottom: 20px;
+      box-shadow: var(--shadow);
+    }
+
+    /* Two column layout */
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    @media (max-width: 800px) { .two-col { grid-template-columns: 1fr; } }
+
+    .col-header {
+      font-size: 0.82rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    /* Tables */
+    table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    th { color: var(--muted); font-weight: 600; text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); font-size: 0.78rem; text-transform: uppercase; }
+    td { padding: 6px 8px; border-bottom: 1px solid rgba(255,255,255,0.03); }
+    tr:hover td { background: rgba(255,255,255,0.02); }
+
+    /* Boss comparison row */
+    .boss-row { cursor: pointer; }
+    .boss-row:hover { background: var(--panel-2); }
+    .boss-detail { display: none; padding: 12px; background: var(--panel-2); border-radius: 8px; margin: 8px 0; }
+    .boss-detail.open { display: block; }
+
+    /* Comp pills */
+    .class-pill {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 0.75rem;
+      margin: 2px;
+      background: var(--panel-3);
+    }
+
+    /* Recommendation cards */
+    .rec-card {
+      padding: 12px 16px;
+      border-radius: 8px;
+      margin-bottom: 10px;
+      border-left: 4px solid;
+    }
+    .rec-card.high { border-color: var(--wipe); background: rgba(255, 99, 99, 0.06); }
+    .rec-card.medium { border-color: var(--warning); background: rgba(255, 209, 102, 0.06); }
+    .rec-card.low { border-color: var(--muted); background: rgba(152, 166, 196, 0.04); }
+    .rec-card .rec-title { font-weight: 600; font-size: 0.88rem; margin-bottom: 4px; }
+    .rec-card .rec-category { font-size: 0.72rem; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+    .rec-card .rec-detail { font-size: 0.82rem; color: var(--muted); line-height: 1.4; }
+
+    /* Pacing bar */
+    .pacing-bar {
+      display: flex;
+      height: 28px;
+      border-radius: 6px;
+      overflow: hidden;
+      margin: 8px 0;
+      background: var(--panel-3);
+    }
+    .pacing-segment {
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.65rem;
+      color: white;
+      overflow: hidden;
+      white-space: nowrap;
+    }
+    .pacing-segment.boss { background: var(--accent); }
+    .pacing-segment.gap { background: rgba(255,255,255,0.05); color: var(--muted); }
+
+    /* Buff matrix */
+    .buff-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 4px;
+      font-size: 0.78rem;
+    }
+    .buff-item { padding: 4px 8px; border-radius: 4px; background: var(--panel-3); }
+    .buff-item.both { color: var(--faster); }
+    .buff-item.ours-only { color: var(--accent); }
+    .buff-item.theirs-only { color: var(--warning); }
+    .buff-item.missing { color: var(--slower); }
+
+    .nav-link {
+      display: inline-block;
+      padding: 6px 12px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 0.85rem;
+      margin-bottom: 16px;
+    }
+    .nav-link:hover { color: var(--text); border-color: var(--accent); }
+
+    .section-toggle {
+      cursor: pointer;
+      user-select: none;
+    }
+    .section-toggle::before {
+      content: '▶ ';
+      font-size: 0.7rem;
+      transition: transform 0.2s;
+    }
+    .section-toggle.open::before { content: '▼ '; }
+  </style>
+</head>
+<body>
+  <!-- Load screen: input form -->
+  <div id="loadScreen" class="app" style="padding:2rem;">
+    <a href="index.html" class="nav-link">← Back to Raid Analysis</a>
+    <div class="hero">
+      <h1>⚔️ Raid Log Comparison</h1>
+      <div class="subtitle">Compare two WarcraftLogs reports side-by-side to find time savings and optimization opportunities.</div>
+    </div>
+    <div class="panel" style="max-width:650px;margin:0 auto;padding:1.5rem;">
+      <div style="margin-bottom:1rem;">
+        <label style="display:block;font-weight:600;margin-bottom:0.3rem;">Report 1 URL</label>
+        <input id="ourUrlInput" type="text" placeholder="https://fresh.warcraftlogs.com/reports/ABC123..." style="width:100%;padding:0.5rem;border-radius:6px;border:1px solid #444;background:#1a1e2e;color:#e0e0e0;font-size:0.95rem;">
+      </div>
+      <div style="margin-bottom:1rem;">
+        <label style="display:block;font-weight:600;margin-bottom:0.3rem;">Report 2 URL</label>
+        <input id="theirUrlInput" type="text" placeholder="https://fresh.warcraftlogs.com/reports/XYZ789..." style="width:100%;padding:0.5rem;border-radius:6px;border:1px solid #444;background:#1a1e2e;color:#e0e0e0;font-size:0.95rem;">
+      </div>
+      <div style="margin-bottom:1rem;">
+        <label style="display:block;font-weight:600;margin-bottom:0.3rem;">API Key (v1)</label>
+        <input id="apiKeyInput" type="password" placeholder="API key (optional — uses default for public logs)" style="width:100%;padding:0.5rem;border-radius:6px;border:1px solid #444;background:#1a1e2e;color:#e0e0e0;font-size:0.95rem;">
+        <div style="font-size:0.8rem;color:#888;margin-top:0.3rem;">Saved in localStorage. Never sent anywhere except WarcraftLogs.</div>
+      </div>
+      <button id="compareBtn" style="padding:0.6rem 1.5rem;border-radius:6px;border:none;background:var(--accent);color:#fff;font-weight:600;cursor:pointer;font-size:0.95rem;">⚔️ Compare Reports</button>
+      <div id="fetchStatus" style="margin-top:1rem;font-size:0.9rem;color:#aaa;"></div>
+      <div id="fetchProgress" style="margin-top:0.5rem;font-size:0.82rem;color:var(--muted);"></div>
+    </div>
+  </div>
+
+  <!-- Main comparison UI (hidden until data loaded) -->
+  <div class="app" id="compareApp" style="display:none;">
+    <a href="index.html" class="nav-link">← Back to Raid Analysis</a>
+    <div style="margin-bottom:16px;">
+      <button id="backBtn" style="padding:0.4rem 0.8rem;border-radius:6px;border:1px solid #444;background:#2a2e3e;color:#e0e0e0;cursor:pointer;font-size:0.85rem;">← New Comparison</button>
+    </div>
+
+    <div class="hero">
+      <h1>⚔️ Raid Log Comparison</h1>
+      <div class="subtitle">Side-by-side breakdown — green means Report 1 is ahead, red means Report 2 is ahead.</div>
+      <div id="reportInfo"></div>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="summary-row" id="summaryCards"></div>
+
+    <!-- Recommendations -->
+    <div class="panel" id="recsPanel">
+      <h2>🎯 Recommendations</h2>
+      <div id="recommendations"></div>
+    </div>
+
+    <!-- Boss Comparison -->
+    <div class="panel">
+      <h2>⚔️ Boss-by-Boss Comparison</h2>
+      <table id="bossTable">
+        <thead>
+          <tr>
+            <th>Boss</th>
+            <th>Report 1 Time</th>
+            <th>Report 2 Time</th>
+            <th>Delta</th>
+            <th>Report 1 DPS</th>
+            <th>Report 2 DPS</th>
+            <th>Report 1 Pulls</th>
+            <th>Report 2 Pulls</th>
+          </tr>
+        </thead>
+        <tbody id="bossBody"></tbody>
+      </table>
+      <div id="bossDetails"></div>
+    </div>
+
+    <!-- Pacing -->
+    <div class="panel">
+      <h2>⏱️ Pacing & Timing</h2>
+      <div class="two-col">
+        <div>
+          <div class="col-header">Report 1</div>
+          <div id="ourPacing"></div>
+        </div>
+        <div>
+          <div class="col-header">Report 2</div>
+          <div id="theirPacing"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Composition -->
+    <div class="panel">
+      <h2>👥 Composition</h2>
+      <div class="two-col">
+        <div>
+          <div class="col-header">Report 1 Comp</div>
+          <div id="ourComp"></div>
+        </div>
+        <div>
+          <div class="col-header">Report 2 Comp</div>
+          <div id="theirComp"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Buffs -->
+    <div class="panel">
+      <h2>✨ Buff & Consumable Coverage</h2>
+      <div id="buffComparison"></div>
+    </div>
+
+    <!-- Individual Player Comparison -->
+    <div class="panel">
+      <h2>👤 Individual Player Comparison</h2>
+      <div style="margin-bottom:16px;font-size:0.85rem;color:var(--muted)">Select players from each report to compare their per-boss performance side-by-side.</div>
+      <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:16px;">
+        <div style="flex:1;min-width:200px;">
+          <label style="display:block;font-size:0.78rem;color:var(--accent);text-transform:uppercase;margin-bottom:4px;">Report 1 Player</label>
+          <select id="ourPlayerSelect" style="width:100%;padding:0.4rem;border-radius:6px;border:1px solid #444;background:#1a1e2e;color:#e0e0e0;font-size:0.9rem;"></select>
+        </div>
+        <div style="flex:1;min-width:200px;">
+          <label style="display:block;font-size:0.78rem;color:var(--warning);text-transform:uppercase;margin-bottom:4px;">Report 2 Player</label>
+          <select id="theirPlayerSelect" style="width:100%;padding:0.4rem;border-radius:6px;border:1px solid #444;background:#1a1e2e;color:#e0e0e0;font-size:0.9rem;"></select>
+        </div>
+        <div style="display:flex;align-items:flex-end;">
+          <button id="comparePlayersBtn" style="padding:0.4rem 1rem;border-radius:6px;border:none;background:var(--accent);color:#fff;font-weight:600;cursor:pointer;font-size:0.85rem;">Compare</button>
+        </div>
+      </div>
+      <div id="individualComparison"></div>
+    </div>
+  </div>
+
+  <script>
+    // ===== State =====
+    let data = window.__COMPARE_DATA__;
+    const DEFAULT_API_KEY = '3e4330ef2d0c5aa921215259c93d38a3';
+    const REPORT_1_LABEL = 'Report 1';
+    const REPORT_2_LABEL = 'Report 2';
+
+    const CLASS_COLORS = {
+      Warrior: '#C79C6E', Paladin: '#F58CBA', Hunter: '#ABD473', Rogue: '#FFF569',
+      Priest: '#FFFFFF', Shaman: '#0070DE', Mage: '#69CCF0', Warlock: '#9482C9', Druid: '#FF7D0A',
+    };
+    const PLAYER_CLASSES = new Set(['Warrior','Paladin','Hunter','Rogue','Priest','Shaman','Mage','Warlock','Druid']);
+    const CONSUMABLE_BUFFS = new Set([
+      'Flask of Pure Death','Flask of Blinding Light','Flask of Supreme Power','Flask of Relentless Assault',
+      'Flask of Mighty Versatility','Flask of Fortification','Flask of the Titans',
+      'Unstable Flask of the Bandit','Unstable Flask of the Elder','Unstable Flask of the Beast',
+      'Unstable Flask of the Physician','Unstable Flask of the Soldier','Unstable Flask of the Sorcerer',
+      'Well Fed','Brilliant Wizard Oil','Superior Wizard Oil','Adamantite Weightstone','Adamantite Sharpening Stone',
+      'Elixir of Major Agility','Elixir of Major Firepower','Elixir of Major Shadow Power',
+      'Elixir of Healing Power','Elixir of Draenic Wisdom','Elixir of Major Mageblood',
+      'Elixir of Major Strength','Elixir of Mastery','Elixir of Major Fortitude','Elixir of Major Defense',
+      'Haste Potion','Destruction Potion','Super Mana Potion','Ironshield Potion','Free Action Potion',
+    ]);
+    const RAID_BUFFS = new Set([
+      'Arcane Brilliance','Mark of the Wild','Gift of the Wild',
+      'Power Word: Fortitude','Prayer of Fortitude','Shadow Protection','Prayer of Shadow Protection',
+      'Divine Spirit','Prayer of Spirit','Blessing of Kings','Greater Blessing of Kings',
+      'Blessing of Might','Greater Blessing of Might','Blessing of Wisdom','Greater Blessing of Wisdom',
+      'Blessing of Salvation','Greater Blessing of Salvation','Blessing of Light','Greater Blessing of Light',
+      'Windfury Totem','Grace of Air Totem','Strength of Earth Totem','Mana Spring Totem',
+      'Wrath of Air Totem','Totem of Wrath','Moonkin Aura','Leader of the Pack',
+      'Trueshot Aura','Ferocious Inspiration','Unleashed Rage','Vampiric Embrace',
+    ]);
+
+    // ===== API Client =====
+    const WCL_API_BASE = 'https://fresh.warcraftlogs.com/v1';
+
+    function extractReportId(url) {
+      const m = url.match(/\/reports\/([A-Za-z0-9]+)/);
+      if (m) return m[1];
+      throw new Error('Could not extract report ID from URL: ' + url);
+    }
+
+    async function apiFetch(path, apiKey, params = {}) {
+      const query = new URLSearchParams({ api_key: apiKey, ...params });
+      const resp = await fetch(`${WCL_API_BASE}${path}?${query}`);
+      if (!resp.ok) {
+        const text = await resp.text();
+        throw new Error(`API error ${resp.status}: ${text}`);
+      }
+      return resp.json();
+    }
+
+    async function fetchPaginatedEvents(eventType, reportId, apiKey, start, end, extraParams = {}) {
+      const events = [];
+      let nextStart = start;
+      while (true) {
+        const payload = await apiFetch(`/report/events/${eventType}/${reportId}`, apiKey, { start: nextStart, end, ...extraParams });
+        const pageEvents = payload.events || [];
+        events.push(...pageEvents);
+        const nextPage = payload.nextPageTimestamp;
+        if (!nextPage || nextPage >= end || nextPage === nextStart) break;
+        nextStart = nextPage;
+      }
+      return events;
+    }
+
+    function roleFromIcon(playerClass, icon) {
+      icon = icon || '';
+      if (icon.includes('-Holy') || icon.includes('-Restoration') || icon.includes('-Discipline')) return 'Healer';
+      if (icon.includes('-Protection') || icon.includes('-Guardian')) return 'Tank';
+      if (['Mage','Warlock','Rogue','Hunter'].includes(playerClass)) return 'DPS';
+      const dpsSpecs = ['-Shadow','-Balance','-Feral','-Enhancement','-Elemental','-Retribution',
+        '-Arms','-Fury','-Combat','-Assassination','-Subtlety','-Frost','-Fire',
+        '-Arcane','-Marksmanship','-BeastMastery','-Survival','-Affliction','-Demonology','-Destruction'];
+      if (dpsSpecs.some(s => icon.includes(s))) return 'DPS';
+      return 'DPS';
+    }
+
+    function fmtDuration(ms) {
+      const totalSec = Math.abs(ms) / 1000;
+      if (totalSec >= 3600) {
+        const h = Math.floor(totalSec / 3600);
+        const m = Math.floor((totalSec % 3600) / 60);
+        const s = Math.floor(totalSec % 60);
+        return `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+      }
+      const m = Math.floor(totalSec / 60);
+      const s = Math.floor(totalSec % 60);
+      return `${m}:${String(s).padStart(2,'0')}`;
+    }
+
+    // ===== Fetch one report =====
+    async function fetchReportData(reportUrl, apiKey, statusEl) {
+      const reportId = extractReportId(reportUrl);
+      statusEl.textContent = `Fetching fights for ${reportId}...`;
+
+      const fightsPayload = await apiFetch(`/report/fights/${reportId}`, apiKey);
+      const allFights = fightsPayload.fights || [];
+      const bossFights = allFights.filter(f => (f.boss || 0) > 0);
+      const trashFights = allFights.filter(f => (f.boss || 0) === 0 && f.name !== 'Unknown');
+
+      const friendlies = fightsPayload.friendlies || [];
+      const playersById = {};
+      for (const actor of friendlies) {
+        if (PLAYER_CLASSES.has(actor.type)) playersById[actor.id] = actor;
+      }
+
+      const reportStartMs = fightsPayload.start || 0;
+      const title = fightsPayload.title || '';
+      const owner = fightsPayload.owner || '';
+
+      // Roster
+      const roster = {};
+      for (const actor of friendlies) {
+        if (!PLAYER_CLASSES.has(actor.type)) continue;
+        roster[actor.name] = { class: actor.type, role: roleFromIcon(actor.type, actor.icon), icon: actor.icon || '', id: actor.id };
+      }
+
+      // Per-boss: only keep fastest kill
+      const bossMap = {};
+      for (const fight of bossFights) {
+        if (!fight.kill) continue;
+        const dur = fight.end_time - fight.start_time;
+        if (!bossMap[fight.name] || dur < bossMap[fight.name].duration_ms) {
+          bossMap[fight.name] = { fight, duration_ms: dur };
+        }
+      }
+
+      const bosses = [];
+      for (const [bossName, entry] of Object.entries(bossMap)) {
+        const fight = entry.fight;
+        const start = fight.start_time, end = fight.end_time;
+        const durationMs = end - start;
+        statusEl.textContent = `${reportId}: Fetching ${bossName}...`;
+
+        // Fetch damage, healing, buffs in parallel
+        const [dmgTable, healTable, buffTable] = await Promise.all([
+          apiFetch(`/report/tables/damage-done/${reportId}`, apiKey, { start, end }),
+          apiFetch(`/report/tables/healing/${reportId}`, apiKey, { start, end }),
+          apiFetch(`/report/tables/buffs/${reportId}`, apiKey, { start, end }),
+        ]);
+
+        let totalDamage = 0;
+        const playerDamage = {};
+        for (const e of (dmgTable.entries || [])) {
+          if (e.id in playersById) {
+            const name = playersById[e.id].name;
+            const dmg = e.total || 0;
+            playerDamage[name] = dmg;
+            totalDamage += dmg;
+          }
+        }
+
+        let totalHealing = 0, totalOverheal = 0;
+        const playerHealing = {};
+        for (const e of (healTable.entries || [])) {
+          if (e.id in playersById) {
+            const name = playersById[e.id].name;
+            const heal = e.total || 0;
+            const oh = e.overheal || 0;
+            playerHealing[name] = { healing: heal, overheal: oh };
+            totalHealing += heal;
+            totalOverheal += oh;
+          }
+        }
+
+        const buffsPresent = new Set();
+        for (const e of (buffTable.auras || [])) {
+          if (CONSUMABLE_BUFFS.has(e.name) || RAID_BUFFS.has(e.name)) buffsPresent.add(e.name);
+        }
+
+        // Bloodlust/Heroism
+        statusEl.textContent = `${reportId}: ${bossName} cooldowns...`;
+        const cooldownEvents = [];
+        for (const cdSpell of ['Bloodlust', 'Heroism']) {
+          try {
+            const cdCasts = await fetchPaginatedEvents('casts', reportId, apiKey, start, end, { filter: `ability.name="${cdSpell}"` });
+            for (const ev of cdCasts) {
+              if (ev.type === 'cast') {
+                cooldownEvents.push({
+                  spell: cdSpell,
+                  time_sec: Math.round((ev.timestamp - start) / 100) / 10,
+                  time_pct: Math.round((ev.timestamp - start) / (end - start) * 1000) / 10,
+                });
+              }
+            }
+          } catch (e) { /* filter may fail on some reports */ }
+        }
+
+        const durationSec = durationMs / 1000;
+        bosses.push({
+          name: bossName,
+          fight_id: fight.id,
+          duration_ms: durationMs,
+          duration_str: fmtDuration(durationMs),
+          start_time: start,
+          end_time: end,
+          total_damage: totalDamage,
+          raid_dps: durationSec > 0 ? Math.round(totalDamage / durationSec) : 0,
+          total_healing: totalHealing,
+          total_overheal: totalOverheal,
+          overheal_pct: (totalHealing + totalOverheal) > 0 ? Math.round(totalOverheal / (totalHealing + totalOverheal) * 1000) / 10 : 0,
+          raid_hps: durationSec > 0 ? Math.round(totalHealing / durationSec) : 0,
+          player_damage: Object.fromEntries(Object.entries(playerDamage).sort((a,b) => b[1] - a[1])),
+          player_healing: Object.fromEntries(Object.entries(playerHealing).sort((a,b) => b[1].healing - a[1].healing)),
+          buffs_present: [...buffsPresent].sort(),
+          cooldowns: cooldownEvents,
+        });
+      }
+
+      bosses.sort((a, b) => a.start_time - b.start_time);
+
+      // Pull counts
+      const bossPullCounts = {};
+      for (const fight of bossFights) {
+        if (!bossPullCounts[fight.name]) bossPullCounts[fight.name] = { total_pulls: 0, kills: 0, wipes: 0 };
+        bossPullCounts[fight.name].total_pulls++;
+        if (fight.kill) bossPullCounts[fight.name].kills++;
+        else bossPullCounts[fight.name].wipes++;
+      }
+
+      // Trash
+      const trashData = { logged: false, total_time_ms: 0, pull_count: 0 };
+      if (trashFights.length) {
+        trashData.logged = true;
+        trashData.pull_count = trashFights.length;
+        const totalTrash = trashFights.reduce((sum, f) => sum + (f.end_time - f.start_time), 0);
+        trashData.total_time_ms = totalTrash;
+        trashData.total_time_str = fmtDuration(totalTrash);
+      }
+
+      // Pacing
+      const pacing = [];
+      for (let i = 0; i < bosses.length; i++) {
+        const entry = { boss: bosses[i].name, kill_time_ms: bosses[i].end_time, fight_duration_ms: bosses[i].duration_ms };
+        if (i > 0) {
+          const gapMs = bosses[i].start_time - bosses[i-1].end_time;
+          entry.gap_from_prev_ms = gapMs;
+          entry.gap_from_prev_str = fmtDuration(Math.max(0, gapMs));
+        }
+        pacing.push(entry);
+      }
+
+      // Total raid time
+      const firstEventMs = allFights.length ? Math.min(...allFights.map(f => f.start_time)) : (bosses[0]?.start_time || 0);
+      const lastKillMs = bosses.length ? bosses[bosses.length - 1].end_time : 0;
+      const totalRaidMs = lastKillMs - firstEventMs;
+      const totalGapMs = pacing.reduce((sum, p) => sum + Math.max(0, p.gap_from_prev_ms || 0), 0);
+
+      return {
+        report_id: reportId, url: reportUrl, title, owner, report_start_ms: reportStartMs,
+        total_raid_ms: totalRaidMs, total_raid_str: fmtDuration(totalRaidMs),
+        total_gap_ms: totalGapMs, total_gap_str: fmtDuration(totalGapMs),
+        roster, bosses, boss_order: bosses.map(b => b.name), boss_pull_counts: bossPullCounts,
+        trash: trashData, pacing,
+      };
+    }
+
+    // ===== Comparison logic =====
+    function compareReports(ours, theirs) {
+      function compSummary(roster) {
+        const roles = { Tank: 0, Healer: 0, DPS: 0 };
+        const classes = {};
+        for (const info of Object.values(roster)) {
+          roles[info.role || 'DPS']++;
+          classes[info.class] = (classes[info.class] || 0) + 1;
+        }
+        return { total: Object.keys(roster).length, roles, classes };
+      }
+
+      const ourComp = compSummary(ours.roster);
+      const theirComp = compSummary(theirs.roster);
+
+      // Boss comparison
+      const allBossNames = [...new Set([...ours.boss_order, ...theirs.boss_order])];
+      const bossComparison = [];
+
+      for (const bossName of allBossNames) {
+        const ourBoss = ours.bosses.find(b => b.name === bossName);
+        const theirBoss = theirs.bosses.find(b => b.name === bossName);
+        const entry = { name: bossName };
+
+        if (ourBoss) {
+          entry.ours = {
+            duration_ms: ourBoss.duration_ms, duration_str: ourBoss.duration_str,
+            raid_dps: ourBoss.raid_dps, raid_hps: ourBoss.raid_hps, overheal_pct: ourBoss.overheal_pct,
+            buffs: ourBoss.buffs_present, cooldowns: ourBoss.cooldowns,
+            top_dps: Object.entries(ourBoss.player_damage).slice(0, 5),
+            top_healers: Object.entries(ourBoss.player_healing).map(([k,v]) => [k, v.healing]).slice(0, 5),
+            pulls: ours.boss_pull_counts[bossName] || {},
+            all_player_damage: ourBoss.player_damage,
+            all_player_healing: ourBoss.player_healing,
+            start_time: ourBoss.start_time,
+            end_time: ourBoss.end_time,
+            fight_id: ourBoss.fight_id,
+          };
+        }
+        if (theirBoss) {
+          entry.theirs = {
+            duration_ms: theirBoss.duration_ms, duration_str: theirBoss.duration_str,
+            raid_dps: theirBoss.raid_dps, raid_hps: theirBoss.raid_hps, overheal_pct: theirBoss.overheal_pct,
+            buffs: theirBoss.buffs_present, cooldowns: theirBoss.cooldowns,
+            top_dps: Object.entries(theirBoss.player_damage).slice(0, 5),
+            top_healers: Object.entries(theirBoss.player_healing).map(([k,v]) => [k, v.healing]).slice(0, 5),
+            pulls: theirs.boss_pull_counts[bossName] || {},
+            all_player_damage: theirBoss.player_damage,
+            all_player_healing: theirBoss.player_healing,
+            start_time: theirBoss.start_time,
+            end_time: theirBoss.end_time,
+            fight_id: theirBoss.fight_id,
+          };
+        }
+
+        if (ourBoss && theirBoss) {
+          const timeDelta = ourBoss.duration_ms - theirBoss.duration_ms;
+          entry.delta = {
+            time_ms: timeDelta,
+            time_str: `${timeDelta > 0 ? '+' : ''}${fmtDuration(timeDelta)}`,
+            time_favorable: timeDelta < 0,
+            dps_diff: ourBoss.raid_dps - theirBoss.raid_dps,
+            hps_diff: ourBoss.raid_hps - theirBoss.raid_hps,
+            overheal_diff: Math.round((ourBoss.overheal_pct - theirBoss.overheal_pct) * 10) / 10,
+            missing_buffs: theirBoss.buffs_present.filter(b => !ourBoss.buffs_present.includes(b)),
+            extra_buffs: ourBoss.buffs_present.filter(b => !theirBoss.buffs_present.includes(b)),
+          };
+        }
+        bossComparison.push(entry);
+      }
+
+      const pacingComparison = {
+        ours: { total_raid_ms: ours.total_raid_ms, total_raid_str: ours.total_raid_str, total_gap_ms: ours.total_gap_ms, total_gap_str: ours.total_gap_str, pacing: ours.pacing, trash: ours.trash },
+        theirs: { total_raid_ms: theirs.total_raid_ms, total_raid_str: theirs.total_raid_str, total_gap_ms: theirs.total_gap_ms, total_gap_str: theirs.total_gap_str, pacing: theirs.pacing, trash: theirs.trash },
+        delta_total_ms: ours.total_raid_ms - theirs.total_raid_ms,
+        delta_gap_ms: ours.total_gap_ms - theirs.total_gap_ms,
+      };
+
+      const recommendations = generateRecommendations(ours, theirs, bossComparison, pacingComparison);
+
+      return {
+        ours: { report_id: ours.report_id, url: ours.url, title: ours.title, owner: ours.owner },
+        theirs: { report_id: theirs.report_id, url: theirs.url, title: theirs.title, owner: theirs.owner },
+        comp: { ours: ourComp, theirs: theirComp },
+        roster: { ours: ours.roster, theirs: theirs.roster },
+        bosses: bossComparison,
+        pacing: pacingComparison,
+        recommendations,
+      };
+    }
+
+    function generateRecommendations(ours, theirs, bossComparison, pacing) {
+      const tips = [];
+
+      // Pacing
+      const gapDelta = pacing.delta_gap_ms;
+      if (gapDelta > 30000) {
+        tips.push({ category: 'Pacing', severity: 'high',
+          title: `Non-combat time is ${fmtDuration(gapDelta)} longer`,
+          detail: 'Time between boss kills is significantly higher. Consider: pre-positioning, faster rebuffs, pulling trash while buffing, or assigning a pull leader.',
+        });
+      }
+
+      // Per-boss time
+      for (const boss of bossComparison) {
+        const d = boss.delta;
+        if (!d) continue;
+        if (d.time_ms > 15000) {
+          tips.push({ category: 'Kill Speed', severity: d.time_ms > 30000 ? 'high' : 'medium',
+            title: `${boss.name}: ${fmtDuration(d.time_ms)} slower`,
+            detail: `${REPORT_2_LABEL} raid DPS was ${d.dps_diff > 0 ? '' : '+'}${(-d.dps_diff).toLocaleString()} higher. ` +
+              (d.missing_buffs.length ? `Missing buffs: ${d.missing_buffs.join(', ')}. ` : '') +
+              (Math.abs(d.overheal_diff) > 5 ? `Overheal difference: ${d.overheal_diff > 0 ? '+' : ''}${d.overheal_diff}%.` : ''),
+          });
+        }
+      }
+
+      // Comp
+      let ourHealers = 0, theirHealers = 0;
+      for (const info of Object.values(ours.roster)) { if (info.role === 'Healer') ourHealers++; }
+      for (const info of Object.values(theirs.roster)) { if (info.role === 'Healer') theirHealers++; }
+      if (ourHealers > theirHealers) {
+        tips.push({ category: 'Composition', severity: 'medium',
+          title: `Running ${ourHealers - theirHealers} more healer(s) than ${REPORT_2_LABEL}`,
+          detail: 'Extra healers reduce raid DPS. If healing is comfortable, consider swapping a healer to DPS for faster kills.',
+        });
+      }
+
+      // Overheal
+      for (const boss of bossComparison) {
+        const d = boss.delta;
+        if (d && d.overheal_diff > 10) {
+          tips.push({ category: 'Healing Efficiency', severity: 'medium',
+            title: `${boss.name}: ${d.overheal_diff.toFixed(1)}% more overheal`,
+            detail: 'High overheal suggests healers could downrank, use fewer GCDs on healing, or one healer could swap to DPS.',
+          });
+          break;
+        }
+      }
+
+      // Cooldown timing
+      for (const boss of bossComparison) {
+        const ourCds = (boss.ours || {}).cooldowns || [];
+        const theirCds = (boss.theirs || {}).cooldowns || [];
+        const ourLust = ourCds.filter(c => c.spell === 'Bloodlust' || c.spell === 'Heroism');
+        const theirLust = theirCds.filter(c => c.spell === 'Bloodlust' || c.spell === 'Heroism');
+        if (theirLust.length && !ourLust.length) {
+          tips.push({ category: 'Cooldowns', severity: 'high',
+            title: `${boss.name}: ${REPORT_2_LABEL} used Bloodlust/Heroism and ${REPORT_1_LABEL} didn't`,
+            detail: 'Bloodlust/Heroism provides 30% haste. Consider using it on this boss.',
+          });
+        } else if (ourLust.length && theirLust.length) {
+          const diff = Math.abs(ourLust[0].time_pct - theirLust[0].time_pct);
+          if (diff > 20) {
+            tips.push({ category: 'Cooldowns', severity: 'low',
+              title: `${boss.name}: Different Bloodlust timing (${ourLust[0].time_pct.toFixed(0)}% vs ${theirLust[0].time_pct.toFixed(0)}%)`,
+              detail: `${REPORT_1_LABEL} used it at ${ourLust[0].time_pct.toFixed(0)}%, ${REPORT_2_LABEL} at ${theirLust[0].time_pct.toFixed(0)}%. Earlier usage generally yields more value unless there's a burn phase.`,
+            });
+          }
+        }
+      }
+
+      // Trash
+      if (ours.trash.logged && theirs.trash.logged) {
+        const trashDelta = ours.trash.total_time_ms - theirs.trash.total_time_ms;
+        if (trashDelta > 60000) {
+          tips.push({ category: 'Trash', severity: 'medium',
+            title: `Trash pulls took ${fmtDuration(trashDelta)} longer`,
+            detail: `${REPORT_1_LABEL} spent ${fmtDuration(ours.trash.total_time_ms)} on trash vs ${REPORT_2_LABEL} at ${fmtDuration(theirs.trash.total_time_ms)}. Consider bigger pulls, more AoE, or skipping optional packs.`,
+          });
+        }
+      }
+
+      const severityOrder = { high: 0, medium: 1, low: 2 };
+      tips.sort((a, b) => (severityOrder[a.severity] || 9) - (severityOrder[b.severity] || 9));
+      return tips;
+    }
+
+    // ===== Rendering =====
+    function escapeHtml(str) {
+      return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    function formatNum(n) {
+      return n != null ? n.toLocaleString() : '\u2014';
+    }
+
+    function formatDuration(ms) {
+      const neg = ms < 0;
+      ms = Math.abs(ms);
+      const sec = Math.floor(ms / 1000);
+      const m = Math.floor(sec / 60);
+      const s = sec % 60;
+      if (m >= 60) {
+        const h = Math.floor(m / 60);
+        return `${neg ? '-' : ''}${h}:${String(m % 60).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+      }
+      return `${neg ? '-' : ''}${m}:${String(s).padStart(2,'0')}`;
+    }
+
+    function showResults(comparisonData) {
+      data = comparisonData;
+      document.getElementById('loadScreen').style.display = 'none';
+      document.getElementById('compareApp').style.display = '';
+      renderReportInfo();
+      renderSummary();
+      renderRecommendations();
+      renderBossTable();
+      renderPacing();
+      renderComp();
+      renderBuffs();
+      renderPlayerSelectors();
+    }
+
+    function renderReportInfo() {
+      const el = document.getElementById('reportInfo');
+      el.innerHTML = `
+        <div style="display:flex;justify-content:center;gap:40px;margin-top:12px;font-size:0.85rem;">
+          <div><strong style="color:var(--accent)">${REPORT_1_LABEL}:</strong> ${escapeHtml(data.ours.title || data.ours.report_id)}</div>
+          <div><strong style="color:var(--warning)">${REPORT_2_LABEL}:</strong> ${escapeHtml(data.theirs.title || data.theirs.report_id)}</div>
+        </div>
+      `;
+    }
+
+    function renderSummary() {
+      const el = document.getElementById('summaryCards');
+      const pacing = data.pacing;
+      const totalDelta = pacing.delta_total_ms;
+      const gapDelta = pacing.delta_gap_ms;
+      const ourBossKills = data.bosses.filter(b => b.ours).length;
+      const theirBossKills = data.bosses.filter(b => b.theirs).length;
+
+      let ourTotalDps = 0, theirTotalDps = 0, bossCount = 0;
+      for (const boss of data.bosses) {
+        if (boss.ours && boss.theirs) {
+          ourTotalDps += boss.ours.raid_dps;
+          theirTotalDps += boss.theirs.raid_dps;
+          bossCount++;
+        }
+      }
+      const avgDpsDiff = bossCount > 0 ? Math.round((ourTotalDps - theirTotalDps) / bossCount) : 0;
+
+      el.innerHTML = `
+        <div class="summary-card">
+          <div class="label">Total Raid Time</div>
+          <div class="value">${escapeHtml(pacing.ours.total_raid_str)}</div>
+          <div class="delta ${totalDelta > 0 ? 'slower' : totalDelta < 0 ? 'faster' : 'neutral'}">
+            ${totalDelta > 0 ? '+' : ''}${formatDuration(totalDelta)} vs ${REPORT_2_LABEL}
+          </div>
+        </div>
+        <div class="summary-card">
+          <div class="label">Non-Combat Time</div>
+          <div class="value">${escapeHtml(pacing.ours.total_gap_str)}</div>
+          <div class="delta ${gapDelta > 0 ? 'slower' : gapDelta < 0 ? 'faster' : 'neutral'}">
+            ${gapDelta > 0 ? '+' : ''}${formatDuration(gapDelta)} vs ${REPORT_2_LABEL}
+          </div>
+        </div>
+        <div class="summary-card">
+          <div class="label">Bosses Killed</div>
+          <div class="value">${ourBossKills}</div>
+          <div class="delta neutral">${REPORT_2_LABEL}: ${theirBossKills}</div>
+        </div>
+        <div class="summary-card">
+          <div class="label">Avg Raid DPS Diff</div>
+          <div class="value">${avgDpsDiff >= 0 ? '+' : ''}${formatNum(avgDpsDiff)}</div>
+          <div class="delta ${avgDpsDiff >= 0 ? 'faster' : 'slower'}">
+            ${avgDpsDiff >= 0 ? `Higher than ${REPORT_2_LABEL}` : `Lower than ${REPORT_2_LABEL}`}
+          </div>
+        </div>
+        <div class="summary-card">
+          <div class="label">Recommendations</div>
+          <div class="value">${data.recommendations.length}</div>
+          <div class="delta neutral">${data.recommendations.filter(r => r.severity === 'high').length} high priority</div>
+        </div>
+      `;
+    }
+
+    function renderRecommendations() {
+      const el = document.getElementById('recommendations');
+      if (!data.recommendations.length) {
+        el.innerHTML = '<p style="color:var(--muted)">No significant differences found \u2014 reports are performing similarly!</p>';
+        return;
+      }
+      el.innerHTML = data.recommendations.map(rec => `
+        <div class="rec-card ${rec.severity}">
+          <div class="rec-category">${escapeHtml(rec.category)}</div>
+          <div class="rec-title">${escapeHtml(rec.title)}</div>
+          <div class="rec-detail">${escapeHtml(rec.detail)}</div>
+        </div>
+      `).join('');
+    }
+
+    function renderBossTable() {
+      const tbody = document.getElementById('bossBody');
+      const details = document.getElementById('bossDetails');
+      let rows = '';
+      let detailsHtml = '';
+
+      for (const boss of data.bosses) {
+        const o = boss.ours || {};
+        const t = boss.theirs || {};
+        const d = boss.delta || {};
+        const deltaClass = d.time_favorable ? 'faster' : d.time_ms > 0 ? 'slower' : 'neutral';
+
+        rows += `<tr class="boss-row" data-boss="${escapeHtml(boss.name)}">
+          <td><strong>${escapeHtml(boss.name)}</strong></td>
+          <td>${o.duration_str || '\u2014'}</td>
+          <td>${t.duration_str || '\u2014'}</td>
+          <td class="${deltaClass}">${d.time_str ? (d.time_favorable ? '\ud83d\udfe2 ' : '\ud83d\udd34 ') + d.time_str : '\u2014'}</td>
+          <td>${o.raid_dps ? formatNum(o.raid_dps) : '\u2014'}</td>
+          <td>${t.raid_dps ? formatNum(t.raid_dps) : '\u2014'}</td>
+          <td>${o.pulls ? o.pulls.total_pulls + (o.pulls.wipes ? ` (${o.pulls.wipes} wipe${o.pulls.wipes > 1 ? 's' : ''})` : '') : '\u2014'}</td>
+          <td>${t.pulls ? t.pulls.total_pulls + (t.pulls.wipes ? ` (${t.pulls.wipes} wipe${t.pulls.wipes > 1 ? 's' : ''})` : '') : '\u2014'}</td>
+        </tr>`;
+
+        const bossId = boss.name.replace(/[^a-zA-Z0-9]/g, '_');
+        detailsHtml += `<div class="boss-detail" id="detail-${bossId}">
+          <div class="two-col">
+            <div>
+              <h3 style="color:var(--accent)">${REPORT_1_LABEL} Top DPS</h3>
+              ${(o.top_dps || []).map(([name, dmg]) => `<div style="font-size:0.82rem">${escapeHtml(name)}: ${formatNum(dmg)}</div>`).join('')}
+              <h3 style="margin-top:12px;color:var(--accent)">${REPORT_1_LABEL} Top Healers</h3>
+              ${(o.top_healers || []).map(([name, heal]) => `<div style="font-size:0.82rem">${escapeHtml(name)}: ${formatNum(heal)}</div>`).join('')}
+              ${o.cooldowns && o.cooldowns.length ? `<h3 style="margin-top:12px;color:var(--accent)">${REPORT_1_LABEL} Cooldowns</h3>${o.cooldowns.map(cd => `<div style="font-size:0.82rem">${cd.spell} at ${cd.time_sec}s (${cd.time_pct}%)</div>`).join('')}` : ''}
+              <div style="margin-top:8px;font-size:0.8rem;color:var(--muted)">Overheal: ${o.overheal_pct != null ? o.overheal_pct : '?'}%</div>
+            </div>
+            <div>
+              <h3 style="color:var(--warning)">${REPORT_2_LABEL} Top DPS</h3>
+              ${(t.top_dps || []).map(([name, dmg]) => `<div style="font-size:0.82rem">${escapeHtml(name)}: ${formatNum(dmg)}</div>`).join('')}
+              <h3 style="margin-top:12px;color:var(--warning)">${REPORT_2_LABEL} Top Healers</h3>
+              ${(t.top_healers || []).map(([name, heal]) => `<div style="font-size:0.82rem">${escapeHtml(name)}: ${formatNum(heal)}</div>`).join('')}
+              ${t.cooldowns && t.cooldowns.length ? `<h3 style="margin-top:12px;color:var(--warning)">${REPORT_2_LABEL} Cooldowns</h3>${t.cooldowns.map(cd => `<div style="font-size:0.82rem">${cd.spell} at ${cd.time_sec}s (${cd.time_pct}%)</div>`).join('')}` : ''}
+              <div style="margin-top:8px;font-size:0.8rem;color:var(--muted)">Overheal: ${t.overheal_pct != null ? t.overheal_pct : '?'}%</div>
+            </div>
+          </div>
+          ${d.missing_buffs && d.missing_buffs.length ? `<div style="margin-top:12px;font-size:0.82rem;color:var(--warning)"><strong>Buffs ${REPORT_2_LABEL} has that ${REPORT_1_LABEL} doesn't:</strong> ${d.missing_buffs.join(', ')}</div>` : ''}
+          ${d.extra_buffs && d.extra_buffs.length ? `<div style="margin-top:4px;font-size:0.82rem;color:var(--accent)"><strong>Buffs ${REPORT_1_LABEL} has that ${REPORT_2_LABEL} doesn't:</strong> ${d.extra_buffs.join(', ')}</div>` : ''}
+        </div>`;
+      }
+
+      tbody.innerHTML = rows;
+      details.innerHTML = detailsHtml;
+
+      tbody.querySelectorAll('.boss-row').forEach(row => {
+        row.addEventListener('click', () => {
+          const bossId = row.dataset.boss.replace(/[^a-zA-Z0-9]/g, '_');
+          const detail = document.getElementById('detail-' + bossId);
+          if (detail) detail.classList.toggle('open');
+        });
+      });
+    }
+
+    function renderPacing() {
+      renderPacingBar('ourPacing', data.pacing.ours);
+      renderPacingBar('theirPacing', data.pacing.theirs);
+    }
+
+    function renderPacingBar(elId, pacingData) {
+      const el = document.getElementById(elId);
+      const totalMs = pacingData.total_raid_ms;
+      if (!totalMs || !pacingData.pacing || !pacingData.pacing.length) {
+        el.innerHTML = '<div style="color:var(--muted);font-size:0.85rem">No pacing data available</div>';
+        return;
+      }
+
+      let html = `<div style="font-size:0.85rem;margin-bottom:8px">Total: <strong>${pacingData.total_raid_str}</strong> | Gaps: <strong>${pacingData.total_gap_str}</strong></div>`;
+      html += '<div class="pacing-bar">';
+      for (const entry of pacingData.pacing) {
+        if (entry.gap_from_prev_ms && entry.gap_from_prev_ms > 0) {
+          const gapPct = (entry.gap_from_prev_ms / totalMs * 100).toFixed(1);
+          html += `<div class="pacing-segment gap" style="width:${gapPct}%" title="Gap: ${entry.gap_from_prev_str}">${gapPct > 5 ? entry.gap_from_prev_str : ''}</div>`;
+        }
+        const bossPct = (entry.fight_duration_ms / totalMs * 100).toFixed(1);
+        html += `<div class="pacing-segment boss" style="width:${bossPct}%" title="${entry.boss}">${bossPct > 4 ? entry.boss.split(' ')[0] : ''}</div>`;
+      }
+      html += '</div>';
+
+      html += '<div style="margin-top:12px;font-size:0.82rem">';
+      for (const entry of pacingData.pacing) {
+        if (entry.gap_from_prev_ms && entry.gap_from_prev_ms > 0) {
+          html += `<div style="color:var(--muted);padding:2px 0">\u2195 ${entry.gap_from_prev_str} gap</div>`;
+        }
+        const durSec = Math.round(entry.fight_duration_ms / 1000);
+        html += `<div style="padding:2px 0">\u2694\ufe0f ${entry.boss} \u2014 ${Math.floor(durSec/60)}:${String(durSec%60).padStart(2,'0')}</div>`;
+      }
+      html += '</div>';
+
+      if (pacingData.trash && pacingData.trash.logged) {
+        html += `<div style="margin-top:12px;font-size:0.82rem;color:var(--muted)">Trash: ${pacingData.trash.pull_count} pulls, ${pacingData.trash.total_time_str} total</div>`;
+      } else if (pacingData.trash) {
+        html += '<div style="margin-top:12px;font-size:0.82rem;color:var(--muted)">Trash not logged \u2014 gap times include trash + movement</div>';
+      }
+      el.innerHTML = html;
+    }
+
+    function renderComp() {
+      renderCompCol('ourComp', data.comp.ours, data.roster.ours);
+      renderCompCol('theirComp', data.comp.theirs, data.roster.theirs);
+    }
+
+    function renderCompCol(elId, comp, roster) {
+      const el = document.getElementById(elId);
+      let html = `<div style="font-size:0.88rem;margin-bottom:8px">
+        <strong>${comp.total}</strong> players \u2014
+        <span style="color:var(--tank)">${comp.roles.Tank} tanks</span>,
+        <span style="color:var(--healer)">${comp.roles.Healer} healers</span>,
+        <span style="color:var(--dps)">${comp.roles.DPS} DPS</span>
+      </div>`;
+
+      html += '<div style="margin-bottom:8px">';
+      for (const [cls, count] of Object.entries(comp.classes).sort()) {
+        const color = CLASS_COLORS[cls] || '#aaa';
+        html += `<span class="class-pill" style="color:${color}">${cls} \u00d7${count}</span> `;
+      }
+      html += '</div>';
+
+      const byRole = { Tank: [], Healer: [], DPS: [] };
+      for (const [name, info] of Object.entries(roster)) {
+        (byRole[info.role] || byRole.DPS).push({ name, ...info });
+      }
+      for (const role of ['Tank', 'Healer', 'DPS']) {
+        if (!byRole[role].length) continue;
+        const roleColor = role === 'Tank' ? 'var(--tank)' : role === 'Healer' ? 'var(--healer)' : 'var(--dps)';
+        html += `<div style="margin-top:8px;font-size:0.78rem;color:${roleColor};font-weight:600">${role}s</div>`;
+        html += '<div style="font-size:0.8rem">';
+        for (const p of byRole[role]) {
+          const color = CLASS_COLORS[p.class] || '#aaa';
+          html += `<div style="color:${color};padding:1px 0">${escapeHtml(p.name)} <span style="color:var(--muted)">(${p.class})</span></div>`;
+        }
+        html += '</div>';
+      }
+      el.innerHTML = html;
+    }
+
+    function renderBuffs() {
+      const el = document.getElementById('buffComparison');
+      const ourBuffs = new Set();
+      const theirBuffs = new Set();
+      for (const boss of data.bosses) {
+        if (boss.ours) (boss.ours.buffs || []).forEach(b => ourBuffs.add(b));
+        if (boss.theirs) (boss.theirs.buffs || []).forEach(b => theirBuffs.add(b));
+      }
+      const sorted = [...new Set([...ourBuffs, ...theirBuffs])].sort();
+
+      let html = '<div style="margin-bottom:12px;font-size:0.82rem;color:var(--muted)">';
+      html += '<span style="color:var(--faster)">\u25cf Both have</span> \u00a0 ';
+      html += `<span style="color:var(--accent)">\u25cf Only ${REPORT_1_LABEL}</span> \u00a0 `;
+      html += `<span style="color:var(--warning)">\u25cf Only ${REPORT_2_LABEL} (${REPORT_1_LABEL} is missing)</span>`;
+      html += '</div><div class="buff-grid">';
+      for (const buff of sorted) {
+        const hasOurs = ourBuffs.has(buff);
+        const hasTheirs = theirBuffs.has(buff);
+        let cls = 'both';
+        if (hasOurs && !hasTheirs) cls = 'ours-only';
+        else if (!hasOurs && hasTheirs) cls = 'theirs-only';
+        html += `<div class="buff-item ${cls}">${escapeHtml(buff)}</div>`;
+      }
+      html += '</div>';
+      el.innerHTML = html;
+    }
+
+    // ===== Individual Player Comparison =====
+    function renderPlayerSelectors() {
+      const ourSelect = document.getElementById('ourPlayerSelect');
+      const theirSelect = document.getElementById('theirPlayerSelect');
+      if (!ourSelect || !theirSelect) return;
+
+      const ourRoster = data.roster.ours || {};
+      const theirRoster = data.roster.theirs || {};
+
+      function buildOptions(roster) {
+        const byRole = { Tank: [], Healer: [], DPS: [] };
+        for (const [name, info] of Object.entries(roster)) {
+          (byRole[info.role] || byRole.DPS).push({ name, ...info });
+        }
+        let html = '<option value="">-- Select a player --</option>';
+        for (const role of ['Tank', 'Healer', 'DPS']) {
+          if (!byRole[role].length) continue;
+          html += `<optgroup label="${role}s">`;
+          for (const p of byRole[role].sort((a, b) => a.name.localeCompare(b.name))) {
+            html += `<option value="${escapeHtml(p.name)}">${escapeHtml(p.name)} (${p.class})</option>`;
+          }
+          html += '</optgroup>';
+        }
+        return html;
+      }
+
+      ourSelect.innerHTML = buildOptions(ourRoster);
+      theirSelect.innerHTML = buildOptions(theirRoster);
+
+      document.getElementById('comparePlayersBtn').addEventListener('click', renderIndividualComparison);
+      ourSelect.addEventListener('change', renderIndividualComparison);
+      theirSelect.addEventListener('change', renderIndividualComparison);
+    }
+
+    function renderMetricChartSection(title, bossStats, ourPlayer, theirPlayer, ourKey, theirKey) {
+      if (!bossStats.some(b => b[ourKey] > 0 || b[theirKey] > 0)) return '';
+      const maxMetric = bossStats.reduce((max, boss) => Math.max(max, boss[ourKey] || 0, boss[theirKey] || 0), 0);
+      if (maxMetric <= 0) return '';
+
+      let html = `<div style="margin-top:20px;"><h3 style="color:var(--text);font-size:0.9rem;margin-bottom:12px;">${title}</h3>`;
+      for (const boss of bossStats) {
+        if (!boss[ourKey] && !boss[theirKey]) continue;
+        html += `<div style="margin-bottom:10px;"><div style="font-size:0.78rem;color:var(--muted);margin-bottom:3px;">${escapeHtml(boss.name)}</div>`;
+        if (ourPlayer) {
+          const pct = maxMetric > 0 ? (boss[ourKey] / maxMetric * 100) : 0;
+          html += `<div style="display:flex;align-items:center;gap:8px;margin-bottom:2px;">
+            <div style="width:72px;font-size:0.75rem;color:var(--accent);text-align:right;">${formatNum(boss[ourKey])}</div>
+            <div style="flex:1;height:14px;background:var(--panel-3);border-radius:4px;overflow:hidden;">
+              <div style="width:${pct}%;height:100%;background:var(--accent);border-radius:4px;"></div>
+            </div>
+          </div>`;
+        }
+        if (theirPlayer) {
+          const pct = maxMetric > 0 ? (boss[theirKey] / maxMetric * 100) : 0;
+          html += `<div style="display:flex;align-items:center;gap:8px;">
+            <div style="width:72px;font-size:0.75rem;color:var(--warning);text-align:right;">${formatNum(boss[theirKey])}</div>
+            <div style="flex:1;height:14px;background:var(--panel-3);border-radius:4px;overflow:hidden;">
+              <div style="width:${pct}%;height:100%;background:var(--warning);border-radius:4px;"></div>
+            </div>
+          </div>`;
+        }
+        html += '</div>';
+      }
+      html += '</div>';
+      return html;
+    }
+
+    function renderIndividualComparison() {
+      const ourPlayer = document.getElementById('ourPlayerSelect').value;
+      const theirPlayer = document.getElementById('theirPlayerSelect').value;
+      const el = document.getElementById('individualComparison');
+
+      if (!ourPlayer && !theirPlayer) {
+        el.innerHTML = '<div style="color:var(--muted);font-size:0.85rem">Select at least one player to see their breakdown.</div>';
+        return;
+      }
+
+      const ourRoster = data.roster.ours || {};
+      const theirRoster = data.roster.theirs || {};
+      const ourInfo = ourRoster[ourPlayer] || {};
+      const theirInfo = theirRoster[theirPlayer] || {};
+      const bossStats = [];
+
+      for (let i = 0; i < data.bosses.length; i++) {
+        const boss = data.bosses[i];
+        const ourBoss = boss.ours || {};
+        const theirBoss = boss.theirs || {};
+
+        const ourDmg = ourPlayer && ourBoss.all_player_damage ? (ourBoss.all_player_damage[ourPlayer] || 0) : 0;
+        const theirDmg = theirPlayer && theirBoss.all_player_damage ? (theirBoss.all_player_damage[theirPlayer] || 0) : 0;
+
+        const ourHealData = ourPlayer && ourBoss.all_player_healing ? (ourBoss.all_player_healing[ourPlayer] || {}) : {};
+        const theirHealData = theirPlayer && theirBoss.all_player_healing ? (theirBoss.all_player_healing[theirPlayer] || {}) : {};
+        const ourHeal = ourHealData.healing || 0;
+        const theirHeal = theirHealData.healing || 0;
+
+        const ourDurSec = ourBoss.duration_ms ? ourBoss.duration_ms / 1000 : 0;
+        const theirDurSec = theirBoss.duration_ms ? theirBoss.duration_ms / 1000 : 0;
+        const ourDps = ourDurSec > 0 ? Math.round(ourDmg / ourDurSec) : 0;
+        const theirDps = theirDurSec > 0 ? Math.round(theirDmg / theirDurSec) : 0;
+        const ourHps = ourDurSec > 0 ? Math.round(ourHeal / ourDurSec) : 0;
+        const theirHps = theirDurSec > 0 ? Math.round(theirHeal / theirDurSec) : 0;
+
+        bossStats.push({ name: boss.name, ourDmg, theirDmg, ourDps, theirDps, ourHeal, theirHeal, ourHps, theirHps });
+      }
+
+      const showHpsDelta = ourPlayer && theirPlayer && bossStats.some(b => b.ourHeal > 0 || b.theirHeal > 0);
+      const totalOurDmg = bossStats.reduce((s, b) => s + b.ourDmg, 0);
+      const totalTheirDmg = bossStats.reduce((s, b) => s + b.theirDmg, 0);
+      const totalOurHeal = bossStats.reduce((s, b) => s + b.ourHeal, 0);
+      const totalTheirHeal = bossStats.reduce((s, b) => s + b.theirHeal, 0);
+      const ourDpsBosses = bossStats.filter(b => b.ourDps > 0);
+      const theirDpsBosses = bossStats.filter(b => b.theirDps > 0);
+      const ourHpsBosses = bossStats.filter(b => b.ourHps > 0);
+      const theirHpsBosses = bossStats.filter(b => b.theirHps > 0);
+      const avgOurDps = ourDpsBosses.length > 0
+        ? Math.round(ourDpsBosses.reduce((s, b) => s + b.ourDps, 0) / ourDpsBosses.length) : 0;
+      const avgTheirDps = theirDpsBosses.length > 0
+        ? Math.round(theirDpsBosses.reduce((s, b) => s + b.theirDps, 0) / theirDpsBosses.length) : 0;
+      const avgOurHps = ourHpsBosses.length > 0
+        ? Math.round(ourHpsBosses.reduce((s, b) => s + b.ourHps, 0) / ourHpsBosses.length) : 0;
+      const avgTheirHps = theirHpsBosses.length > 0
+        ? Math.round(theirHpsBosses.reduce((s, b) => s + b.theirHps, 0) / theirHpsBosses.length) : 0;
+      const ourHealingPrimary = ourPlayer ? totalOurHeal > totalOurDmg : false;
+      const theirHealingPrimary = theirPlayer ? totalTheirHeal > totalTheirDmg : false;
+
+      let html = '';
+
+      // Player info header
+      html += '<div style="display:flex;gap:24px;margin-bottom:16px;flex-wrap:wrap;">';
+      if (ourPlayer) {
+        const color = CLASS_COLORS[ourInfo.class] || '#aaa';
+        html += `<div style="font-size:0.9rem"><strong style="color:var(--accent)">${REPORT_1_LABEL} Player:</strong> <span style="color:${color}">${escapeHtml(ourPlayer)}</span> <span style="color:var(--muted)">(${ourInfo.class || '?'} - ${ourInfo.role || '?'})</span></div>`;
+      }
+      if (theirPlayer) {
+        const color = CLASS_COLORS[theirInfo.class] || '#aaa';
+        html += `<div style="font-size:0.9rem"><strong style="color:var(--warning)">${REPORT_2_LABEL} Player:</strong> <span style="color:${color}">${escapeHtml(theirPlayer)}</span> <span style="color:var(--muted)">(${theirInfo.class || '?'} - ${theirInfo.role || '?'})</span></div>`;
+      }
+      html += '</div>';
+
+      // Per-boss comparison table
+      html += '<div style="font-size:0.78rem;color:var(--muted);margin-bottom:8px;">Click a boss row to load detailed ability/cooldown breakdown</div>';
+      html += '<table><thead><tr><th>Boss</th>';
+      if (ourPlayer) html += `<th>${REPORT_1_LABEL} Damage</th><th>${REPORT_1_LABEL} DPS</th><th>${REPORT_1_LABEL} Healing</th><th>${REPORT_1_LABEL} HPS</th>`;
+      if (theirPlayer) html += `<th>${REPORT_2_LABEL} Damage</th><th>${REPORT_2_LABEL} DPS</th><th>${REPORT_2_LABEL} Healing</th><th>${REPORT_2_LABEL} HPS</th>`;
+      if (ourPlayer && theirPlayer) html += '<th>DPS \u0394</th>';
+      if (showHpsDelta) html += '<th>HPS \u0394</th>';
+      html += '</tr></thead><tbody>';
+      for (let i = 0; i < bossStats.length; i++) {
+        const boss = bossStats[i];
+        html += `<tr class="boss-row" data-boss-idx="${i}" style="cursor:pointer;"><td><strong>${escapeHtml(boss.name)}</strong> <span style="font-size:0.7rem;color:var(--muted);">▶</span></td>`;
+        if (ourPlayer) {
+          html += `<td>${boss.ourDmg ? formatNum(boss.ourDmg) : '\u2014'}</td>`;
+          html += `<td>${boss.ourDps ? formatNum(boss.ourDps) : '\u2014'}</td>`;
+          html += `<td>${boss.ourHeal ? formatNum(boss.ourHeal) : '\u2014'}</td>`;
+          html += `<td>${boss.ourHps ? formatNum(boss.ourHps) : '\u2014'}</td>`;
+        }
+        if (theirPlayer) {
+          html += `<td>${boss.theirDmg ? formatNum(boss.theirDmg) : '\u2014'}</td>`;
+          html += `<td>${boss.theirDps ? formatNum(boss.theirDps) : '\u2014'}</td>`;
+          html += `<td>${boss.theirHeal ? formatNum(boss.theirHeal) : '\u2014'}</td>`;
+          html += `<td>${boss.theirHps ? formatNum(boss.theirHps) : '\u2014'}</td>`;
+        }
+        if (ourPlayer && theirPlayer) {
+          const dpsDiff = boss.ourDps - boss.theirDps;
+          const cls = dpsDiff > 0 ? 'faster' : dpsDiff < 0 ? 'slower' : 'neutral';
+          html += `<td class="${cls}">${dpsDiff > 0 ? '+' : ''}${formatNum(dpsDiff)}</td>`;
+        }
+        if (showHpsDelta) {
+          const hpsDiff = boss.ourHps - boss.theirHps;
+          const cls = hpsDiff > 0 ? 'faster' : hpsDiff < 0 ? 'slower' : 'neutral';
+          html += `<td class="${cls}">${hpsDiff > 0 ? '+' : ''}${formatNum(hpsDiff)}</td>`;
+        }
+        html += '</tr>';
+        html += `<tr><td colspan="99" style="padding:0;border:none;"><div id="player-detail-${i}" class="boss-detail"></div></td></tr>`;
+      }
+      html += '</tbody></table>';
+
+      // Summary stats
+      html += '<div style="display:flex;gap:16px;margin-top:16px;flex-wrap:wrap;">';
+      if (ourPlayer) {
+        html += `<div class="summary-card" style="flex:1;min-width:150px;">
+          <div class="label">${REPORT_1_LABEL} Total Damage</div>
+          <div class="value" style="font-size:1.1rem">${formatNum(totalOurDmg)}</div>
+          <div class="delta neutral" style="font-size:0.8rem">Avg DPS: ${formatNum(avgOurDps)}</div>
+        </div>`;
+        html += `<div class="summary-card" style="flex:1;min-width:150px;">
+          <div class="label">${REPORT_1_LABEL} Total Healing</div>
+          <div class="value" style="font-size:1.1rem">${formatNum(totalOurHeal)}</div>
+          <div class="delta neutral" style="font-size:0.8rem">Avg HPS: ${formatNum(avgOurHps)}</div>
+        </div>`;
+      }
+      if (theirPlayer) {
+        html += `<div class="summary-card" style="flex:1;min-width:150px;">
+          <div class="label">${REPORT_2_LABEL} Total Damage</div>
+          <div class="value" style="font-size:1.1rem">${formatNum(totalTheirDmg)}</div>
+          <div class="delta neutral" style="font-size:0.8rem">Avg DPS: ${formatNum(avgTheirDps)}</div>
+        </div>`;
+        html += `<div class="summary-card" style="flex:1;min-width:150px;">
+          <div class="label">${REPORT_2_LABEL} Total Healing</div>
+          <div class="value" style="font-size:1.1rem">${formatNum(totalTheirHeal)}</div>
+          <div class="delta neutral" style="font-size:0.8rem">Avg HPS: ${formatNum(avgTheirHps)}</div>
+        </div>`;
+      }
+      if (ourPlayer && theirPlayer) {
+        const totalDiff = totalOurDmg - totalTheirDmg;
+        const avgDiff = avgOurDps - avgTheirDps;
+        const totalHealDiff = totalOurHeal - totalTheirHeal;
+        const avgHpsDiff = avgOurHps - avgTheirHps;
+        html += `<div class="summary-card" style="flex:1;min-width:150px;">
+          <div class="label">Difference</div>
+          <div class="value ${avgDiff >= 0 ? 'faster' : 'slower'}" style="font-size:1.1rem">${avgDiff >= 0 ? '+' : ''}${formatNum(avgDiff)} avg DPS</div>
+          <div class="delta ${totalDiff >= 0 ? 'faster' : 'slower'}" style="font-size:0.8rem">${totalDiff >= 0 ? '+' : ''}${formatNum(totalDiff)} total dmg</div>
+        </div>`;
+        if (showHpsDelta) {
+          html += `<div class="summary-card" style="flex:1;min-width:150px;">
+            <div class="label">Healing Difference</div>
+            <div class="value ${avgHpsDiff >= 0 ? 'faster' : 'slower'}" style="font-size:1.1rem">${avgHpsDiff >= 0 ? '+' : ''}${formatNum(avgHpsDiff)} avg HPS</div>
+            <div class="delta ${totalHealDiff >= 0 ? 'faster' : 'slower'}" style="font-size:0.8rem">${totalHealDiff >= 0 ? '+' : ''}${formatNum(totalHealDiff)} total healing</div>
+          </div>`;
+        }
+      }
+      html += '</div>';
+
+      const showDpsChart = ourPlayer && theirPlayer
+        ? !(ourHealingPrimary && theirHealingPrimary)
+        : (ourPlayer ? !ourHealingPrimary : !theirHealingPrimary);
+      const showHpsChart = ourPlayer && theirPlayer
+        ? (ourHealingPrimary && theirHealingPrimary) || (ourHealingPrimary !== theirHealingPrimary)
+        : (ourPlayer ? ourHealingPrimary : theirHealingPrimary);
+
+      if (showDpsChart) {
+        html += renderMetricChartSection('DPS per Boss', bossStats, ourPlayer, theirPlayer, 'ourDps', 'theirDps');
+      }
+      if (showHpsChart) {
+        html += renderMetricChartSection('HPS per Boss', bossStats, ourPlayer, theirPlayer, 'ourHps', 'theirHps');
+      }
+
+      el.innerHTML = html;
+
+      // Wire up boss row clicks to load detailed breakdown
+      el.querySelectorAll('.boss-row[data-boss-idx]').forEach(row => {
+        row.addEventListener('click', () => {
+          const idx = parseInt(row.dataset.bossIdx);
+          const detailEl = document.getElementById(`player-detail-${idx}`);
+          if (detailEl.classList.contains('open')) {
+            detailEl.classList.remove('open');
+            return;
+          }
+          detailEl.classList.add('open');
+          if (detailEl.dataset.loaded) return;
+          detailEl.dataset.loaded = 'true';
+          loadPlayerBossDetails(idx, ourPlayer, theirPlayer, detailEl);
+        });
+      });
+    }
+
+    // ===== Detailed Player Boss Breakdown =====
+    async function fetchPlayerDamageBreakdown(reportId, apiKey, playerId, start, end) {
+      const table = await apiFetch(`/report/tables/damage-done/${reportId}`, apiKey, { start, end, sourceid: playerId });
+      const abilities = [];
+      for (const entry of (table.entries || [])) {
+        abilities.push({
+          name: entry.name || 'Unknown',
+          total: entry.total || 0,
+          hitCount: entry.hitCount || 0,
+          critHitCount: entry.critHitCount || 0,
+          missCount: entry.missCount || 0,
+          tickCount: entry.tickCount || 0,
+          critTickCount: entry.critTickCount || 0,
+        });
+      }
+      abilities.sort((a, b) => b.total - a.total);
+      return abilities;
+    }
+
+    async function fetchPlayerHealingBreakdown(reportId, apiKey, playerId, start, end) {
+      const table = await apiFetch(`/report/tables/healing/${reportId}`, apiKey, { start, end, sourceid: playerId });
+      const abilities = [];
+      for (const entry of (table.entries || [])) {
+        abilities.push({
+          name: entry.name || 'Unknown',
+          total: entry.total || 0,
+          overheal: entry.overheal || 0,
+          hitCount: entry.hitCount || 0,
+          critHitCount: entry.critHitCount || 0,
+          tickCount: entry.tickCount || 0,
+          critTickCount: entry.critTickCount || 0,
+        });
+      }
+      abilities.sort((a, b) => b.total - a.total);
+      return abilities;
+    }
+
+    async function fetchPlayerBuffs(reportId, apiKey, playerId, start, end) {
+      const table = await apiFetch(`/report/tables/buffs/${reportId}`, apiKey, { start, end, targetid: playerId });
+      const buffs = [];
+      const fightDuration = end - start;
+      for (const entry of (table.auras || [])) {
+        const uptime = entry.totalUptime || 0;
+        buffs.push({
+          name: entry.name || 'Unknown',
+          uptime_ms: uptime,
+          uptime_pct: fightDuration > 0 ? Math.round(uptime / fightDuration * 1000) / 10 : 0,
+          isConsumable: CONSUMABLE_BUFFS.has(entry.name),
+          isRaidBuff: RAID_BUFFS.has(entry.name),
+        });
+      }
+      buffs.sort((a, b) => b.uptime_pct - a.uptime_pct);
+      return buffs;
+    }
+
+    async function fetchPlayerCasts(reportId, apiKey, playerId, start, end) {
+      const table = await apiFetch(`/report/tables/casts/${reportId}`, apiKey, { start, end, sourceid: playerId });
+      const casts = [];
+      for (const entry of (table.entries || [])) {
+        casts.push({
+          name: entry.name || 'Unknown',
+          total: entry.total || 0,
+          hitCount: entry.hitCount || 0,
+        });
+      }
+      casts.sort((a, b) => b.total - a.total);
+      return casts;
+    }
+
+    async function fetchPlayerCastEvents(reportId, apiKey, playerId, start, end) {
+      const events = await fetchPaginatedEvents('casts', reportId, apiKey, start, end, { sourceid: playerId });
+      return events.filter(e => e.type === 'cast').map(e => ({
+        ability: e.ability ? e.ability.name : 'Unknown',
+        abilityId: e.ability ? e.ability.guid : 0,
+        timestamp: e.timestamp,
+        time_into_fight_sec: Math.round((e.timestamp - start) / 100) / 10,
+      }));
+    }
+
+    async function loadPlayerBossDetails(bossIdx, ourPlayerName, theirPlayerName, detailEl) {
+      const boss = data.bosses[bossIdx];
+      const apiKey = localStorage.getItem('wcl_api_key') || DEFAULT_API_KEY;
+
+      const ourRoster = data.roster.ours || {};
+      const theirRoster = data.roster.theirs || {};
+      const ourInfo = ourRoster[ourPlayerName] || {};
+      const theirInfo = theirRoster[theirPlayerName] || {};
+
+      detailEl.innerHTML = '<div style="padding:12px;color:var(--muted);font-size:0.85rem;">⏳ Loading detailed breakdown...</div>';
+
+      try {
+        const fetches = [];
+        // Our player data
+        if (ourPlayerName && boss.ours && ourInfo.id) {
+          const reportId = data.ours.report_id;
+          const start = boss.ours.start_time;
+          const end = boss.ours.end_time;
+          fetches.push(Promise.all([
+            fetchPlayerDamageBreakdown(reportId, apiKey, ourInfo.id, start, end),
+            fetchPlayerHealingBreakdown(reportId, apiKey, ourInfo.id, start, end),
+            fetchPlayerBuffs(reportId, apiKey, ourInfo.id, start, end),
+            fetchPlayerCasts(reportId, apiKey, ourInfo.id, start, end),
+            fetchPlayerCastEvents(reportId, apiKey, ourInfo.id, start, end),
+          ]));
+        } else {
+          fetches.push(Promise.resolve([[], [], [], [], []]));
+        }
+        // Their player data
+        if (theirPlayerName && boss.theirs && theirInfo.id) {
+          const reportId = data.theirs.report_id;
+          const start = boss.theirs.start_time;
+          const end = boss.theirs.end_time;
+          fetches.push(Promise.all([
+            fetchPlayerDamageBreakdown(reportId, apiKey, theirInfo.id, start, end),
+            fetchPlayerHealingBreakdown(reportId, apiKey, theirInfo.id, start, end),
+            fetchPlayerBuffs(reportId, apiKey, theirInfo.id, start, end),
+            fetchPlayerCasts(reportId, apiKey, theirInfo.id, start, end),
+            fetchPlayerCastEvents(reportId, apiKey, theirInfo.id, start, end),
+          ]));
+        } else {
+          fetches.push(Promise.resolve([[], [], [], [], []]));
+        }
+
+        const [[ourAbilities, ourHealingAbilities, ourBuffs, ourCasts, ourCastEvents], [theirAbilities, theirHealingAbilities, theirBuffs, theirCasts, theirCastEvents]] = await Promise.all(fetches);
+
+        const ourDurSec = boss.ours ? boss.ours.duration_ms / 1000 : 0;
+        const theirDurSec = boss.theirs ? boss.theirs.duration_ms / 1000 : 0;
+
+        let html = renderPlayerDetailPanel(
+          ourPlayerName, theirPlayerName, ourInfo, theirInfo,
+          ourAbilities, theirAbilities,
+          ourHealingAbilities, theirHealingAbilities,
+          ourBuffs, theirBuffs,
+          ourCasts, theirCasts,
+          ourCastEvents, theirCastEvents,
+          ourDurSec, theirDurSec,
+          boss.name
+        );
+
+        detailEl.innerHTML = html;
+      } catch (err) {
+        detailEl.innerHTML = `<div style="padding:12px;color:var(--wipe);">Error loading details: ${escapeHtml(err.message)}</div>`;
+      }
+    }
+
+    function renderPlayerDetailPanel(ourName, theirName, ourInfo, theirInfo, ourAbilities, theirAbilities, ourHealingAbilities, theirHealingAbilities, ourBuffs, theirBuffs, ourCasts, theirCasts, ourCastEvents, theirCastEvents, ourDurSec, theirDurSec, bossName) {
+      let html = '<div style="padding:16px;">';
+      const report1Header = ourName ? `${REPORT_1_LABEL}: ${escapeHtml(ourName)}` : REPORT_1_LABEL;
+      const report2Header = theirName ? `${REPORT_2_LABEL}: ${escapeHtml(theirName)}` : REPORT_2_LABEL;
+
+      // === Damage Ability Breakdown ===
+      html += '<h3 style="color:var(--text);margin-bottom:12px;">🗡️ Damage Breakdown by Ability</h3>';
+      html += '<div class="two-col">';
+
+      if (ourName && ourAbilities.length) {
+        const totalDmg = ourAbilities.reduce((s, a) => s + a.total, 0);
+        html += '<div>';
+        html += `<div class="col-header" style="color:var(--accent)">${report1Header}</div>`;
+        html += '<table><thead><tr><th>Ability</th><th>Damage</th><th>%</th><th>Hits</th><th>Crit%</th></tr></thead><tbody>';
+        for (const a of ourAbilities.slice(0, 15)) {
+          const pct = totalDmg > 0 ? (a.total / totalDmg * 100).toFixed(1) : 0;
+          const totalHits = a.hitCount + a.critHitCount + a.tickCount + a.critTickCount;
+          const critHits = a.critHitCount + a.critTickCount;
+          const critPct = totalHits > 0 ? (critHits / totalHits * 100).toFixed(0) : 0;
+          html += `<tr><td>${escapeHtml(a.name)}</td><td>${formatNum(a.total)}</td><td>${pct}%</td><td>${totalHits}</td><td>${critPct}%</td></tr>`;
+        }
+        html += '</tbody></table></div>';
+      } else if (ourName) {
+        html += `<div><div class="col-header" style="color:var(--accent)">${report1Header}</div><div style="color:var(--muted);font-size:0.82rem;">No data</div></div>`;
+      }
+
+      if (theirName && theirAbilities.length) {
+        const totalDmg = theirAbilities.reduce((s, a) => s + a.total, 0);
+        html += '<div>';
+        html += `<div class="col-header" style="color:var(--warning)">${report2Header}</div>`;
+        html += '<table><thead><tr><th>Ability</th><th>Damage</th><th>%</th><th>Hits</th><th>Crit%</th></tr></thead><tbody>';
+        for (const a of theirAbilities.slice(0, 15)) {
+          const pct = totalDmg > 0 ? (a.total / totalDmg * 100).toFixed(1) : 0;
+          const totalHits = a.hitCount + a.critHitCount + a.tickCount + a.critTickCount;
+          const critHits = a.critHitCount + a.critTickCount;
+          const critPct = totalHits > 0 ? (critHits / totalHits * 100).toFixed(0) : 0;
+          html += `<tr><td>${escapeHtml(a.name)}</td><td>${formatNum(a.total)}</td><td>${pct}%</td><td>${totalHits}</td><td>${critPct}%</td></tr>`;
+        }
+        html += '</tbody></table></div>';
+      } else if (theirName) {
+        html += `<div><div class="col-header" style="color:var(--warning)">${report2Header}</div><div style="color:var(--muted);font-size:0.82rem;">No data</div></div>`;
+      }
+      html += '</div>';
+
+      // === Healing Ability Breakdown ===
+      html += '<h3 style="color:var(--text);margin-top:20px;margin-bottom:12px;">💚 Healing Breakdown by Ability</h3>';
+      html += '<div class="two-col">';
+
+      if (ourName && ourHealingAbilities.length) {
+        html += '<div>';
+        html += `<div class="col-header" style="color:var(--accent)">${report1Header}</div>`;
+        html += '<table><thead><tr><th>Ability</th><th>Healing</th><th>Overheal%</th><th>Hits</th><th>Crit%</th></tr></thead><tbody>';
+        for (const a of ourHealingAbilities.slice(0, 15)) {
+          const totalHits = a.hitCount + a.critHitCount + a.tickCount + a.critTickCount;
+          const critHits = a.critHitCount + a.critTickCount;
+          const critPct = totalHits > 0 ? (critHits / totalHits * 100).toFixed(0) : 0;
+          const overhealPct = (a.total + a.overheal) > 0 ? (a.overheal / (a.total + a.overheal) * 100).toFixed(1) : '0.0';
+          html += `<tr><td>${escapeHtml(a.name)}</td><td>${formatNum(a.total)}</td><td>${overhealPct}%</td><td>${totalHits}</td><td>${critPct}%</td></tr>`;
+        }
+        html += '</tbody></table></div>';
+      } else if (ourName) {
+        html += `<div><div class="col-header" style="color:var(--accent)">${report1Header}</div><div style="color:var(--muted);font-size:0.82rem;">No data</div></div>`;
+      }
+
+      if (theirName && theirHealingAbilities.length) {
+        html += '<div>';
+        html += `<div class="col-header" style="color:var(--warning)">${report2Header}</div>`;
+        html += '<table><thead><tr><th>Ability</th><th>Healing</th><th>Overheal%</th><th>Hits</th><th>Crit%</th></tr></thead><tbody>';
+        for (const a of theirHealingAbilities.slice(0, 15)) {
+          const totalHits = a.hitCount + a.critHitCount + a.tickCount + a.critTickCount;
+          const critHits = a.critHitCount + a.critTickCount;
+          const critPct = totalHits > 0 ? (critHits / totalHits * 100).toFixed(0) : 0;
+          const overhealPct = (a.total + a.overheal) > 0 ? (a.overheal / (a.total + a.overheal) * 100).toFixed(1) : '0.0';
+          html += `<tr><td>${escapeHtml(a.name)}</td><td>${formatNum(a.total)}</td><td>${overhealPct}%</td><td>${totalHits}</td><td>${critPct}%</td></tr>`;
+        }
+        html += '</tbody></table></div>';
+      } else if (theirName) {
+        html += `<div><div class="col-header" style="color:var(--warning)">${report2Header}</div><div style="color:var(--muted);font-size:0.82rem;">No data</div></div>`;
+      }
+      html += '</div>';
+
+      // === Cast Efficiency / Rotation ===
+      html += '<h3 style="color:var(--text);margin-top:20px;margin-bottom:12px;">🔄 Cast Breakdown (Rotation)</h3>';
+      html += '<div class="two-col">';
+
+      if (ourName && ourCasts.length) {
+        const totalCasts = ourCasts.reduce((s, c) => s + c.total, 0);
+        const cpm = ourDurSec > 0 ? (totalCasts / ourDurSec * 60).toFixed(1) : 0;
+        html += '<div>';
+        html += `<div class="col-header" style="color:var(--accent)">${report1Header} <span style="font-size:0.75rem;color:var(--muted)">(${totalCasts} casts, ${cpm} CPM)</span></div>`;
+        html += '<table><thead><tr><th>Ability</th><th>Casts</th><th>CPM</th><th>% of Casts</th></tr></thead><tbody>';
+        for (const c of ourCasts.slice(0, 15)) {
+          const cpmAbility = ourDurSec > 0 ? (c.total / ourDurSec * 60).toFixed(1) : 0;
+          const pct = totalCasts > 0 ? (c.total / totalCasts * 100).toFixed(1) : 0;
+          html += `<tr><td>${escapeHtml(c.name)}</td><td>${c.total}</td><td>${cpmAbility}</td><td>${pct}%</td></tr>`;
+        }
+        html += '</tbody></table></div>';
+      } else {
+        html += '<div></div>';
+      }
+
+      if (theirName && theirCasts.length) {
+        const totalCasts = theirCasts.reduce((s, c) => s + c.total, 0);
+        const cpm = theirDurSec > 0 ? (totalCasts / theirDurSec * 60).toFixed(1) : 0;
+        html += '<div>';
+        html += `<div class="col-header" style="color:var(--warning)">${report2Header} <span style="font-size:0.75rem;color:var(--muted)">(${totalCasts} casts, ${cpm} CPM)</span></div>`;
+        html += '<table><thead><tr><th>Ability</th><th>Casts</th><th>CPM</th><th>% of Casts</th></tr></thead><tbody>';
+        for (const c of theirCasts.slice(0, 15)) {
+          const cpmAbility = theirDurSec > 0 ? (c.total / theirDurSec * 60).toFixed(1) : 0;
+          const pct = totalCasts > 0 ? (c.total / totalCasts * 100).toFixed(1) : 0;
+          html += `<tr><td>${escapeHtml(c.name)}</td><td>${c.total}</td><td>${cpmAbility}</td><td>${pct}%</td></tr>`;
+        }
+        html += '</tbody></table></div>';
+      } else {
+        html += '<div></div>';
+      }
+      html += '</div>';
+
+      // === Cooldown Timeline ===
+      html += '<h3 style="color:var(--text);margin-top:20px;margin-bottom:12px;">⚡ Cooldown Timeline</h3>';
+      const KNOWN_CDS = new Set([
+        'Bloodlust', 'Heroism', 'Innervate', 'Rebirth', 'Soulstone Resurrection',
+        'Divine Shield', 'Lay on Hands', 'Shield Wall', 'Last Stand', 'Recklessness',
+        'Avenging Wrath', 'Arcane Power', 'Icy Veins', 'Combustion', 'Cold Snap',
+        'Presence of Mind', 'Shadow Word: Death', 'Shadowfiend', 'Inner Focus',
+        'Elemental Mastery', 'Nature\'s Swiftness', 'Bestial Wrath', 'Rapid Fire',
+        'Blade Flurry', 'Adrenaline Rush', 'Cold Blood', 'Preparation',
+        'Death Wish', 'Recklessness', 'Sweeping Strikes', 'Berserking',
+        'Blood Fury', 'Will of the Forsaken', 'Stoneform',
+        'Drums of Battle', 'Drums of War', 'Drums of Restoration',
+        'Destruction Potion', 'Haste Potion', 'Super Mana Potion', 'Ironshield Potion',
+        'Flame Cap', 'Dark Rune', 'Demonic Rune',
+      ]);
+      // Abilities to exclude from the frequency-based detection (rotational abilities cast rarely)
+      const CD_EXCLUDE = new Set([
+        'Melee', 'Auto Shot', 'Shoot', 'Attack', 'Wand',
+      ]);
+
+      function detectCooldowns(castEvents) {
+        // Count how many times each ability was cast
+        const counts = {};
+        for (const e of castEvents) {
+          counts[e.ability] = (counts[e.ability] || 0) + 1;
+        }
+        // A cooldown is: in the known list, OR cast 3 or fewer times (likely a CD/trinket/on-use)
+        return castEvents.filter(e => {
+          if (CD_EXCLUDE.has(e.ability)) return false;
+          if (KNOWN_CDS.has(e.ability)) return true;
+          // Low frequency = likely a cooldown (trinkets, on-use items, etc)
+          return counts[e.ability] <= 3;
+        });
+      }
+
+      const ourCds = detectCooldowns(ourCastEvents);
+      const theirCds = detectCooldowns(theirCastEvents);
+
+      html += '<div class="two-col">';
+      if (ourName) {
+        html += '<div>';
+        html += `<div class="col-header" style="color:var(--accent)">${report1Header}</div>`;
+        if (ourCds.length) {
+          html += '<div style="font-size:0.82rem;">';
+          for (const cd of ourCds) {
+            const timePct = ourDurSec > 0 ? (cd.time_into_fight_sec / ourDurSec * 100).toFixed(0) : 0;
+            html += `<div style="padding:2px 0;"><span style="color:var(--accent);">${escapeHtml(cd.ability)}</span> at ${cd.time_into_fight_sec}s <span style="color:var(--muted)">(${timePct}%)</span></div>`;
+          }
+          html += '</div>';
+        } else {
+          html += '<div style="color:var(--muted);font-size:0.82rem;">No major cooldowns used</div>';
+        }
+        html += '</div>';
+      }
+      if (theirName) {
+        html += '<div>';
+        html += `<div class="col-header" style="color:var(--warning)">${report2Header}</div>`;
+        if (theirCds.length) {
+          html += '<div style="font-size:0.82rem;">';
+          for (const cd of theirCds) {
+            const timePct = theirDurSec > 0 ? (cd.time_into_fight_sec / theirDurSec * 100).toFixed(0) : 0;
+            html += `<div style="padding:2px 0;"><span style="color:var(--warning);">${escapeHtml(cd.ability)}</span> at ${cd.time_into_fight_sec}s <span style="color:var(--muted)">(${timePct}%)</span></div>`;
+          }
+          html += '</div>';
+        } else {
+          html += '<div style="color:var(--muted);font-size:0.82rem;">No major cooldowns used</div>';
+        }
+        html += '</div>';
+      }
+      html += '</div>';
+
+      // === Buff Uptime ===
+      html += '<h3 style="color:var(--text);margin-top:20px;margin-bottom:12px;">📊 Buff & Consumable Uptime</h3>';
+      html += '<div class="two-col">';
+
+      if (ourName && ourBuffs.length) {
+        html += '<div>';
+        html += `<div class="col-header" style="color:var(--accent)">${report1Header}</div>`;
+        const relevantBuffs = ourBuffs.filter(b => b.isConsumable || b.isRaidBuff || b.uptime_pct > 20);
+        html += '<table><thead><tr><th>Buff</th><th>Uptime</th><th>Type</th></tr></thead><tbody>';
+        for (const b of relevantBuffs.slice(0, 20)) {
+          const type = b.isConsumable ? '🧪' : b.isRaidBuff ? '✨' : '🔹';
+          const uptimeClass = b.uptime_pct >= 90 ? 'faster' : b.uptime_pct >= 50 ? 'neutral' : 'slower';
+          html += `<tr><td>${escapeHtml(b.name)}</td><td class="${uptimeClass}">${b.uptime_pct}%</td><td>${type}</td></tr>`;
+        }
+        html += '</tbody></table></div>';
+      } else {
+        html += '<div></div>';
+      }
+
+      if (theirName && theirBuffs.length) {
+        html += '<div>';
+        html += `<div class="col-header" style="color:var(--warning)">${report2Header}</div>`;
+        const relevantBuffs = theirBuffs.filter(b => b.isConsumable || b.isRaidBuff || b.uptime_pct > 20);
+        html += '<table><thead><tr><th>Buff</th><th>Uptime</th><th>Type</th></tr></thead><tbody>';
+        for (const b of relevantBuffs.slice(0, 20)) {
+          const type = b.isConsumable ? '🧪' : b.isRaidBuff ? '✨' : '🔹';
+          const uptimeClass = b.uptime_pct >= 90 ? 'faster' : b.uptime_pct >= 50 ? 'neutral' : 'slower';
+          html += `<tr><td>${escapeHtml(b.name)}</td><td class="${uptimeClass}">${b.uptime_pct}%</td><td>${type}</td></tr>`;
+        }
+        html += '</tbody></table></div>';
+      } else {
+        html += '<div></div>';
+      }
+      html += '</div>';
+
+      // === Activity / Downtime Summary ===
+      html += '<h3 style="color:var(--text);margin-top:20px;margin-bottom:12px;">⏱️ Activity Summary</h3>';
+      html += '<div class="two-col">';
+
+      function activitySummary(castEvents, durSec, name, color) {
+        if (!castEvents.length || !durSec) return `<div><div class="col-header" style="color:${color}">${escapeHtml(name)}</div><div style="color:var(--muted);font-size:0.82rem;">No data</div></div>`;
+        const totalCasts = castEvents.length;
+        const cpm = (totalCasts / durSec * 60).toFixed(1);
+        // Estimate downtime from gaps between casts > 2.5s
+        let downtimeMs = 0;
+        const sorted = [...castEvents].sort((a, b) => a.timestamp - b.timestamp);
+        for (let i = 1; i < sorted.length; i++) {
+          const gap = sorted[i].timestamp - sorted[i-1].timestamp;
+          if (gap > 2500) downtimeMs += gap - 1500; // assume 1.5s GCD baseline
+        }
+        const downtimeSec = (downtimeMs / 1000).toFixed(1);
+        const downtimePct = (downtimeMs / (durSec * 1000) * 100).toFixed(1);
+        const activeTimePct = (100 - parseFloat(downtimePct)).toFixed(1);
+        let h = `<div><div class="col-header" style="color:${color}">${escapeHtml(name)}</div>`;
+        h += `<div style="font-size:0.85rem;line-height:1.8;">`;
+        h += `<div>Total Casts: <strong>${totalCasts}</strong></div>`;
+        h += `<div>Casts/min: <strong>${cpm}</strong></div>`;
+        h += `<div>Active Time: <strong class="${parseFloat(activeTimePct) >= 90 ? 'faster' : parseFloat(activeTimePct) >= 75 ? 'neutral' : 'slower'}">${activeTimePct}%</strong></div>`;
+        h += `<div>Est. Downtime: <strong>${downtimeSec}s</strong> <span style="color:var(--muted)">(${downtimePct}%)</span></div>`;
+        h += `</div></div>`;
+        return h;
+      }
+
+      if (ourName) html += activitySummary(ourCastEvents, ourDurSec, `${REPORT_1_LABEL}: ${ourName}`, 'var(--accent)');
+      if (theirName) html += activitySummary(theirCastEvents, theirDurSec, `${REPORT_2_LABEL}: ${theirName}`, 'var(--warning)');
+      html += '</div>';
+
+      html += '</div>';
+      return html;
+    }
+
+    // ===== Bootstrap =====
+    document.addEventListener('DOMContentLoaded', () => {
+      const loadScreen = document.getElementById('loadScreen');
+      const compareBtn = document.getElementById('compareBtn');
+      const statusEl = document.getElementById('fetchStatus');
+      const progressEl = document.getElementById('fetchProgress');
+      const apiKeyInput = document.getElementById('apiKeyInput');
+      const backBtn = document.getElementById('backBtn');
+
+      // Restore saved API key
+      const savedKey = localStorage.getItem('wcl_api_key');
+      if (savedKey) apiKeyInput.value = savedKey;
+
+      // If pre-embedded data exists, show it
+      if (data && data.ours) {
+        showResults(data);
+        return;
+      }
+
+      compareBtn.addEventListener('click', async () => {
+        const ourUrl = document.getElementById('ourUrlInput').value.trim();
+        const theirUrl = document.getElementById('theirUrlInput').value.trim();
+        const apiKey = apiKeyInput.value.trim() || DEFAULT_API_KEY;
+
+        if (!ourUrl) { statusEl.textContent = `Please enter the ${REPORT_1_LABEL} URL.`; return; }
+        if (!theirUrl) { statusEl.textContent = `Please enter the ${REPORT_2_LABEL} URL.`; return; }
+
+        if (apiKeyInput.value.trim()) localStorage.setItem('wcl_api_key', apiKeyInput.value.trim());
+        compareBtn.disabled = true;
+        statusEl.textContent = 'Starting comparison...';
+        progressEl.textContent = '';
+
+        try {
+          progressEl.textContent = `Fetching ${REPORT_1_LABEL}...`;
+          const ourData = await fetchReportData(ourUrl, apiKey, statusEl);
+
+          progressEl.textContent = `Fetching ${REPORT_2_LABEL}...`;
+          const theirData = await fetchReportData(theirUrl, apiKey, statusEl);
+
+          progressEl.textContent = 'Comparing...';
+          const comparison = compareReports(ourData, theirData);
+
+          showResults(comparison);
+        } catch (err) {
+          statusEl.textContent = `Error: ${err.message}`;
+          progressEl.textContent = '';
+        } finally {
+          compareBtn.disabled = false;
+        }
+      });
+
+      backBtn.addEventListener('click', () => {
+        document.getElementById('compareApp').style.display = 'none';
+        loadScreen.style.display = '';
+        statusEl.textContent = '';
+        progressEl.textContent = '';
+      });
+    });
+  </script>
+</body>
+</html>
