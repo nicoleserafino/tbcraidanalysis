@@ -1,0 +1,94 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r backend/requirements.txt
+
+      - name: Check Python syntax
+        run: python -m py_compile backend/main.py && python -m py_compile backend/config.py
+
+      - name: Validate frontend HTML
+        run: |
+          node -e "
+            const fs = require('fs');
+            for (const f of ['frontend/index.html', 'frontend/compare.html']) {
+              const h = fs.readFileSync(f, 'utf8');
+              const m = h.match(/<script[^>]*>([\s\S]*?)<\/script>/g) || [];
+              m.forEach((s, i) => {
+                const c = s.replace(/<\/?script[^>]*>/g, '');
+                try { new Function(c); }
+                catch(e) { console.error(f, 'script', i, e.message); process.exit(1); }
+              });
+            }
+            console.log('All frontend scripts OK');
+          "
+
+  build-image:
+    needs: lint-and-test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+
+  deploy:
+    needs: build-image
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Deploy to Azure Container Apps
+        uses: azure/container-apps-deploy-action@v1
+        with:
+          containerAppName: tbcraidanalysis
+          resourceGroup: ${{ secrets.AZURE_RESOURCE_GROUP }}
+          imageToDeploy: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          environmentVariables: |
+            WCL_CLIENT_ID=${{ secrets.WCL_CLIENT_ID }}
+            WCL_CLIENT_SECRET=${{ secrets.WCL_CLIENT_SECRET }}
+            API_KEY=${{ secrets.API_KEY }}
