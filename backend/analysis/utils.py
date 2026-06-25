@@ -66,16 +66,19 @@ def infer_role(
 
     if player_class in TANK_CAPABLE_CLASSES and tank_score > 20 and total_damage_taken > total_damage_done:
         return "Tank"
-
-    if player_class == "Priest" and (heal_score > 0 or total_healing > 100000):
-        return "Healer"
+    # High tank spell usage alone is definitive (bear tanks deal significant damage)
+    if player_class in TANK_CAPABLE_CLASSES and tank_score > 50:
+        return "Tank"
 
     if player_class in HEAL_CAPABLE_CLASSES:
+        # Strong heal spell usage + healing at least matches damage = healer
         if heal_score > 20 and total_healing >= total_damage_done:
             return "Healer"
+        # Overwhelming healing output relative to damage
         if total_healing > total_damage_done * 3:
             return "Healer"
-        if total_healing > total_damage_done * 0.15 and total_healing > 50000:
+        # Meaningful healing that isn't just incidental (e.g. Vampiric Embrace)
+        if heal_score > 10 and total_healing > total_damage_done * 0.5:
             return "Healer"
 
     if player_class in TANK_CAPABLE_CLASSES and total_damage_taken > max(total_damage_done * 2, total_healing * 2, 100000):

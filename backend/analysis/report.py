@@ -437,6 +437,7 @@ def build_pull_data(
     ))
 
     return {
+        "fight_id": fight["id"],
         "encounter_id": fight.get("encounterID"),
         "boss_name": fight["name"],
         "duration_sec": duration_sec,

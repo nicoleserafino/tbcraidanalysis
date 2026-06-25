@@ -260,6 +260,55 @@ async def get_gear_audit(report_code: str):
     return result
 
 
+# ── AI Advice Endpoint ───────────────────────────────────────────────────────
+
+from pydantic import BaseModel
+
+
+class AIAdviceRequest(BaseModel):
+    player_name: str
+    player_class: str
+    player_role: str
+    boss_name: str
+    pull_data: dict[str, Any]
+
+
+@app.post("/api/report/ai-advice")
+async def post_ai_advice(req: AIAdviceRequest):
+    """Get AI-powered individual player advice for a specific fight."""
+    from backend.analysis.ai_advice import get_ai_advice
+    try:
+        advice = await get_ai_advice(
+            player_name=req.player_name,
+            player_class=req.player_class,
+            player_role=req.player_role,
+            boss_name=req.boss_name,
+            pull_data=req.pull_data,
+        )
+        return {"advice": advice}
+    except Exception as e:
+        logger.error("AI advice error: %s\n%s", e, traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"AI advice failed: {e}")
+
+
+# ── Threat Data Endpoint ─────────────────────────────────────────────────────
+
+@app.get("/api/report/{report_code}/threat")
+async def get_threat_data(report_code: str, fight_id: int):
+    """Fetch threat data for top 5 DPS on a specific fight."""
+    from backend.analysis.threat import fetch_threat_data
+    try:
+        code = extract_report_code(report_code)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    try:
+        result = await fetch_threat_data(code, fight_id)
+        return result
+    except Exception as e:
+        logger.error("Threat data error: %s\n%s", e, traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Threat data failed: {e}")
+
+
 # Serve frontend static files
 FRONTEND_DIR = Path(__file__).parent.parent / "frontend"
 
