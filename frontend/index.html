@@ -5699,7 +5699,8 @@
       state.player = getPullPlayers()[0] || Object.keys(getAllPlayers())[0] || '';
       document.getElementById('loadScreen').style.display = 'none';
       document.getElementById('analysisApp').style.display = '';
-      const reportCode = report?.code || extractReportId(logUrlInput.value.trim());
+      const reportCode = report?.log_info?.report_id || extractReportId(logUrlInput.value.trim());
+      state.reportCode = reportCode;
       if (reportCode) {
         const url = new URL(window.location.href);
         url.searchParams.set('code', reportCode);
