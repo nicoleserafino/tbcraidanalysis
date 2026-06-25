@@ -2,11 +2,9 @@
 
 A pull-by-pull raid analysis tool for World of Warcraft: The Burning Crusade Classic. Built for raid leaders and players who want fast, actionable breakdowns of their raid nights without digging through WarcraftLogs manually.
 
-**Live app:** [lcdguildanalysis.lemonwater-036d18c5.eastus2.azurecontainerapps.io](https://lcdguildanalysis.lemonwater-036d18c5.eastus2.azurecontainerapps.io)
-
 ## How to Use
 
-1. Go to the live app link above
+1. Open the app
 2. Paste a WarcraftLogs report URL (e.g., `https://fresh.warcraftlogs.com/reports/ABC123`)
 3. Click **Analyze Report**
 4. Browse tabs for pull-by-pull breakdowns
