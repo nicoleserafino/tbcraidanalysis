@@ -161,9 +161,8 @@ async def fetch_full_report(report_code: str) -> dict:
             for total in spells.values():
                 agg_damage_done[player] = agg_damage_done.get(player, 0) + total
 
-        for player, sources in pull.get("player_damage_taken", {}).items():
-            for count in sources.values():
-                agg_damage_taken[player] = agg_damage_taken.get(player, 0) + count
+        for player, total in pull.get("player_damage_taken_total", {}).items():
+            agg_damage_taken[player] = agg_damage_taken.get(player, 0) + total
 
         if boss_name not in bosses:
             bosses[boss_name] = {"total_pulls": 0, "kills": 0, "wipes": 0, "pulls": []}
@@ -370,6 +369,7 @@ def build_pull_data(
 
     # Process damage taken
     player_damage_taken = {}
+    player_damage_taken_total = {}
     damage_sources = {}
     for ev in damage_taken:
         if ev.get("type") != "damage":
@@ -379,8 +379,10 @@ def build_pull_data(
             continue
         player = actor_name(target_id, actors_by_id)
         source = spell_name(ev, ability_names)
+        amount = ev.get("amount", 0) + ev.get("absorbed", 0)
         player_damage_taken.setdefault(player, {})
         player_damage_taken[player][source] = player_damage_taken[player].get(source, 0) + 1
+        player_damage_taken_total[player] = player_damage_taken_total.get(player, 0) + amount
         damage_sources[source] = damage_sources.get(source, 0) + 1
 
     # Process damage done table
@@ -450,6 +452,7 @@ def build_pull_data(
         "damage_done": damage_done_out,
         "damage_sources": damage_sources,
         "player_damage_taken": player_damage_taken,
+        "player_damage_taken_total": player_damage_taken_total,
         "buff_events": buff_events,
         "threat_events": threat_events,
         "clutch_heals": clutch_heals[:10],
