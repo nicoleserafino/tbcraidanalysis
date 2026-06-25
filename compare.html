@@ -214,11 +214,11 @@
     </div>
     <div class="panel" style="max-width:650px;margin:0 auto;padding:1.5rem;">
       <div style="margin-bottom:1rem;">
-        <label style="display:block;font-weight:600;margin-bottom:0.3rem;">Our Report URL</label>
+        <label style="display:block;font-weight:600;margin-bottom:0.3rem;">Report 1 URL</label>
         <input id="ourUrlInput" type="text" placeholder="https://fresh.warcraftlogs.com/reports/ABC123..." style="width:100%;padding:0.5rem;border-radius:6px;border:1px solid #444;background:#1a1e2e;color:#e0e0e0;font-size:0.95rem;">
       </div>
       <div style="margin-bottom:1rem;">
-        <label style="display:block;font-weight:600;margin-bottom:0.3rem;">Their Report URL</label>
+        <label style="display:block;font-weight:600;margin-bottom:0.3rem;">Report 2 URL</label>
         <input id="theirUrlInput" type="text" placeholder="https://fresh.warcraftlogs.com/reports/XYZ789..." style="width:100%;padding:0.5rem;border-radius:6px;border:1px solid #444;background:#1a1e2e;color:#e0e0e0;font-size:0.95rem;">
       </div>
       <div style="margin-bottom:1rem;">
@@ -241,7 +241,7 @@
 
     <div class="hero">
       <h1>⚔️ Raid Log Comparison</h1>
-      <div class="subtitle">Side-by-side breakdown — green means we're ahead, red means they are.</div>
+      <div class="subtitle">Side-by-side breakdown — green means Report 1 is ahead, red means Report 2 is ahead.</div>
       <div id="reportInfo"></div>
     </div>
 
@@ -261,13 +261,13 @@
         <thead>
           <tr>
             <th>Boss</th>
-            <th>Our Time</th>
-            <th>Their Time</th>
+            <th>Report 1 Time</th>
+            <th>Report 2 Time</th>
             <th>Delta</th>
-            <th>Our DPS</th>
-            <th>Their DPS</th>
-            <th>Our Pulls</th>
-            <th>Their Pulls</th>
+            <th>Report 1 DPS</th>
+            <th>Report 2 DPS</th>
+            <th>Report 1 Pulls</th>
+            <th>Report 2 Pulls</th>
           </tr>
         </thead>
         <tbody id="bossBody"></tbody>
@@ -280,11 +280,11 @@
       <h2>⏱️ Pacing & Timing</h2>
       <div class="two-col">
         <div>
-          <div class="col-header">Our Raid</div>
+          <div class="col-header">Report 1</div>
           <div id="ourPacing"></div>
         </div>
         <div>
-          <div class="col-header">Their Raid</div>
+          <div class="col-header">Report 2</div>
           <div id="theirPacing"></div>
         </div>
       </div>
@@ -295,11 +295,11 @@
       <h2>👥 Composition</h2>
       <div class="two-col">
         <div>
-          <div class="col-header">Our Comp</div>
+          <div class="col-header">Report 1 Comp</div>
           <div id="ourComp"></div>
         </div>
         <div>
-          <div class="col-header">Their Comp</div>
+          <div class="col-header">Report 2 Comp</div>
           <div id="theirComp"></div>
         </div>
       </div>
@@ -314,14 +314,14 @@
     <!-- Individual Player Comparison -->
     <div class="panel">
       <h2>👤 Individual Player Comparison</h2>
-      <div style="margin-bottom:16px;font-size:0.85rem;color:var(--muted)">Select players from each raid to compare their per-boss performance side-by-side.</div>
+      <div style="margin-bottom:16px;font-size:0.85rem;color:var(--muted)">Select players from each report to compare their per-boss performance side-by-side.</div>
       <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:16px;">
         <div style="flex:1;min-width:200px;">
-          <label style="display:block;font-size:0.78rem;color:var(--accent);text-transform:uppercase;margin-bottom:4px;">Our Player</label>
+          <label style="display:block;font-size:0.78rem;color:var(--accent);text-transform:uppercase;margin-bottom:4px;">Report 1 Player</label>
           <select id="ourPlayerSelect" style="width:100%;padding:0.4rem;border-radius:6px;border:1px solid #444;background:#1a1e2e;color:#e0e0e0;font-size:0.9rem;"></select>
         </div>
         <div style="flex:1;min-width:200px;">
-          <label style="display:block;font-size:0.78rem;color:var(--warning);text-transform:uppercase;margin-bottom:4px;">Their Player</label>
+          <label style="display:block;font-size:0.78rem;color:var(--warning);text-transform:uppercase;margin-bottom:4px;">Report 2 Player</label>
           <select id="theirPlayerSelect" style="width:100%;padding:0.4rem;border-radius:6px;border:1px solid #444;background:#1a1e2e;color:#e0e0e0;font-size:0.9rem;"></select>
         </div>
         <div style="display:flex;align-items:flex-end;">
@@ -335,6 +335,9 @@
   <script>
     // ===== State =====
     let data = window.__COMPARE_DATA__;
+    const DEFAULT_API_KEY = '3e4330ef2d0c5aa921215259c93d38a3';
+    const REPORT_1_LABEL = 'Report 1';
+    const REPORT_2_LABEL = 'Report 2';
 
     const CLASS_COLORS = {
       Warrior: '#C79C6E', Paladin: '#F58CBA', Hunter: '#ABD473', Rogue: '#FFF569',
@@ -698,7 +701,7 @@
         if (d.time_ms > 15000) {
           tips.push({ category: 'Kill Speed', severity: d.time_ms > 30000 ? 'high' : 'medium',
             title: `${boss.name}: ${fmtDuration(d.time_ms)} slower`,
-            detail: `Their raid DPS was ${d.dps_diff > 0 ? '' : '+'}${(-d.dps_diff).toLocaleString()} higher. ` +
+            detail: `${REPORT_2_LABEL} raid DPS was ${d.dps_diff > 0 ? '' : '+'}${(-d.dps_diff).toLocaleString()} higher. ` +
               (d.missing_buffs.length ? `Missing buffs: ${d.missing_buffs.join(', ')}. ` : '') +
               (Math.abs(d.overheal_diff) > 5 ? `Overheal difference: ${d.overheal_diff > 0 ? '+' : ''}${d.overheal_diff}%.` : ''),
           });
@@ -711,7 +714,7 @@
       for (const info of Object.values(theirs.roster)) { if (info.role === 'Healer') theirHealers++; }
       if (ourHealers > theirHealers) {
         tips.push({ category: 'Composition', severity: 'medium',
-          title: `Running ${ourHealers - theirHealers} more healer(s) than them`,
+          title: `Running ${ourHealers - theirHealers} more healer(s) than ${REPORT_2_LABEL}`,
           detail: 'Extra healers reduce raid DPS. If healing is comfortable, consider swapping a healer to DPS for faster kills.',
         });
       }
@@ -736,7 +739,7 @@
         const theirLust = theirCds.filter(c => c.spell === 'Bloodlust' || c.spell === 'Heroism');
         if (theirLust.length && !ourLust.length) {
           tips.push({ category: 'Cooldowns', severity: 'high',
-            title: `${boss.name}: They used Bloodlust/Heroism, you didn't`,
+            title: `${boss.name}: ${REPORT_2_LABEL} used Bloodlust/Heroism and ${REPORT_1_LABEL} didn't`,
             detail: 'Bloodlust/Heroism provides 30% haste. Consider using it on this boss.',
           });
         } else if (ourLust.length && theirLust.length) {
@@ -744,7 +747,7 @@
           if (diff > 20) {
             tips.push({ category: 'Cooldowns', severity: 'low',
               title: `${boss.name}: Different Bloodlust timing (${ourLust[0].time_pct.toFixed(0)}% vs ${theirLust[0].time_pct.toFixed(0)}%)`,
-              detail: `You used it at ${ourLust[0].time_pct.toFixed(0)}%, they at ${theirLust[0].time_pct.toFixed(0)}%. Earlier usage generally yields more value unless there's a burn phase.`,
+              detail: `${REPORT_1_LABEL} used it at ${ourLust[0].time_pct.toFixed(0)}%, ${REPORT_2_LABEL} at ${theirLust[0].time_pct.toFixed(0)}%. Earlier usage generally yields more value unless there's a burn phase.`,
             });
           }
         }
@@ -756,7 +759,7 @@
         if (trashDelta > 60000) {
           tips.push({ category: 'Trash', severity: 'medium',
             title: `Trash pulls took ${fmtDuration(trashDelta)} longer`,
-            detail: `Your raid spent ${fmtDuration(ours.trash.total_time_ms)} on trash vs their ${fmtDuration(theirs.trash.total_time_ms)}. Consider bigger pulls, more AoE, or skipping optional packs.`,
+            detail: `${REPORT_1_LABEL} spent ${fmtDuration(ours.trash.total_time_ms)} on trash vs ${REPORT_2_LABEL} at ${fmtDuration(theirs.trash.total_time_ms)}. Consider bigger pulls, more AoE, or skipping optional packs.`,
           });
         }
       }
@@ -806,8 +809,8 @@
       const el = document.getElementById('reportInfo');
       el.innerHTML = `
         <div style="display:flex;justify-content:center;gap:40px;margin-top:12px;font-size:0.85rem;">
-          <div><strong style="color:var(--accent)">Ours:</strong> ${escapeHtml(data.ours.title || data.ours.report_id)}</div>
-          <div><strong style="color:var(--warning)">Theirs:</strong> ${escapeHtml(data.theirs.title || data.theirs.report_id)}</div>
+          <div><strong style="color:var(--accent)">${REPORT_1_LABEL}:</strong> ${escapeHtml(data.ours.title || data.ours.report_id)}</div>
+          <div><strong style="color:var(--warning)">${REPORT_2_LABEL}:</strong> ${escapeHtml(data.theirs.title || data.theirs.report_id)}</div>
         </div>
       `;
     }
@@ -835,26 +838,26 @@
           <div class="label">Total Raid Time</div>
           <div class="value">${escapeHtml(pacing.ours.total_raid_str)}</div>
           <div class="delta ${totalDelta > 0 ? 'slower' : totalDelta < 0 ? 'faster' : 'neutral'}">
-            ${totalDelta > 0 ? '+' : ''}${formatDuration(totalDelta)} vs theirs
+            ${totalDelta > 0 ? '+' : ''}${formatDuration(totalDelta)} vs ${REPORT_2_LABEL}
           </div>
         </div>
         <div class="summary-card">
           <div class="label">Non-Combat Time</div>
           <div class="value">${escapeHtml(pacing.ours.total_gap_str)}</div>
           <div class="delta ${gapDelta > 0 ? 'slower' : gapDelta < 0 ? 'faster' : 'neutral'}">
-            ${gapDelta > 0 ? '+' : ''}${formatDuration(gapDelta)} vs theirs
+            ${gapDelta > 0 ? '+' : ''}${formatDuration(gapDelta)} vs ${REPORT_2_LABEL}
           </div>
         </div>
         <div class="summary-card">
           <div class="label">Bosses Killed</div>
           <div class="value">${ourBossKills}</div>
-          <div class="delta neutral">Theirs: ${theirBossKills}</div>
+          <div class="delta neutral">${REPORT_2_LABEL}: ${theirBossKills}</div>
         </div>
         <div class="summary-card">
           <div class="label">Avg Raid DPS Diff</div>
           <div class="value">${avgDpsDiff >= 0 ? '+' : ''}${formatNum(avgDpsDiff)}</div>
           <div class="delta ${avgDpsDiff >= 0 ? 'faster' : 'slower'}">
-            ${avgDpsDiff >= 0 ? 'Higher than theirs' : 'Lower than theirs'}
+            ${avgDpsDiff >= 0 ? `Higher than ${REPORT_2_LABEL}` : `Lower than ${REPORT_2_LABEL}`}
           </div>
         </div>
         <div class="summary-card">
@@ -868,7 +871,7 @@
     function renderRecommendations() {
       const el = document.getElementById('recommendations');
       if (!data.recommendations.length) {
-        el.innerHTML = '<p style="color:var(--muted)">No significant differences found \u2014 raids are performing similarly!</p>';
+        el.innerHTML = '<p style="color:var(--muted)">No significant differences found \u2014 reports are performing similarly!</p>';
         return;
       }
       el.innerHTML = data.recommendations.map(rec => `
@@ -907,24 +910,24 @@
         detailsHtml += `<div class="boss-detail" id="detail-${bossId}">
           <div class="two-col">
             <div>
-              <h3 style="color:var(--accent)">Our Top DPS</h3>
+              <h3 style="color:var(--accent)">${REPORT_1_LABEL} Top DPS</h3>
               ${(o.top_dps || []).map(([name, dmg]) => `<div style="font-size:0.82rem">${escapeHtml(name)}: ${formatNum(dmg)}</div>`).join('')}
-              <h3 style="margin-top:12px;color:var(--accent)">Our Top Healers</h3>
+              <h3 style="margin-top:12px;color:var(--accent)">${REPORT_1_LABEL} Top Healers</h3>
               ${(o.top_healers || []).map(([name, heal]) => `<div style="font-size:0.82rem">${escapeHtml(name)}: ${formatNum(heal)}</div>`).join('')}
-              ${o.cooldowns && o.cooldowns.length ? `<h3 style="margin-top:12px;color:var(--accent)">Our Cooldowns</h3>${o.cooldowns.map(cd => `<div style="font-size:0.82rem">${cd.spell} at ${cd.time_sec}s (${cd.time_pct}%)</div>`).join('')}` : ''}
+              ${o.cooldowns && o.cooldowns.length ? `<h3 style="margin-top:12px;color:var(--accent)">${REPORT_1_LABEL} Cooldowns</h3>${o.cooldowns.map(cd => `<div style="font-size:0.82rem">${cd.spell} at ${cd.time_sec}s (${cd.time_pct}%)</div>`).join('')}` : ''}
               <div style="margin-top:8px;font-size:0.8rem;color:var(--muted)">Overheal: ${o.overheal_pct != null ? o.overheal_pct : '?'}%</div>
             </div>
             <div>
-              <h3 style="color:var(--warning)">Their Top DPS</h3>
+              <h3 style="color:var(--warning)">${REPORT_2_LABEL} Top DPS</h3>
               ${(t.top_dps || []).map(([name, dmg]) => `<div style="font-size:0.82rem">${escapeHtml(name)}: ${formatNum(dmg)}</div>`).join('')}
-              <h3 style="margin-top:12px;color:var(--warning)">Their Top Healers</h3>
+              <h3 style="margin-top:12px;color:var(--warning)">${REPORT_2_LABEL} Top Healers</h3>
               ${(t.top_healers || []).map(([name, heal]) => `<div style="font-size:0.82rem">${escapeHtml(name)}: ${formatNum(heal)}</div>`).join('')}
-              ${t.cooldowns && t.cooldowns.length ? `<h3 style="margin-top:12px;color:var(--warning)">Their Cooldowns</h3>${t.cooldowns.map(cd => `<div style="font-size:0.82rem">${cd.spell} at ${cd.time_sec}s (${cd.time_pct}%)</div>`).join('')}` : ''}
+              ${t.cooldowns && t.cooldowns.length ? `<h3 style="margin-top:12px;color:var(--warning)">${REPORT_2_LABEL} Cooldowns</h3>${t.cooldowns.map(cd => `<div style="font-size:0.82rem">${cd.spell} at ${cd.time_sec}s (${cd.time_pct}%)</div>`).join('')}` : ''}
               <div style="margin-top:8px;font-size:0.8rem;color:var(--muted)">Overheal: ${t.overheal_pct != null ? t.overheal_pct : '?'}%</div>
             </div>
           </div>
-          ${d.missing_buffs && d.missing_buffs.length ? `<div style="margin-top:12px;font-size:0.82rem;color:var(--warning)"><strong>Buffs they have that we don't:</strong> ${d.missing_buffs.join(', ')}</div>` : ''}
-          ${d.extra_buffs && d.extra_buffs.length ? `<div style="margin-top:4px;font-size:0.82rem;color:var(--accent)"><strong>Buffs we have that they don't:</strong> ${d.extra_buffs.join(', ')}</div>` : ''}
+          ${d.missing_buffs && d.missing_buffs.length ? `<div style="margin-top:12px;font-size:0.82rem;color:var(--warning)"><strong>Buffs ${REPORT_2_LABEL} has that ${REPORT_1_LABEL} doesn't:</strong> ${d.missing_buffs.join(', ')}</div>` : ''}
+          ${d.extra_buffs && d.extra_buffs.length ? `<div style="margin-top:4px;font-size:0.82rem;color:var(--accent)"><strong>Buffs ${REPORT_1_LABEL} has that ${REPORT_2_LABEL} doesn't:</strong> ${d.extra_buffs.join(', ')}</div>` : ''}
         </div>`;
       }
 
@@ -1034,8 +1037,8 @@
 
       let html = '<div style="margin-bottom:12px;font-size:0.82rem;color:var(--muted)">';
       html += '<span style="color:var(--faster)">\u25cf Both have</span> \u00a0 ';
-      html += '<span style="color:var(--accent)">\u25cf Only ours</span> \u00a0 ';
-      html += '<span style="color:var(--warning)">\u25cf Only theirs (we\'re missing)</span>';
+      html += `<span style="color:var(--accent)">\u25cf Only ${REPORT_1_LABEL}</span> \u00a0 `;
+      html += `<span style="color:var(--warning)">\u25cf Only ${REPORT_2_LABEL} (${REPORT_1_LABEL} is missing)</span>`;
       html += '</div><div class="buff-grid">';
       for (const buff of sorted) {
         const hasOurs = ourBuffs.has(buff);
@@ -1083,6 +1086,39 @@
       theirSelect.addEventListener('change', renderIndividualComparison);
     }
 
+    function renderMetricChartSection(title, bossStats, ourPlayer, theirPlayer, ourKey, theirKey) {
+      if (!bossStats.some(b => b[ourKey] > 0 || b[theirKey] > 0)) return '';
+      const maxMetric = bossStats.reduce((max, boss) => Math.max(max, boss[ourKey] || 0, boss[theirKey] || 0), 0);
+      if (maxMetric <= 0) return '';
+
+      let html = `<div style="margin-top:20px;"><h3 style="color:var(--text);font-size:0.9rem;margin-bottom:12px;">${title}</h3>`;
+      for (const boss of bossStats) {
+        if (!boss[ourKey] && !boss[theirKey]) continue;
+        html += `<div style="margin-bottom:10px;"><div style="font-size:0.78rem;color:var(--muted);margin-bottom:3px;">${escapeHtml(boss.name)}</div>`;
+        if (ourPlayer) {
+          const pct = maxMetric > 0 ? (boss[ourKey] / maxMetric * 100) : 0;
+          html += `<div style="display:flex;align-items:center;gap:8px;margin-bottom:2px;">
+            <div style="width:72px;font-size:0.75rem;color:var(--accent);text-align:right;">${formatNum(boss[ourKey])}</div>
+            <div style="flex:1;height:14px;background:var(--panel-3);border-radius:4px;overflow:hidden;">
+              <div style="width:${pct}%;height:100%;background:var(--accent);border-radius:4px;"></div>
+            </div>
+          </div>`;
+        }
+        if (theirPlayer) {
+          const pct = maxMetric > 0 ? (boss[theirKey] / maxMetric * 100) : 0;
+          html += `<div style="display:flex;align-items:center;gap:8px;">
+            <div style="width:72px;font-size:0.75rem;color:var(--warning);text-align:right;">${formatNum(boss[theirKey])}</div>
+            <div style="flex:1;height:14px;background:var(--panel-3);border-radius:4px;overflow:hidden;">
+              <div style="width:${pct}%;height:100%;background:var(--warning);border-radius:4px;"></div>
+            </div>
+          </div>`;
+        }
+        html += '</div>';
+      }
+      html += '</div>';
+      return html;
+    }
+
     function renderIndividualComparison() {
       const ourPlayer = document.getElementById('ourPlayerSelect').value;
       const theirPlayer = document.getElementById('theirPlayerSelect').value;
@@ -1097,29 +1133,6 @@
       const theirRoster = data.roster.theirs || {};
       const ourInfo = ourRoster[ourPlayer] || {};
       const theirInfo = theirRoster[theirPlayer] || {};
-
-      let html = '';
-
-      // Player info header
-      html += '<div style="display:flex;gap:24px;margin-bottom:16px;flex-wrap:wrap;">';
-      if (ourPlayer) {
-        const color = CLASS_COLORS[ourInfo.class] || '#aaa';
-        html += `<div style="font-size:0.9rem"><strong style="color:var(--accent)">Our Player:</strong> <span style="color:${color}">${escapeHtml(ourPlayer)}</span> <span style="color:var(--muted)">(${ourInfo.class || '?'} - ${ourInfo.role || '?'})</span></div>`;
-      }
-      if (theirPlayer) {
-        const color = CLASS_COLORS[theirInfo.class] || '#aaa';
-        html += `<div style="font-size:0.9rem"><strong style="color:var(--warning)">Their Player:</strong> <span style="color:${color}">${escapeHtml(theirPlayer)}</span> <span style="color:var(--muted)">(${theirInfo.class || '?'} - ${theirInfo.role || '?'})</span></div>`;
-      }
-      html += '</div>';
-
-      // Per-boss comparison table
-      html += '<div style="font-size:0.78rem;color:var(--muted);margin-bottom:8px;">Click a boss row to load detailed ability/cooldown breakdown</div>';
-      html += '<table><thead><tr><th>Boss</th>';
-      if (ourPlayer) html += '<th>Our Damage</th><th>Our DPS</th><th>Our Healing</th>';
-      if (theirPlayer) html += '<th>Their Damage</th><th>Their DPS</th><th>Their Healing</th>';
-      if (ourPlayer && theirPlayer) html += '<th>DPS \u0394</th>';
-      html += '</tr></thead><tbody>';
-
       const bossStats = [];
 
       for (let i = 0; i < data.bosses.length; i++) {
@@ -1139,24 +1152,78 @@
         const theirDurSec = theirBoss.duration_ms ? theirBoss.duration_ms / 1000 : 0;
         const ourDps = ourDurSec > 0 ? Math.round(ourDmg / ourDurSec) : 0;
         const theirDps = theirDurSec > 0 ? Math.round(theirDmg / theirDurSec) : 0;
+        const ourHps = ourDurSec > 0 ? Math.round(ourHeal / ourDurSec) : 0;
+        const theirHps = theirDurSec > 0 ? Math.round(theirHeal / theirDurSec) : 0;
 
-        bossStats.push({ name: boss.name, ourDmg, theirDmg, ourDps, theirDps, ourHeal, theirHeal });
+        bossStats.push({ name: boss.name, ourDmg, theirDmg, ourDps, theirDps, ourHeal, theirHeal, ourHps, theirHps });
+      }
 
+      const showHpsDelta = ourPlayer && theirPlayer && bossStats.some(b => b.ourHeal > 0 || b.theirHeal > 0);
+      const totalOurDmg = bossStats.reduce((s, b) => s + b.ourDmg, 0);
+      const totalTheirDmg = bossStats.reduce((s, b) => s + b.theirDmg, 0);
+      const totalOurHeal = bossStats.reduce((s, b) => s + b.ourHeal, 0);
+      const totalTheirHeal = bossStats.reduce((s, b) => s + b.theirHeal, 0);
+      const ourDpsBosses = bossStats.filter(b => b.ourDps > 0);
+      const theirDpsBosses = bossStats.filter(b => b.theirDps > 0);
+      const ourHpsBosses = bossStats.filter(b => b.ourHps > 0);
+      const theirHpsBosses = bossStats.filter(b => b.theirHps > 0);
+      const avgOurDps = ourDpsBosses.length > 0
+        ? Math.round(ourDpsBosses.reduce((s, b) => s + b.ourDps, 0) / ourDpsBosses.length) : 0;
+      const avgTheirDps = theirDpsBosses.length > 0
+        ? Math.round(theirDpsBosses.reduce((s, b) => s + b.theirDps, 0) / theirDpsBosses.length) : 0;
+      const avgOurHps = ourHpsBosses.length > 0
+        ? Math.round(ourHpsBosses.reduce((s, b) => s + b.ourHps, 0) / ourHpsBosses.length) : 0;
+      const avgTheirHps = theirHpsBosses.length > 0
+        ? Math.round(theirHpsBosses.reduce((s, b) => s + b.theirHps, 0) / theirHpsBosses.length) : 0;
+      const ourHealingPrimary = ourPlayer ? totalOurHeal > totalOurDmg : false;
+      const theirHealingPrimary = theirPlayer ? totalTheirHeal > totalTheirDmg : false;
+
+      let html = '';
+
+      // Player info header
+      html += '<div style="display:flex;gap:24px;margin-bottom:16px;flex-wrap:wrap;">';
+      if (ourPlayer) {
+        const color = CLASS_COLORS[ourInfo.class] || '#aaa';
+        html += `<div style="font-size:0.9rem"><strong style="color:var(--accent)">${REPORT_1_LABEL} Player:</strong> <span style="color:${color}">${escapeHtml(ourPlayer)}</span> <span style="color:var(--muted)">(${ourInfo.class || '?'} - ${ourInfo.role || '?'})</span></div>`;
+      }
+      if (theirPlayer) {
+        const color = CLASS_COLORS[theirInfo.class] || '#aaa';
+        html += `<div style="font-size:0.9rem"><strong style="color:var(--warning)">${REPORT_2_LABEL} Player:</strong> <span style="color:${color}">${escapeHtml(theirPlayer)}</span> <span style="color:var(--muted)">(${theirInfo.class || '?'} - ${theirInfo.role || '?'})</span></div>`;
+      }
+      html += '</div>';
+
+      // Per-boss comparison table
+      html += '<div style="font-size:0.78rem;color:var(--muted);margin-bottom:8px;">Click a boss row to load detailed ability/cooldown breakdown</div>';
+      html += '<table><thead><tr><th>Boss</th>';
+      if (ourPlayer) html += `<th>${REPORT_1_LABEL} Damage</th><th>${REPORT_1_LABEL} DPS</th><th>${REPORT_1_LABEL} Healing</th><th>${REPORT_1_LABEL} HPS</th>`;
+      if (theirPlayer) html += `<th>${REPORT_2_LABEL} Damage</th><th>${REPORT_2_LABEL} DPS</th><th>${REPORT_2_LABEL} Healing</th><th>${REPORT_2_LABEL} HPS</th>`;
+      if (ourPlayer && theirPlayer) html += '<th>DPS \u0394</th>';
+      if (showHpsDelta) html += '<th>HPS \u0394</th>';
+      html += '</tr></thead><tbody>';
+      for (let i = 0; i < bossStats.length; i++) {
+        const boss = bossStats[i];
         html += `<tr class="boss-row" data-boss-idx="${i}" style="cursor:pointer;"><td><strong>${escapeHtml(boss.name)}</strong> <span style="font-size:0.7rem;color:var(--muted);">▶</span></td>`;
         if (ourPlayer) {
-          html += `<td>${ourDmg ? formatNum(ourDmg) : '\u2014'}</td>`;
-          html += `<td>${ourDps ? formatNum(ourDps) : '\u2014'}</td>`;
-          html += `<td>${ourHeal ? formatNum(ourHeal) : '\u2014'}</td>`;
+          html += `<td>${boss.ourDmg ? formatNum(boss.ourDmg) : '\u2014'}</td>`;
+          html += `<td>${boss.ourDps ? formatNum(boss.ourDps) : '\u2014'}</td>`;
+          html += `<td>${boss.ourHeal ? formatNum(boss.ourHeal) : '\u2014'}</td>`;
+          html += `<td>${boss.ourHps ? formatNum(boss.ourHps) : '\u2014'}</td>`;
         }
         if (theirPlayer) {
-          html += `<td>${theirDmg ? formatNum(theirDmg) : '\u2014'}</td>`;
-          html += `<td>${theirDps ? formatNum(theirDps) : '\u2014'}</td>`;
-          html += `<td>${theirHeal ? formatNum(theirHeal) : '\u2014'}</td>`;
+          html += `<td>${boss.theirDmg ? formatNum(boss.theirDmg) : '\u2014'}</td>`;
+          html += `<td>${boss.theirDps ? formatNum(boss.theirDps) : '\u2014'}</td>`;
+          html += `<td>${boss.theirHeal ? formatNum(boss.theirHeal) : '\u2014'}</td>`;
+          html += `<td>${boss.theirHps ? formatNum(boss.theirHps) : '\u2014'}</td>`;
         }
         if (ourPlayer && theirPlayer) {
-          const dpsDiff = ourDps - theirDps;
+          const dpsDiff = boss.ourDps - boss.theirDps;
           const cls = dpsDiff > 0 ? 'faster' : dpsDiff < 0 ? 'slower' : 'neutral';
           html += `<td class="${cls}">${dpsDiff > 0 ? '+' : ''}${formatNum(dpsDiff)}</td>`;
+        }
+        if (showHpsDelta) {
+          const hpsDiff = boss.ourHps - boss.theirHps;
+          const cls = hpsDiff > 0 ? 'faster' : hpsDiff < 0 ? 'slower' : 'neutral';
+          html += `<td class="${cls}">${hpsDiff > 0 ? '+' : ''}${formatNum(hpsDiff)}</td>`;
         }
         html += '</tr>';
         html += `<tr><td colspan="99" style="padding:0;border:none;"><div id="player-detail-${i}" class="boss-detail"></div></td></tr>`;
@@ -1164,69 +1231,63 @@
       html += '</tbody></table>';
 
       // Summary stats
-      const totalOurDmg = bossStats.reduce((s, b) => s + b.ourDmg, 0);
-      const totalTheirDmg = bossStats.reduce((s, b) => s + b.theirDmg, 0);
-      const ourDpsBosses = bossStats.filter(b => b.ourDps > 0);
-      const theirDpsBosses = bossStats.filter(b => b.theirDps > 0);
-      const avgOurDps = ourDpsBosses.length > 0
-        ? Math.round(ourDpsBosses.reduce((s, b) => s + b.ourDps, 0) / ourDpsBosses.length) : 0;
-      const avgTheirDps = theirDpsBosses.length > 0
-        ? Math.round(theirDpsBosses.reduce((s, b) => s + b.theirDps, 0) / theirDpsBosses.length) : 0;
-
       html += '<div style="display:flex;gap:16px;margin-top:16px;flex-wrap:wrap;">';
       if (ourPlayer) {
         html += `<div class="summary-card" style="flex:1;min-width:150px;">
-          <div class="label">Our Total Damage</div>
+          <div class="label">${REPORT_1_LABEL} Total Damage</div>
           <div class="value" style="font-size:1.1rem">${formatNum(totalOurDmg)}</div>
           <div class="delta neutral" style="font-size:0.8rem">Avg DPS: ${formatNum(avgOurDps)}</div>
+        </div>`;
+        html += `<div class="summary-card" style="flex:1;min-width:150px;">
+          <div class="label">${REPORT_1_LABEL} Total Healing</div>
+          <div class="value" style="font-size:1.1rem">${formatNum(totalOurHeal)}</div>
+          <div class="delta neutral" style="font-size:0.8rem">Avg HPS: ${formatNum(avgOurHps)}</div>
         </div>`;
       }
       if (theirPlayer) {
         html += `<div class="summary-card" style="flex:1;min-width:150px;">
-          <div class="label">Their Total Damage</div>
+          <div class="label">${REPORT_2_LABEL} Total Damage</div>
           <div class="value" style="font-size:1.1rem">${formatNum(totalTheirDmg)}</div>
           <div class="delta neutral" style="font-size:0.8rem">Avg DPS: ${formatNum(avgTheirDps)}</div>
+        </div>`;
+        html += `<div class="summary-card" style="flex:1;min-width:150px;">
+          <div class="label">${REPORT_2_LABEL} Total Healing</div>
+          <div class="value" style="font-size:1.1rem">${formatNum(totalTheirHeal)}</div>
+          <div class="delta neutral" style="font-size:0.8rem">Avg HPS: ${formatNum(avgTheirHps)}</div>
         </div>`;
       }
       if (ourPlayer && theirPlayer) {
         const totalDiff = totalOurDmg - totalTheirDmg;
         const avgDiff = avgOurDps - avgTheirDps;
+        const totalHealDiff = totalOurHeal - totalTheirHeal;
+        const avgHpsDiff = avgOurHps - avgTheirHps;
         html += `<div class="summary-card" style="flex:1;min-width:150px;">
           <div class="label">Difference</div>
           <div class="value ${avgDiff >= 0 ? 'faster' : 'slower'}" style="font-size:1.1rem">${avgDiff >= 0 ? '+' : ''}${formatNum(avgDiff)} avg DPS</div>
           <div class="delta ${totalDiff >= 0 ? 'faster' : 'slower'}" style="font-size:0.8rem">${totalDiff >= 0 ? '+' : ''}${formatNum(totalDiff)} total dmg</div>
         </div>`;
+        if (showHpsDelta) {
+          html += `<div class="summary-card" style="flex:1;min-width:150px;">
+            <div class="label">Healing Difference</div>
+            <div class="value ${avgHpsDiff >= 0 ? 'faster' : 'slower'}" style="font-size:1.1rem">${avgHpsDiff >= 0 ? '+' : ''}${formatNum(avgHpsDiff)} avg HPS</div>
+            <div class="delta ${totalHealDiff >= 0 ? 'faster' : 'slower'}" style="font-size:0.8rem">${totalHealDiff >= 0 ? '+' : ''}${formatNum(totalHealDiff)} total healing</div>
+          </div>`;
+        }
       }
       html += '</div>';
 
-      // DPS bar chart
-      if (bossStats.some(b => b.ourDps > 0 || b.theirDps > 0)) {
-        html += '<div style="margin-top:20px;"><h3 style="color:var(--text);font-size:0.9rem;margin-bottom:12px;">DPS per Boss</h3>';
-        const maxDps = Math.max(...bossStats.map(b => Math.max(b.ourDps, b.theirDps)));
-        for (const boss of bossStats) {
-          if (!boss.ourDps && !boss.theirDps) continue;
-          html += `<div style="margin-bottom:10px;"><div style="font-size:0.78rem;color:var(--muted);margin-bottom:3px;">${escapeHtml(boss.name)}</div>`;
-          if (ourPlayer) {
-            const pct = maxDps > 0 ? (boss.ourDps / maxDps * 100) : 0;
-            html += `<div style="display:flex;align-items:center;gap:8px;margin-bottom:2px;">
-              <div style="width:60px;font-size:0.75rem;color:var(--accent);text-align:right;">${formatNum(boss.ourDps)}</div>
-              <div style="flex:1;height:14px;background:var(--panel-3);border-radius:4px;overflow:hidden;">
-                <div style="width:${pct}%;height:100%;background:var(--accent);border-radius:4px;"></div>
-              </div>
-            </div>`;
-          }
-          if (theirPlayer) {
-            const pct = maxDps > 0 ? (boss.theirDps / maxDps * 100) : 0;
-            html += `<div style="display:flex;align-items:center;gap:8px;">
-              <div style="width:60px;font-size:0.75rem;color:var(--warning);text-align:right;">${formatNum(boss.theirDps)}</div>
-              <div style="flex:1;height:14px;background:var(--panel-3);border-radius:4px;overflow:hidden;">
-                <div style="width:${pct}%;height:100%;background:var(--warning);border-radius:4px;"></div>
-              </div>
-            </div>`;
-          }
-          html += '</div>';
-        }
-        html += '</div>';
+      const showDpsChart = ourPlayer && theirPlayer
+        ? !(ourHealingPrimary && theirHealingPrimary)
+        : (ourPlayer ? !ourHealingPrimary : !theirHealingPrimary);
+      const showHpsChart = ourPlayer && theirPlayer
+        ? (ourHealingPrimary && theirHealingPrimary) || (ourHealingPrimary !== theirHealingPrimary)
+        : (ourPlayer ? ourHealingPrimary : theirHealingPrimary);
+
+      if (showDpsChart) {
+        html += renderMetricChartSection('DPS per Boss', bossStats, ourPlayer, theirPlayer, 'ourDps', 'theirDps');
+      }
+      if (showHpsChart) {
+        html += renderMetricChartSection('HPS per Boss', bossStats, ourPlayer, theirPlayer, 'ourHps', 'theirHps');
       }
 
       el.innerHTML = html;
@@ -1259,6 +1320,24 @@
           hitCount: entry.hitCount || 0,
           critHitCount: entry.critHitCount || 0,
           missCount: entry.missCount || 0,
+          tickCount: entry.tickCount || 0,
+          critTickCount: entry.critTickCount || 0,
+        });
+      }
+      abilities.sort((a, b) => b.total - a.total);
+      return abilities;
+    }
+
+    async function fetchPlayerHealingBreakdown(reportId, apiKey, playerId, start, end) {
+      const table = await apiFetch(`/report/tables/healing/${reportId}`, apiKey, { start, end, sourceid: playerId });
+      const abilities = [];
+      for (const entry of (table.entries || [])) {
+        abilities.push({
+          name: entry.name || 'Unknown',
+          total: entry.total || 0,
+          overheal: entry.overheal || 0,
+          hitCount: entry.hitCount || 0,
+          critHitCount: entry.critHitCount || 0,
           tickCount: entry.tickCount || 0,
           critTickCount: entry.critTickCount || 0,
         });
@@ -1311,11 +1390,7 @@
 
     async function loadPlayerBossDetails(bossIdx, ourPlayerName, theirPlayerName, detailEl) {
       const boss = data.bosses[bossIdx];
-      const apiKey = localStorage.getItem('wcl_api_key');
-      if (!apiKey) {
-        detailEl.innerHTML = '<div style="color:var(--wipe);padding:12px;">API key not found. Please enter it above.</div>';
-        return;
-      }
+      const apiKey = localStorage.getItem('wcl_api_key') || DEFAULT_API_KEY;
 
       const ourRoster = data.roster.ours || {};
       const theirRoster = data.roster.theirs || {};
@@ -1333,12 +1408,13 @@
           const end = boss.ours.end_time;
           fetches.push(Promise.all([
             fetchPlayerDamageBreakdown(reportId, apiKey, ourInfo.id, start, end),
+            fetchPlayerHealingBreakdown(reportId, apiKey, ourInfo.id, start, end),
             fetchPlayerBuffs(reportId, apiKey, ourInfo.id, start, end),
             fetchPlayerCasts(reportId, apiKey, ourInfo.id, start, end),
             fetchPlayerCastEvents(reportId, apiKey, ourInfo.id, start, end),
           ]));
         } else {
-          fetches.push(Promise.resolve([[], [], [], []]));
+          fetches.push(Promise.resolve([[], [], [], [], []]));
         }
         // Their player data
         if (theirPlayerName && boss.theirs && theirInfo.id) {
@@ -1347,15 +1423,16 @@
           const end = boss.theirs.end_time;
           fetches.push(Promise.all([
             fetchPlayerDamageBreakdown(reportId, apiKey, theirInfo.id, start, end),
+            fetchPlayerHealingBreakdown(reportId, apiKey, theirInfo.id, start, end),
             fetchPlayerBuffs(reportId, apiKey, theirInfo.id, start, end),
             fetchPlayerCasts(reportId, apiKey, theirInfo.id, start, end),
             fetchPlayerCastEvents(reportId, apiKey, theirInfo.id, start, end),
           ]));
         } else {
-          fetches.push(Promise.resolve([[], [], [], []]));
+          fetches.push(Promise.resolve([[], [], [], [], []]));
         }
 
-        const [[ourAbilities, ourBuffs, ourCasts, ourCastEvents], [theirAbilities, theirBuffs, theirCasts, theirCastEvents]] = await Promise.all(fetches);
+        const [[ourAbilities, ourHealingAbilities, ourBuffs, ourCasts, ourCastEvents], [theirAbilities, theirHealingAbilities, theirBuffs, theirCasts, theirCastEvents]] = await Promise.all(fetches);
 
         const ourDurSec = boss.ours ? boss.ours.duration_ms / 1000 : 0;
         const theirDurSec = boss.theirs ? boss.theirs.duration_ms / 1000 : 0;
@@ -1363,6 +1440,7 @@
         let html = renderPlayerDetailPanel(
           ourPlayerName, theirPlayerName, ourInfo, theirInfo,
           ourAbilities, theirAbilities,
+          ourHealingAbilities, theirHealingAbilities,
           ourBuffs, theirBuffs,
           ourCasts, theirCasts,
           ourCastEvents, theirCastEvents,
@@ -1376,8 +1454,10 @@
       }
     }
 
-    function renderPlayerDetailPanel(ourName, theirName, ourInfo, theirInfo, ourAbilities, theirAbilities, ourBuffs, theirBuffs, ourCasts, theirCasts, ourCastEvents, theirCastEvents, ourDurSec, theirDurSec, bossName) {
+    function renderPlayerDetailPanel(ourName, theirName, ourInfo, theirInfo, ourAbilities, theirAbilities, ourHealingAbilities, theirHealingAbilities, ourBuffs, theirBuffs, ourCasts, theirCasts, ourCastEvents, theirCastEvents, ourDurSec, theirDurSec, bossName) {
       let html = '<div style="padding:16px;">';
+      const report1Header = ourName ? `${REPORT_1_LABEL}: ${escapeHtml(ourName)}` : REPORT_1_LABEL;
+      const report2Header = theirName ? `${REPORT_2_LABEL}: ${escapeHtml(theirName)}` : REPORT_2_LABEL;
 
       // === Damage Ability Breakdown ===
       html += '<h3 style="color:var(--text);margin-bottom:12px;">🗡️ Damage Breakdown by Ability</h3>';
@@ -1386,7 +1466,7 @@
       if (ourName && ourAbilities.length) {
         const totalDmg = ourAbilities.reduce((s, a) => s + a.total, 0);
         html += '<div>';
-        html += `<div class="col-header" style="color:var(--accent)">Our: ${escapeHtml(ourName)}</div>`;
+        html += `<div class="col-header" style="color:var(--accent)">${report1Header}</div>`;
         html += '<table><thead><tr><th>Ability</th><th>Damage</th><th>%</th><th>Hits</th><th>Crit%</th></tr></thead><tbody>';
         for (const a of ourAbilities.slice(0, 15)) {
           const pct = totalDmg > 0 ? (a.total / totalDmg * 100).toFixed(1) : 0;
@@ -1397,13 +1477,13 @@
         }
         html += '</tbody></table></div>';
       } else if (ourName) {
-        html += '<div><div class="col-header" style="color:var(--accent)">Our: ${escapeHtml(ourName)}</div><div style="color:var(--muted);font-size:0.82rem;">No data</div></div>';
+        html += `<div><div class="col-header" style="color:var(--accent)">${report1Header}</div><div style="color:var(--muted);font-size:0.82rem;">No data</div></div>`;
       }
 
       if (theirName && theirAbilities.length) {
         const totalDmg = theirAbilities.reduce((s, a) => s + a.total, 0);
         html += '<div>';
-        html += `<div class="col-header" style="color:var(--warning)">Their: ${escapeHtml(theirName)}</div>`;
+        html += `<div class="col-header" style="color:var(--warning)">${report2Header}</div>`;
         html += '<table><thead><tr><th>Ability</th><th>Damage</th><th>%</th><th>Hits</th><th>Crit%</th></tr></thead><tbody>';
         for (const a of theirAbilities.slice(0, 15)) {
           const pct = totalDmg > 0 ? (a.total / totalDmg * 100).toFixed(1) : 0;
@@ -1414,7 +1494,44 @@
         }
         html += '</tbody></table></div>';
       } else if (theirName) {
-        html += '<div><div class="col-header" style="color:var(--warning)">Their: ${escapeHtml(theirName)}</div><div style="color:var(--muted);font-size:0.82rem;">No data</div></div>';
+        html += `<div><div class="col-header" style="color:var(--warning)">${report2Header}</div><div style="color:var(--muted);font-size:0.82rem;">No data</div></div>`;
+      }
+      html += '</div>';
+
+      // === Healing Ability Breakdown ===
+      html += '<h3 style="color:var(--text);margin-top:20px;margin-bottom:12px;">💚 Healing Breakdown by Ability</h3>';
+      html += '<div class="two-col">';
+
+      if (ourName && ourHealingAbilities.length) {
+        html += '<div>';
+        html += `<div class="col-header" style="color:var(--accent)">${report1Header}</div>`;
+        html += '<table><thead><tr><th>Ability</th><th>Healing</th><th>Overheal%</th><th>Hits</th><th>Crit%</th></tr></thead><tbody>';
+        for (const a of ourHealingAbilities.slice(0, 15)) {
+          const totalHits = a.hitCount + a.critHitCount + a.tickCount + a.critTickCount;
+          const critHits = a.critHitCount + a.critTickCount;
+          const critPct = totalHits > 0 ? (critHits / totalHits * 100).toFixed(0) : 0;
+          const overhealPct = (a.total + a.overheal) > 0 ? (a.overheal / (a.total + a.overheal) * 100).toFixed(1) : '0.0';
+          html += `<tr><td>${escapeHtml(a.name)}</td><td>${formatNum(a.total)}</td><td>${overhealPct}%</td><td>${totalHits}</td><td>${critPct}%</td></tr>`;
+        }
+        html += '</tbody></table></div>';
+      } else if (ourName) {
+        html += `<div><div class="col-header" style="color:var(--accent)">${report1Header}</div><div style="color:var(--muted);font-size:0.82rem;">No data</div></div>`;
+      }
+
+      if (theirName && theirHealingAbilities.length) {
+        html += '<div>';
+        html += `<div class="col-header" style="color:var(--warning)">${report2Header}</div>`;
+        html += '<table><thead><tr><th>Ability</th><th>Healing</th><th>Overheal%</th><th>Hits</th><th>Crit%</th></tr></thead><tbody>';
+        for (const a of theirHealingAbilities.slice(0, 15)) {
+          const totalHits = a.hitCount + a.critHitCount + a.tickCount + a.critTickCount;
+          const critHits = a.critHitCount + a.critTickCount;
+          const critPct = totalHits > 0 ? (critHits / totalHits * 100).toFixed(0) : 0;
+          const overhealPct = (a.total + a.overheal) > 0 ? (a.overheal / (a.total + a.overheal) * 100).toFixed(1) : '0.0';
+          html += `<tr><td>${escapeHtml(a.name)}</td><td>${formatNum(a.total)}</td><td>${overhealPct}%</td><td>${totalHits}</td><td>${critPct}%</td></tr>`;
+        }
+        html += '</tbody></table></div>';
+      } else if (theirName) {
+        html += `<div><div class="col-header" style="color:var(--warning)">${report2Header}</div><div style="color:var(--muted);font-size:0.82rem;">No data</div></div>`;
       }
       html += '</div>';
 
@@ -1426,7 +1543,7 @@
         const totalCasts = ourCasts.reduce((s, c) => s + c.total, 0);
         const cpm = ourDurSec > 0 ? (totalCasts / ourDurSec * 60).toFixed(1) : 0;
         html += '<div>';
-        html += `<div class="col-header" style="color:var(--accent)">Our: ${escapeHtml(ourName)} <span style="font-size:0.75rem;color:var(--muted)">(${totalCasts} casts, ${cpm} CPM)</span></div>`;
+        html += `<div class="col-header" style="color:var(--accent)">${report1Header} <span style="font-size:0.75rem;color:var(--muted)">(${totalCasts} casts, ${cpm} CPM)</span></div>`;
         html += '<table><thead><tr><th>Ability</th><th>Casts</th><th>CPM</th><th>% of Casts</th></tr></thead><tbody>';
         for (const c of ourCasts.slice(0, 15)) {
           const cpmAbility = ourDurSec > 0 ? (c.total / ourDurSec * 60).toFixed(1) : 0;
@@ -1442,7 +1559,7 @@
         const totalCasts = theirCasts.reduce((s, c) => s + c.total, 0);
         const cpm = theirDurSec > 0 ? (totalCasts / theirDurSec * 60).toFixed(1) : 0;
         html += '<div>';
-        html += `<div class="col-header" style="color:var(--warning)">Their: ${escapeHtml(theirName)} <span style="font-size:0.75rem;color:var(--muted)">(${totalCasts} casts, ${cpm} CPM)</span></div>`;
+        html += `<div class="col-header" style="color:var(--warning)">${report2Header} <span style="font-size:0.75rem;color:var(--muted)">(${totalCasts} casts, ${cpm} CPM)</span></div>`;
         html += '<table><thead><tr><th>Ability</th><th>Casts</th><th>CPM</th><th>% of Casts</th></tr></thead><tbody>';
         for (const c of theirCasts.slice(0, 15)) {
           const cpmAbility = theirDurSec > 0 ? (c.total / theirDurSec * 60).toFixed(1) : 0;
@@ -1496,7 +1613,7 @@
       html += '<div class="two-col">';
       if (ourName) {
         html += '<div>';
-        html += `<div class="col-header" style="color:var(--accent)">Our: ${escapeHtml(ourName)}</div>`;
+        html += `<div class="col-header" style="color:var(--accent)">${report1Header}</div>`;
         if (ourCds.length) {
           html += '<div style="font-size:0.82rem;">';
           for (const cd of ourCds) {
@@ -1511,7 +1628,7 @@
       }
       if (theirName) {
         html += '<div>';
-        html += `<div class="col-header" style="color:var(--warning)">Their: ${escapeHtml(theirName)}</div>`;
+        html += `<div class="col-header" style="color:var(--warning)">${report2Header}</div>`;
         if (theirCds.length) {
           html += '<div style="font-size:0.82rem;">';
           for (const cd of theirCds) {
@@ -1532,7 +1649,7 @@
 
       if (ourName && ourBuffs.length) {
         html += '<div>';
-        html += `<div class="col-header" style="color:var(--accent)">Our: ${escapeHtml(ourName)}</div>`;
+        html += `<div class="col-header" style="color:var(--accent)">${report1Header}</div>`;
         const relevantBuffs = ourBuffs.filter(b => b.isConsumable || b.isRaidBuff || b.uptime_pct > 20);
         html += '<table><thead><tr><th>Buff</th><th>Uptime</th><th>Type</th></tr></thead><tbody>';
         for (const b of relevantBuffs.slice(0, 20)) {
@@ -1547,7 +1664,7 @@
 
       if (theirName && theirBuffs.length) {
         html += '<div>';
-        html += `<div class="col-header" style="color:var(--warning)">Their: ${escapeHtml(theirName)}</div>`;
+        html += `<div class="col-header" style="color:var(--warning)">${report2Header}</div>`;
         const relevantBuffs = theirBuffs.filter(b => b.isConsumable || b.isRaidBuff || b.uptime_pct > 20);
         html += '<table><thead><tr><th>Buff</th><th>Uptime</th><th>Type</th></tr></thead><tbody>';
         for (const b of relevantBuffs.slice(0, 20)) {
@@ -1589,8 +1706,8 @@
         return h;
       }
 
-      if (ourName) html += activitySummary(ourCastEvents, ourDurSec, ourName, 'var(--accent)');
-      if (theirName) html += activitySummary(theirCastEvents, theirDurSec, theirName, 'var(--warning)');
+      if (ourName) html += activitySummary(ourCastEvents, ourDurSec, `${REPORT_1_LABEL}: ${ourName}`, 'var(--accent)');
+      if (theirName) html += activitySummary(theirCastEvents, theirDurSec, `${REPORT_2_LABEL}: ${theirName}`, 'var(--warning)');
       html += '</div>';
 
       html += '</div>';
@@ -1616,15 +1733,13 @@
         return;
       }
 
-      const DEFAULT_API_KEY = '3e4330ef2d0c5aa921215259c93d38a3';
-
       compareBtn.addEventListener('click', async () => {
         const ourUrl = document.getElementById('ourUrlInput').value.trim();
         const theirUrl = document.getElementById('theirUrlInput').value.trim();
         const apiKey = apiKeyInput.value.trim() || DEFAULT_API_KEY;
 
-        if (!ourUrl) { statusEl.textContent = 'Please enter your report URL.'; return; }
-        if (!theirUrl) { statusEl.textContent = 'Please enter their report URL.'; return; }
+        if (!ourUrl) { statusEl.textContent = `Please enter the ${REPORT_1_LABEL} URL.`; return; }
+        if (!theirUrl) { statusEl.textContent = `Please enter the ${REPORT_2_LABEL} URL.`; return; }
 
         if (apiKeyInput.value.trim()) localStorage.setItem('wcl_api_key', apiKeyInput.value.trim());
         compareBtn.disabled = true;
@@ -1632,10 +1747,10 @@
         progressEl.textContent = '';
 
         try {
-          progressEl.textContent = 'Fetching our report...';
+          progressEl.textContent = `Fetching ${REPORT_1_LABEL}...`;
           const ourData = await fetchReportData(ourUrl, apiKey, statusEl);
 
-          progressEl.textContent = 'Fetching their report...';
+          progressEl.textContent = `Fetching ${REPORT_2_LABEL}...`;
           const theirData = await fetchReportData(theirUrl, apiKey, statusEl);
 
           progressEl.textContent = 'Comparing...';
