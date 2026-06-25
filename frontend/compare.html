@@ -207,19 +207,25 @@
 <body>
   <!-- Load screen: input form -->
   <div id="loadScreen" class="app" style="padding:2rem;">
-    <a href="/report" class="nav-link">← Back to Raid Analysis</a>
+    <a href="/" class="nav-link">← Back to Guild Dashboard</a>
     <div class="hero">
       <h1>⚔️ Raid Log Comparison</h1>
       <div class="subtitle">Compare two WarcraftLogs reports side-by-side to find time savings and optimization opportunities.</div>
     </div>
     <div class="panel" style="max-width:650px;margin:0 auto;padding:1.5rem;">
       <div style="margin-bottom:1rem;">
-        <label style="display:block;font-weight:600;margin-bottom:0.3rem;">Report 1 URL</label>
-        <input id="ourUrlInput" type="text" placeholder="https://fresh.warcraftlogs.com/reports/ABC123..." style="width:100%;padding:0.5rem;border-radius:6px;border:1px solid #444;background:#1a1e2e;color:#e0e0e0;font-size:0.95rem;">
+        <label style="display:block;font-weight:600;margin-bottom:0.3rem;">Report 1 (Older)</label>
+        <select id="ourSelect" style="width:100%;padding:0.5rem;border-radius:6px;border:1px solid #444;background:#1a1e2e;color:#e0e0e0;font-size:0.95rem;margin-bottom:0.4rem;">
+          <option value="">Loading guild raids…</option>
+        </select>
+        <input id="ourUrlInput" type="text" placeholder="Or paste a custom URL…" style="width:100%;padding:0.5rem;border-radius:6px;border:1px solid #444;background:#1a1e2e;color:#e0e0e0;font-size:0.85rem;display:none;">
       </div>
       <div style="margin-bottom:1rem;">
-        <label style="display:block;font-weight:600;margin-bottom:0.3rem;">Report 2 URL</label>
-        <input id="theirUrlInput" type="text" placeholder="https://fresh.warcraftlogs.com/reports/XYZ789..." style="width:100%;padding:0.5rem;border-radius:6px;border:1px solid #444;background:#1a1e2e;color:#e0e0e0;font-size:0.95rem;">
+        <label style="display:block;font-weight:600;margin-bottom:0.3rem;">Report 2 (Newer)</label>
+        <select id="theirSelect" style="width:100%;padding:0.5rem;border-radius:6px;border:1px solid #444;background:#1a1e2e;color:#e0e0e0;font-size:0.95rem;margin-bottom:0.4rem;">
+          <option value="">Loading guild raids…</option>
+        </select>
+        <input id="theirUrlInput" type="text" placeholder="Or paste a custom URL…" style="width:100%;padding:0.5rem;border-radius:6px;border:1px solid #444;background:#1a1e2e;color:#e0e0e0;font-size:0.85rem;display:none;">
       </div>
       <button id="compareBtn" style="padding:0.6rem 1.5rem;border-radius:6px;border:none;background:var(--accent);color:#fff;font-weight:600;cursor:pointer;font-size:0.95rem;">⚔️ Compare Reports</button>
       <div id="fetchStatus" style="margin-top:1rem;font-size:0.9rem;color:#aaa;"></div>
@@ -361,6 +367,8 @@
     ]);
 
     function extractReportId(url) {
+      // Handle bare report codes (alphanumeric, 16 chars)
+      if (/^[A-Za-z0-9]{10,20}$/.test(url)) return url;
       const m = url.match(/\/reports\/([A-Za-z0-9]+)/);
       if (m) return m[1];
       throw new Error('Could not extract report ID from URL: ' + url);
@@ -389,8 +397,8 @@
     }
 
     // ===== Fetch one report =====
-    async function fetchReportData(reportUrl, statusEl) {
-      const reportId = extractReportId(reportUrl);
+    async function fetchReportData(codeOrUrl, statusEl) {
+      const reportId = extractReportId(codeOrUrl);
       statusEl.textContent = `Fetching ${reportId} from server...`;
       return fetchApiJson(`/api/compare-report/${reportId}`);
     }
@@ -1446,6 +1454,57 @@
       const progressEl = document.getElementById('fetchProgress');
       const backBtn = document.getElementById('backBtn');
 
+      const ourSelect = document.getElementById('ourSelect');
+      const theirSelect = document.getElementById('theirSelect');
+      const ourUrlInput = document.getElementById('ourUrlInput');
+      const theirUrlInput = document.getElementById('theirUrlInput');
+
+      // Load guild reports into dropdowns
+      (async function loadGuildReports() {
+        try {
+          const res = await fetchApiJson('/api/guild/reports?limit=50&page=1');
+          const reports = res.reports || [];
+          const options = reports.map(r => {
+            const d = new Date(r.date);
+            const label = `${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} — ${r.zone} (${r.player_count} players)`;
+            return `<option value="${r.code}">${label}</option>`;
+          });
+          const optionsHtml = '<option value="">— Select a guild raid —</option>' +
+            options.join('') +
+            '<option value="__custom__">✏️ Custom URL…</option>';
+          ourSelect.innerHTML = optionsHtml;
+          theirSelect.innerHTML = optionsHtml;
+          // Default: newest in "Report 2", second newest in "Report 1"
+          if (reports.length >= 2) {
+            theirSelect.value = reports[0].code;
+            ourSelect.value = reports[1].code;
+          }
+        } catch (e) {
+          ourSelect.innerHTML = '<option value="__custom__">✏️ Custom URL (guild load failed)</option>';
+          theirSelect.innerHTML = '<option value="__custom__">✏️ Custom URL (guild load failed)</option>';
+          ourUrlInput.style.display = '';
+          theirUrlInput.style.display = '';
+        }
+      })();
+
+      ourSelect.addEventListener('change', () => {
+        ourUrlInput.style.display = ourSelect.value === '__custom__' ? '' : 'none';
+        if (ourSelect.value !== '__custom__') ourUrlInput.value = '';
+      });
+      theirSelect.addEventListener('change', () => {
+        theirUrlInput.style.display = theirSelect.value === '__custom__' ? '' : 'none';
+        if (theirSelect.value !== '__custom__') theirUrlInput.value = '';
+      });
+
+      function getReportCode(selectEl, inputEl) {
+        if (selectEl.value === '__custom__') {
+          const url = inputEl.value.trim();
+          if (!url) return null;
+          return extractReportId(url);
+        }
+        return selectEl.value || null;
+      }
+
       // If pre-embedded data exists, show it
       if (data && data.ours) {
         showResults(data);
@@ -1453,11 +1512,15 @@
       }
 
       compareBtn.addEventListener('click', async () => {
-        const ourUrl = document.getElementById('ourUrlInput').value.trim();
-        const theirUrl = document.getElementById('theirUrlInput').value.trim();
-
-        if (!ourUrl) { statusEl.textContent = `Please enter the ${REPORT_1_LABEL} URL.`; return; }
-        if (!theirUrl) { statusEl.textContent = `Please enter the ${REPORT_2_LABEL} URL.`; return; }
+        let ourCode, theirCode;
+        try {
+          ourCode = getReportCode(ourSelect, ourUrlInput);
+          if (!ourCode) { statusEl.textContent = 'Please select or enter Report 1.'; return; }
+        } catch (e) { statusEl.textContent = `Report 1: ${e.message}`; return; }
+        try {
+          theirCode = getReportCode(theirSelect, theirUrlInput);
+          if (!theirCode) { statusEl.textContent = 'Please select or enter Report 2.'; return; }
+        } catch (e) { statusEl.textContent = `Report 2: ${e.message}`; return; }
 
         compareBtn.disabled = true;
         statusEl.textContent = 'Starting comparison...';
@@ -1465,10 +1528,10 @@
 
         try {
           progressEl.textContent = `Fetching ${REPORT_1_LABEL}...`;
-          const ourData = await fetchReportData(ourUrl, statusEl);
+          const ourData = await fetchReportData(ourCode, statusEl);
 
           progressEl.textContent = `Fetching ${REPORT_2_LABEL}...`;
-          const theirData = await fetchReportData(theirUrl, statusEl);
+          const theirData = await fetchReportData(theirCode, statusEl);
 
           progressEl.textContent = 'Comparing...';
           const comparison = compareReports(ourData, theirData);
