@@ -443,7 +443,9 @@
       padding: 24px;
       display: grid;
       align-content: start;
-      overflow: visible;
+      overflow-x: hidden;
+      overflow-y: auto;
+      max-height: calc(100vh - 130px);
     }
 
     .detail-panel-header {
@@ -469,6 +471,7 @@
     .detail-views {
       position: relative;
       min-height: 420px;
+      min-width: 0;
     }
 
     .detail-view {
@@ -548,6 +551,7 @@
 
     .card {
       padding: 18px;
+      overflow: hidden;
       position: relative;
       transition: transform 0.22s ease, border-color 0.22s ease, box-shadow 0.22s ease;
     }
@@ -614,6 +618,7 @@
 
     .table-wrap {
       overflow-x: auto;
+      max-width: 100%;
       border: 1px solid rgba(179, 169, 255, 0.1);
       border-radius: 16px;
       background: rgba(9, 13, 24, 0.38);
