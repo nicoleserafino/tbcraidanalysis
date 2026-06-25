@@ -221,11 +221,6 @@
         <label style="display:block;font-weight:600;margin-bottom:0.3rem;">Report 2 URL</label>
         <input id="theirUrlInput" type="text" placeholder="https://fresh.warcraftlogs.com/reports/XYZ789..." style="width:100%;padding:0.5rem;border-radius:6px;border:1px solid #444;background:#1a1e2e;color:#e0e0e0;font-size:0.95rem;">
       </div>
-      <div style="margin-bottom:1rem;">
-        <label style="display:block;font-weight:600;margin-bottom:0.3rem;">API Key (v1)</label>
-        <input id="apiKeyInput" type="password" placeholder="API key (optional — uses default for public logs)" style="width:100%;padding:0.5rem;border-radius:6px;border:1px solid #444;background:#1a1e2e;color:#e0e0e0;font-size:0.95rem;">
-        <div style="font-size:0.8rem;color:#888;margin-top:0.3rem;">Saved in localStorage. Never sent anywhere except WarcraftLogs.</div>
-      </div>
       <button id="compareBtn" style="padding:0.6rem 1.5rem;border-radius:6px;border:none;background:var(--accent);color:#fff;font-weight:600;cursor:pointer;font-size:0.95rem;">⚔️ Compare Reports</button>
       <div id="fetchStatus" style="margin-top:1rem;font-size:0.9rem;color:#aaa;"></div>
       <div id="fetchProgress" style="margin-top:0.5rem;font-size:0.82rem;color:var(--muted);"></div>
@@ -335,7 +330,6 @@
   <script>
     // ===== State =====
     let data = window.__COMPARE_DATA__;
-    const DEFAULT_API_KEY = '3e4330ef2d0c5aa921215259c93d38a3';
     const REPORT_1_LABEL = 'Report 1';
     const REPORT_2_LABEL = 'Report 2';
 
@@ -366,49 +360,19 @@
       'Trueshot Aura','Ferocious Inspiration','Unleashed Rage','Vampiric Embrace',
     ]);
 
-    // ===== API Client =====
-    const WCL_API_BASE = 'https://fresh.warcraftlogs.com/v1';
-
     function extractReportId(url) {
       const m = url.match(/\/reports\/([A-Za-z0-9]+)/);
       if (m) return m[1];
       throw new Error('Could not extract report ID from URL: ' + url);
     }
 
-    async function apiFetch(path, apiKey, params = {}) {
-      const query = new URLSearchParams({ api_key: apiKey, ...params });
-      const resp = await fetch(`${WCL_API_BASE}${path}?${query}`);
+    async function fetchApiJson(url) {
+      const resp = await fetch(url);
       if (!resp.ok) {
-        const text = await resp.text();
-        throw new Error(`API error ${resp.status}: ${text}`);
+        const body = await resp.json().catch(() => ({ detail: resp.statusText }));
+        throw new Error(body.detail || `Server error ${resp.status}`);
       }
       return resp.json();
-    }
-
-    async function fetchPaginatedEvents(eventType, reportId, apiKey, start, end, extraParams = {}) {
-      const events = [];
-      let nextStart = start;
-      while (true) {
-        const payload = await apiFetch(`/report/events/${eventType}/${reportId}`, apiKey, { start: nextStart, end, ...extraParams });
-        const pageEvents = payload.events || [];
-        events.push(...pageEvents);
-        const nextPage = payload.nextPageTimestamp;
-        if (!nextPage || nextPage >= end || nextPage === nextStart) break;
-        nextStart = nextPage;
-      }
-      return events;
-    }
-
-    function roleFromIcon(playerClass, icon) {
-      icon = icon || '';
-      if (icon.includes('-Holy') || icon.includes('-Restoration') || icon.includes('-Discipline')) return 'Healer';
-      if (icon.includes('-Protection') || icon.includes('-Guardian')) return 'Tank';
-      if (['Mage','Warlock','Rogue','Hunter'].includes(playerClass)) return 'DPS';
-      const dpsSpecs = ['-Shadow','-Balance','-Feral','-Enhancement','-Elemental','-Retribution',
-        '-Arms','-Fury','-Combat','-Assassination','-Subtlety','-Frost','-Fire',
-        '-Arcane','-Marksmanship','-BeastMastery','-Survival','-Affliction','-Demonology','-Destruction'];
-      if (dpsSpecs.some(s => icon.includes(s))) return 'DPS';
-      return 'DPS';
     }
 
     function fmtDuration(ms) {
@@ -425,170 +389,10 @@
     }
 
     // ===== Fetch one report =====
-    async function fetchReportData(reportUrl, apiKey, statusEl) {
+    async function fetchReportData(reportUrl, statusEl) {
       const reportId = extractReportId(reportUrl);
-      statusEl.textContent = `Fetching fights for ${reportId}...`;
-
-      const fightsPayload = await apiFetch(`/report/fights/${reportId}`, apiKey);
-      const allFights = fightsPayload.fights || [];
-      const bossFights = allFights.filter(f => (f.boss || 0) > 0);
-      const trashFights = allFights.filter(f => (f.boss || 0) === 0 && f.name !== 'Unknown');
-
-      const friendlies = fightsPayload.friendlies || [];
-      const playersById = {};
-      for (const actor of friendlies) {
-        if (PLAYER_CLASSES.has(actor.type)) playersById[actor.id] = actor;
-      }
-
-      const reportStartMs = fightsPayload.start || 0;
-      const title = fightsPayload.title || '';
-      const owner = fightsPayload.owner || '';
-
-      // Roster
-      const roster = {};
-      for (const actor of friendlies) {
-        if (!PLAYER_CLASSES.has(actor.type)) continue;
-        roster[actor.name] = { class: actor.type, role: roleFromIcon(actor.type, actor.icon), icon: actor.icon || '', id: actor.id };
-      }
-
-      // Per-boss: only keep fastest kill
-      const bossMap = {};
-      for (const fight of bossFights) {
-        if (!fight.kill) continue;
-        const dur = fight.end_time - fight.start_time;
-        if (!bossMap[fight.name] || dur < bossMap[fight.name].duration_ms) {
-          bossMap[fight.name] = { fight, duration_ms: dur };
-        }
-      }
-
-      const bosses = [];
-      for (const [bossName, entry] of Object.entries(bossMap)) {
-        const fight = entry.fight;
-        const start = fight.start_time, end = fight.end_time;
-        const durationMs = end - start;
-        statusEl.textContent = `${reportId}: Fetching ${bossName}...`;
-
-        // Fetch damage, healing, buffs in parallel
-        const [dmgTable, healTable, buffTable] = await Promise.all([
-          apiFetch(`/report/tables/damage-done/${reportId}`, apiKey, { start, end }),
-          apiFetch(`/report/tables/healing/${reportId}`, apiKey, { start, end }),
-          apiFetch(`/report/tables/buffs/${reportId}`, apiKey, { start, end }),
-        ]);
-
-        let totalDamage = 0;
-        const playerDamage = {};
-        for (const e of (dmgTable.entries || [])) {
-          if (e.id in playersById) {
-            const name = playersById[e.id].name;
-            const dmg = e.total || 0;
-            playerDamage[name] = dmg;
-            totalDamage += dmg;
-          }
-        }
-
-        let totalHealing = 0, totalOverheal = 0;
-        const playerHealing = {};
-        for (const e of (healTable.entries || [])) {
-          if (e.id in playersById) {
-            const name = playersById[e.id].name;
-            const heal = e.total || 0;
-            const oh = e.overheal || 0;
-            playerHealing[name] = { healing: heal, overheal: oh };
-            totalHealing += heal;
-            totalOverheal += oh;
-          }
-        }
-
-        const buffsPresent = new Set();
-        for (const e of (buffTable.auras || [])) {
-          if (CONSUMABLE_BUFFS.has(e.name) || RAID_BUFFS.has(e.name)) buffsPresent.add(e.name);
-        }
-
-        // Bloodlust/Heroism
-        statusEl.textContent = `${reportId}: ${bossName} cooldowns...`;
-        const cooldownEvents = [];
-        for (const cdSpell of ['Bloodlust', 'Heroism']) {
-          try {
-            const cdCasts = await fetchPaginatedEvents('casts', reportId, apiKey, start, end, { filter: `ability.name="${cdSpell}"` });
-            for (const ev of cdCasts) {
-              if (ev.type === 'cast') {
-                cooldownEvents.push({
-                  spell: cdSpell,
-                  time_sec: Math.round((ev.timestamp - start) / 100) / 10,
-                  time_pct: Math.round((ev.timestamp - start) / (end - start) * 1000) / 10,
-                });
-              }
-            }
-          } catch (e) { /* filter may fail on some reports */ }
-        }
-
-        const durationSec = durationMs / 1000;
-        bosses.push({
-          name: bossName,
-          fight_id: fight.id,
-          duration_ms: durationMs,
-          duration_str: fmtDuration(durationMs),
-          start_time: start,
-          end_time: end,
-          total_damage: totalDamage,
-          raid_dps: durationSec > 0 ? Math.round(totalDamage / durationSec) : 0,
-          total_healing: totalHealing,
-          total_overheal: totalOverheal,
-          overheal_pct: (totalHealing + totalOverheal) > 0 ? Math.round(totalOverheal / (totalHealing + totalOverheal) * 1000) / 10 : 0,
-          raid_hps: durationSec > 0 ? Math.round(totalHealing / durationSec) : 0,
-          player_damage: Object.fromEntries(Object.entries(playerDamage).sort((a,b) => b[1] - a[1])),
-          player_healing: Object.fromEntries(Object.entries(playerHealing).sort((a,b) => b[1].healing - a[1].healing)),
-          buffs_present: [...buffsPresent].sort(),
-          cooldowns: cooldownEvents,
-        });
-      }
-
-      bosses.sort((a, b) => a.start_time - b.start_time);
-
-      // Pull counts
-      const bossPullCounts = {};
-      for (const fight of bossFights) {
-        if (!bossPullCounts[fight.name]) bossPullCounts[fight.name] = { total_pulls: 0, kills: 0, wipes: 0 };
-        bossPullCounts[fight.name].total_pulls++;
-        if (fight.kill) bossPullCounts[fight.name].kills++;
-        else bossPullCounts[fight.name].wipes++;
-      }
-
-      // Trash
-      const trashData = { logged: false, total_time_ms: 0, pull_count: 0 };
-      if (trashFights.length) {
-        trashData.logged = true;
-        trashData.pull_count = trashFights.length;
-        const totalTrash = trashFights.reduce((sum, f) => sum + (f.end_time - f.start_time), 0);
-        trashData.total_time_ms = totalTrash;
-        trashData.total_time_str = fmtDuration(totalTrash);
-      }
-
-      // Pacing
-      const pacing = [];
-      for (let i = 0; i < bosses.length; i++) {
-        const entry = { boss: bosses[i].name, kill_time_ms: bosses[i].end_time, fight_duration_ms: bosses[i].duration_ms };
-        if (i > 0) {
-          const gapMs = bosses[i].start_time - bosses[i-1].end_time;
-          entry.gap_from_prev_ms = gapMs;
-          entry.gap_from_prev_str = fmtDuration(Math.max(0, gapMs));
-        }
-        pacing.push(entry);
-      }
-
-      // Total raid time
-      const firstEventMs = allFights.length ? Math.min(...allFights.map(f => f.start_time)) : (bosses[0]?.start_time || 0);
-      const lastKillMs = bosses.length ? bosses[bosses.length - 1].end_time : 0;
-      const totalRaidMs = lastKillMs - firstEventMs;
-      const totalGapMs = pacing.reduce((sum, p) => sum + Math.max(0, p.gap_from_prev_ms || 0), 0);
-
-      return {
-        report_id: reportId, url: reportUrl, title, owner, report_start_ms: reportStartMs,
-        total_raid_ms: totalRaidMs, total_raid_str: fmtDuration(totalRaidMs),
-        total_gap_ms: totalGapMs, total_gap_str: fmtDuration(totalGapMs),
-        roster, bosses, boss_order: bosses.map(b => b.name), boss_pull_counts: bossPullCounts,
-        trash: trashData, pacing,
-      };
+      statusEl.textContent = `Fetching ${reportId} from server...`;
+      return fetchApiJson(`/api/compare-report/${reportId}`);
     }
 
     // ===== Comparison logic =====
@@ -1310,87 +1114,13 @@
     }
 
     // ===== Detailed Player Boss Breakdown =====
-    async function fetchPlayerDamageBreakdown(reportId, apiKey, playerId, start, end) {
-      const table = await apiFetch(`/report/tables/damage-done/${reportId}`, apiKey, { start, end, sourceid: playerId });
-      const abilities = [];
-      for (const entry of (table.entries || [])) {
-        abilities.push({
-          name: entry.name || 'Unknown',
-          total: entry.total || 0,
-          hitCount: entry.hitCount || 0,
-          critHitCount: entry.critHitCount || 0,
-          missCount: entry.missCount || 0,
-          tickCount: entry.tickCount || 0,
-          critTickCount: entry.critTickCount || 0,
-        });
-      }
-      abilities.sort((a, b) => b.total - a.total);
-      return abilities;
-    }
-
-    async function fetchPlayerHealingBreakdown(reportId, apiKey, playerId, start, end) {
-      const table = await apiFetch(`/report/tables/healing/${reportId}`, apiKey, { start, end, sourceid: playerId });
-      const abilities = [];
-      for (const entry of (table.entries || [])) {
-        abilities.push({
-          name: entry.name || 'Unknown',
-          total: entry.total || 0,
-          overheal: entry.overheal || 0,
-          hitCount: entry.hitCount || 0,
-          critHitCount: entry.critHitCount || 0,
-          tickCount: entry.tickCount || 0,
-          critTickCount: entry.critTickCount || 0,
-        });
-      }
-      abilities.sort((a, b) => b.total - a.total);
-      return abilities;
-    }
-
-    async function fetchPlayerBuffs(reportId, apiKey, playerId, start, end) {
-      const table = await apiFetch(`/report/tables/buffs/${reportId}`, apiKey, { start, end, targetid: playerId });
-      const buffs = [];
-      const fightDuration = end - start;
-      for (const entry of (table.auras || [])) {
-        const uptime = entry.totalUptime || 0;
-        buffs.push({
-          name: entry.name || 'Unknown',
-          uptime_ms: uptime,
-          uptime_pct: fightDuration > 0 ? Math.round(uptime / fightDuration * 1000) / 10 : 0,
-          isConsumable: CONSUMABLE_BUFFS.has(entry.name),
-          isRaidBuff: RAID_BUFFS.has(entry.name),
-        });
-      }
-      buffs.sort((a, b) => b.uptime_pct - a.uptime_pct);
-      return buffs;
-    }
-
-    async function fetchPlayerCasts(reportId, apiKey, playerId, start, end) {
-      const table = await apiFetch(`/report/tables/casts/${reportId}`, apiKey, { start, end, sourceid: playerId });
-      const casts = [];
-      for (const entry of (table.entries || [])) {
-        casts.push({
-          name: entry.name || 'Unknown',
-          total: entry.total || 0,
-          hitCount: entry.hitCount || 0,
-        });
-      }
-      casts.sort((a, b) => b.total - a.total);
-      return casts;
-    }
-
-    async function fetchPlayerCastEvents(reportId, apiKey, playerId, start, end) {
-      const events = await fetchPaginatedEvents('casts', reportId, apiKey, start, end, { sourceid: playerId });
-      return events.filter(e => e.type === 'cast').map(e => ({
-        ability: e.ability ? e.ability.name : 'Unknown',
-        abilityId: e.ability ? e.ability.guid : 0,
-        timestamp: e.timestamp,
-        time_into_fight_sec: Math.round((e.timestamp - start) / 100) / 10,
-      }));
+    async function fetchPlayerBossDetails(reportId, fightId, playerId) {
+      const query = new URLSearchParams({ fight_id: fightId, player_id: playerId });
+      return fetchApiJson(`/api/report/${reportId}/player-details?${query}`);
     }
 
     async function loadPlayerBossDetails(bossIdx, ourPlayerName, theirPlayerName, detailEl) {
       const boss = data.bosses[bossIdx];
-      const apiKey = localStorage.getItem('wcl_api_key') || DEFAULT_API_KEY;
 
       const ourRoster = data.roster.ours || {};
       const theirRoster = data.roster.theirs || {};
@@ -1404,35 +1134,29 @@
         // Our player data
         if (ourPlayerName && boss.ours && ourInfo.id) {
           const reportId = data.ours.report_id;
-          const start = boss.ours.start_time;
-          const end = boss.ours.end_time;
-          fetches.push(Promise.all([
-            fetchPlayerDamageBreakdown(reportId, apiKey, ourInfo.id, start, end),
-            fetchPlayerHealingBreakdown(reportId, apiKey, ourInfo.id, start, end),
-            fetchPlayerBuffs(reportId, apiKey, ourInfo.id, start, end),
-            fetchPlayerCasts(reportId, apiKey, ourInfo.id, start, end),
-            fetchPlayerCastEvents(reportId, apiKey, ourInfo.id, start, end),
-          ]));
+          fetches.push(fetchPlayerBossDetails(reportId, boss.ours.fight_id, ourInfo.id));
         } else {
-          fetches.push(Promise.resolve([[], [], [], [], []]));
+          fetches.push(Promise.resolve({ damage: [], healing: [], buffs: [], casts: [], cast_events: [] }));
         }
         // Their player data
         if (theirPlayerName && boss.theirs && theirInfo.id) {
           const reportId = data.theirs.report_id;
-          const start = boss.theirs.start_time;
-          const end = boss.theirs.end_time;
-          fetches.push(Promise.all([
-            fetchPlayerDamageBreakdown(reportId, apiKey, theirInfo.id, start, end),
-            fetchPlayerHealingBreakdown(reportId, apiKey, theirInfo.id, start, end),
-            fetchPlayerBuffs(reportId, apiKey, theirInfo.id, start, end),
-            fetchPlayerCasts(reportId, apiKey, theirInfo.id, start, end),
-            fetchPlayerCastEvents(reportId, apiKey, theirInfo.id, start, end),
-          ]));
+          fetches.push(fetchPlayerBossDetails(reportId, boss.theirs.fight_id, theirInfo.id));
         } else {
-          fetches.push(Promise.resolve([[], [], [], [], []]));
+          fetches.push(Promise.resolve({ damage: [], healing: [], buffs: [], casts: [], cast_events: [] }));
         }
 
-        const [[ourAbilities, ourHealingAbilities, ourBuffs, ourCasts, ourCastEvents], [theirAbilities, theirHealingAbilities, theirBuffs, theirCasts, theirCastEvents]] = await Promise.all(fetches);
+        const [ourDetails, theirDetails] = await Promise.all(fetches);
+        const ourAbilities = ourDetails.damage || [];
+        const ourHealingAbilities = ourDetails.healing || [];
+        const ourBuffs = ourDetails.buffs || [];
+        const ourCasts = ourDetails.casts || [];
+        const ourCastEvents = ourDetails.cast_events || [];
+        const theirAbilities = theirDetails.damage || [];
+        const theirHealingAbilities = theirDetails.healing || [];
+        const theirBuffs = theirDetails.buffs || [];
+        const theirCasts = theirDetails.casts || [];
+        const theirCastEvents = theirDetails.cast_events || [];
 
         const ourDurSec = boss.ours ? boss.ours.duration_ms / 1000 : 0;
         const theirDurSec = boss.theirs ? boss.theirs.duration_ms / 1000 : 0;
@@ -1720,12 +1444,7 @@
       const compareBtn = document.getElementById('compareBtn');
       const statusEl = document.getElementById('fetchStatus');
       const progressEl = document.getElementById('fetchProgress');
-      const apiKeyInput = document.getElementById('apiKeyInput');
       const backBtn = document.getElementById('backBtn');
-
-      // Restore saved API key
-      const savedKey = localStorage.getItem('wcl_api_key');
-      if (savedKey) apiKeyInput.value = savedKey;
 
       // If pre-embedded data exists, show it
       if (data && data.ours) {
@@ -1736,22 +1455,20 @@
       compareBtn.addEventListener('click', async () => {
         const ourUrl = document.getElementById('ourUrlInput').value.trim();
         const theirUrl = document.getElementById('theirUrlInput').value.trim();
-        const apiKey = apiKeyInput.value.trim() || DEFAULT_API_KEY;
 
         if (!ourUrl) { statusEl.textContent = `Please enter the ${REPORT_1_LABEL} URL.`; return; }
         if (!theirUrl) { statusEl.textContent = `Please enter the ${REPORT_2_LABEL} URL.`; return; }
 
-        if (apiKeyInput.value.trim()) localStorage.setItem('wcl_api_key', apiKeyInput.value.trim());
         compareBtn.disabled = true;
         statusEl.textContent = 'Starting comparison...';
         progressEl.textContent = '';
 
         try {
           progressEl.textContent = `Fetching ${REPORT_1_LABEL}...`;
-          const ourData = await fetchReportData(ourUrl, apiKey, statusEl);
+          const ourData = await fetchReportData(ourUrl, statusEl);
 
           progressEl.textContent = `Fetching ${REPORT_2_LABEL}...`;
-          const theirData = await fetchReportData(theirUrl, apiKey, statusEl);
+          const theirData = await fetchReportData(theirUrl, statusEl);
 
           progressEl.textContent = 'Comparing...';
           const comparison = compareReports(ourData, theirData);

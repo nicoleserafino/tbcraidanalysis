@@ -20,6 +20,8 @@ async def fetch_events_paginated(
     start_time: float,
     end_time: float,
     filter_expression: str | None = None,
+    source_id: int | None = None,
+    target_id: int | None = None,
 ) -> list[dict]:
     """Fetch all pages of events for a fight."""
     all_events = []
@@ -35,6 +37,10 @@ async def fetch_events_paginated(
         }
         if filter_expression:
             variables["filterExpression"] = filter_expression
+        if source_id is not None:
+            variables["sourceID"] = source_id
+        if target_id is not None:
+            variables["targetID"] = target_id
 
         data = await graphql_query(REPORT_EVENTS, variables)
         events_data = data["reportData"]["report"]["events"]
@@ -67,7 +73,11 @@ async def fetch_table(
         variables["targetID"] = target_id
 
     data = await graphql_query(REPORT_TABLE, variables)
-    return data["reportData"]["report"]["table"]
+    table = data["reportData"]["report"]["table"]
+    # v2 wraps table content in a "data" key
+    if isinstance(table, dict) and "data" in table and isinstance(table["data"], dict):
+        return table["data"]
+    return table
 
 
 async def fetch_full_report(report_code: str) -> dict:

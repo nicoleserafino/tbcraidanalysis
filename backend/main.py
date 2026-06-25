@@ -5,16 +5,19 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
+from backend.analysis.compare import fetch_compare_report, fetch_player_details
 from backend.analysis.report import fetch_full_report
 
 app = FastAPI(title="TBC Raid Analysis", version="2.0.0")
 
 # In-memory cache (TTL-based, simple dict for now)
 _report_cache: dict[str, dict] = {}
+_compare_report_cache: dict[str, dict] = {}
+_player_details_cache: dict[tuple[str, int, int], dict] = {}
 
 
 def extract_report_code(url_or_code: str) -> str:
@@ -81,6 +84,57 @@ async def get_report_fights(report_code: str):
             if a.get("type") == "Player"
         ],
     }
+
+
+@app.get("/api/compare-report/{report_code}")
+async def get_compare_report(report_code: str):
+    """Fetch comparison-focused data for a report."""
+    try:
+        code = extract_report_code(report_code)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    if code in _compare_report_cache:
+        return _compare_report_cache[code]
+
+    try:
+        report = await fetch_compare_report(code)
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch compare report: {e}")
+
+    _compare_report_cache[code] = report
+    return report
+
+
+@app.get("/api/report/{report_code}/player-details")
+async def get_player_details(
+    report_code: str,
+    fight_id: int = Query(...),
+    player_id: int = Query(...),
+):
+    """Fetch detailed per-player boss data for compare.html."""
+    try:
+        code = extract_report_code(report_code)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    cache_key = (code, fight_id, player_id)
+    if cache_key in _player_details_cache:
+        return _player_details_cache[cache_key]
+
+    try:
+        details = await fetch_player_details(code, fight_id, player_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch player details: {e}")
+
+    _player_details_cache[cache_key] = details
+    return details
 
 
 # Serve frontend static files

@@ -4,18 +4,18 @@ The comparison tool lets you diff two WarcraftLogs reports side-by-side to ident
 
 ## Usage
 
-From the main analysis UI, click **Compare Logs** in the top bar — or navigate directly to the compare page at [nicoleserafino.github.io/tbcraidanalysis/compare.html](https://nicoleserafino.github.io/tbcraidanalysis/compare.html).
+From the main analysis UI, click **Compare Logs** in the top bar — or navigate directly to `/compare` on the hosted app.
 
-Paste two report URLs and the tool will show you a full breakdown of differences.
+Paste two report URLs (labeled "Report 1" and "Report 2") and the tool will show you a full breakdown of differences.
 
-### CLI (advanced/optional)
+### CLI (legacy/optional)
 
-If you prefer to generate comparison data locally:
+If you prefer to generate comparison data locally using the v1 API:
 
 ```bash
 python3 scripts/compare_logs.py \
-  "https://fresh.warcraftlogs.com/reports/YOUR_REPORT" \
-  "https://fresh.warcraftlogs.com/reports/THEIR_REPORT"
+  "https://fresh.warcraftlogs.com/reports/REPORT_1" \
+  "https://fresh.warcraftlogs.com/reports/REPORT_2"
 ```
 
 This generates `data/comparison.json` and rebuilds `compare.html` with the embedded data.
@@ -73,9 +73,12 @@ The comparison JSON (`data/comparison.json`) contains:
 
 ## Requirements
 
+No API key or setup is needed when using the hosted app — the backend handles WCL v2 authentication automatically.
+
+For the legacy CLI script:
 - Python 3.9+
 - A `.env` file with `API_KEY=your_wcl_v1_key` in the project root
-- Both reports must be accessible with the provided API key (public or your own unlisted logs)
+- Both reports must be accessible with the provided API key
 
 ## Limitations
 

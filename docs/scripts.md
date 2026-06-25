@@ -1,6 +1,6 @@
-# Scripts (Advanced / Optional)
+# Scripts (Legacy / Optional)
 
-CLI tools for fetching, parsing, and comparing WarcraftLogs raid data locally. **These are not required to use the tool** — the hosted version at [nicoleserafino.github.io/tbcraidanalysis](https://nicoleserafino.github.io/tbcraidanalysis) handles everything in-browser.
+CLI tools for fetching, parsing, and comparing WarcraftLogs raid data locally using the **v1 API**. **These are not required to use the tool** — the hosted version uses a FastAPI backend with the WCL v2 API.
 
 These scripts are useful if you want to:
 - Process raw combat log files (`WoWCombatLog.txt`)
@@ -9,6 +9,8 @@ These scripts are useful if you want to:
 - Extend the tool with custom analysis
 
 All scripts are in the `scripts/` directory and require Python 3.9+.
+
+> **Note:** These scripts use the WCL v1 API which requires a personal API key. The main app uses v2 OAuth handled by the backend — no API key needed.
 
 ## fetch_from_api.py
 

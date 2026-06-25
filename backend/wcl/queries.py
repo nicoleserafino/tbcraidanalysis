@@ -36,8 +36,47 @@ query ReportFights($code: String!) {
 }
 """
 
+REPORT_FIGHTS_ALL = """
+query ReportFightsAll($code: String!) {
+  reportData {
+    report(code: $code) {
+      title
+      owner {
+        name
+      }
+      startTime
+      endTime
+      fights {
+        id
+        name
+        encounterID
+        kill
+        startTime
+        endTime
+        difficulty
+        fightPercentage
+      }
+      masterData {
+        actors {
+          id
+          name
+          type
+          subType
+          server
+        }
+        abilities {
+          gameID
+          name
+          type
+        }
+      }
+    }
+  }
+}
+"""
+
 REPORT_EVENTS = """
-query ReportEvents($code: String!, $fightIDs: [Int]!, $dataType: EventDataType!, $startTime: Float!, $endTime: Float!, $filterExpression: String) {
+query ReportEvents($code: String!, $fightIDs: [Int]!, $dataType: EventDataType!, $startTime: Float!, $endTime: Float!, $filterExpression: String, $sourceID: Int, $targetID: Int) {
   reportData {
     report(code: $code) {
       events(
@@ -46,6 +85,8 @@ query ReportEvents($code: String!, $fightIDs: [Int]!, $dataType: EventDataType!,
         startTime: $startTime
         endTime: $endTime
         filterExpression: $filterExpression
+        sourceID: $sourceID
+        targetID: $targetID
       ) {
         data
         nextPageTimestamp
