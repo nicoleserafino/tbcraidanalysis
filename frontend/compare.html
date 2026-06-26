@@ -502,7 +502,7 @@
 
     <div class="hero">
       <h1>⚔️ Raid Log Comparison</h1>
-      <div class="subtitle">Side-by-side breakdown — green means Report 1 is ahead, red means Report 2 is ahead.</div>
+      <div class="subtitle">Side-by-side breakdown — green means improvement (Report 2 ahead), red means regression (Report 1 was better).</div>
       <div id="reportInfo"></div>
     </div>
 
@@ -723,7 +723,7 @@
           entry.delta = {
             time_ms: timeDelta,
             time_str: `${timeDelta > 0 ? '+' : ''}${fmtDuration(timeDelta)}`,
-            time_favorable: timeDelta < 0,
+            time_favorable: timeDelta > 0,
             dps_diff: ourBoss.raid_dps - theirBoss.raid_dps,
             hps_diff: ourBoss.raid_hps - theirBoss.raid_hps,
             overheal_diff: Math.round((ourBoss.overheal_pct - theirBoss.overheal_pct) * 10) / 10,
@@ -909,15 +909,15 @@
         <div class="summary-card">
           <div class="label">Total Raid Time</div>
           <div class="value">${escapeHtml(pacing.ours.total_raid_str)}</div>
-          <div class="delta ${totalDelta > 0 ? 'slower' : totalDelta < 0 ? 'faster' : 'neutral'}">
-            ${totalDelta > 0 ? '+' : ''}${formatDuration(totalDelta)} vs ${REPORT_2_LABEL}
+          <div class="delta ${totalDelta > 0 ? 'faster' : totalDelta < 0 ? 'slower' : 'neutral'}">
+           ${totalDelta > 0 ? '' : '+'}${formatDuration(-totalDelta)} vs ${REPORT_2_LABEL}
           </div>
         </div>
         <div class="summary-card">
           <div class="label">Non-Combat Time</div>
           <div class="value">${escapeHtml(pacing.ours.total_gap_str)}</div>
-          <div class="delta ${gapDelta > 0 ? 'slower' : gapDelta < 0 ? 'faster' : 'neutral'}">
-            ${gapDelta > 0 ? '+' : ''}${formatDuration(gapDelta)} vs ${REPORT_2_LABEL}
+          <div class="delta ${gapDelta > 0 ? 'faster' : gapDelta < 0 ? 'slower' : 'neutral'}">
+           ${gapDelta > 0 ? '' : '+'}${formatDuration(-gapDelta)} vs ${REPORT_2_LABEL}
           </div>
         </div>
         <div class="summary-card">
@@ -928,8 +928,8 @@
         <div class="summary-card">
           <div class="label">Avg Raid DPS Diff</div>
           <div class="value">${avgDpsDiff >= 0 ? '+' : ''}${formatNum(avgDpsDiff)}</div>
-          <div class="delta ${avgDpsDiff >= 0 ? 'faster' : 'slower'}">
-            ${avgDpsDiff >= 0 ? `Higher than ${REPORT_2_LABEL}` : `Lower than ${REPORT_2_LABEL}`}
+          <div class="delta ${avgDpsDiff >= 0 ? 'slower' : 'faster'}">
+            ${avgDpsDiff >= 0 ? `${REPORT_2_LABEL} was lower` : `${REPORT_2_LABEL} was higher`}
           </div>
         </div>
         <div class="summary-card">
@@ -1289,12 +1289,12 @@
         }
         if (ourPlayer && theirPlayer) {
           const dpsDiff = boss.ourDps - boss.theirDps;
-          const cls = dpsDiff > 0 ? 'faster' : dpsDiff < 0 ? 'slower' : 'neutral';
+          const cls = dpsDiff > 0 ? 'slower' : dpsDiff < 0 ? 'faster' : 'neutral';
           html += `<td class="${cls}">${dpsDiff > 0 ? '+' : ''}${formatNum(dpsDiff)}</td>`;
         }
         if (showHpsDelta) {
           const hpsDiff = boss.ourHps - boss.theirHps;
-          const cls = hpsDiff > 0 ? 'faster' : hpsDiff < 0 ? 'slower' : 'neutral';
+          const cls = hpsDiff > 0 ? 'slower' : hpsDiff < 0 ? 'faster' : 'neutral';
           html += `<td class="${cls}">${hpsDiff > 0 ? '+' : ''}${formatNum(hpsDiff)}</td>`;
         }
         html += '</tr>';
@@ -1335,14 +1335,14 @@
         const avgHpsDiff = avgOurHps - avgTheirHps;
         html += `<div class="summary-card" style="flex:1;min-width:150px;">
           <div class="label">Difference</div>
-          <div class="value ${avgDiff >= 0 ? 'faster' : 'slower'}" style="font-size:1.1rem">${avgDiff >= 0 ? '+' : ''}${formatNum(avgDiff)} avg DPS</div>
-          <div class="delta ${totalDiff >= 0 ? 'faster' : 'slower'}" style="font-size:0.8rem">${totalDiff >= 0 ? '+' : ''}${formatNum(totalDiff)} total dmg</div>
+          <div class="value ${avgDiff >= 0 ? 'slower' : 'faster'}" style="font-size:1.1rem">${avgDiff >= 0 ? '+' : ''}${formatNum(avgDiff)} avg DPS</div>
+          <div class="delta ${totalDiff >= 0 ? 'slower' : 'faster'}" style="font-size:0.8rem">${totalDiff >= 0 ? '+' : ''}${formatNum(totalDiff)} total dmg</div>
         </div>`;
         if (showHpsDelta) {
           html += `<div class="summary-card" style="flex:1;min-width:150px;">
             <div class="label">Healing Difference</div>
-            <div class="value ${avgHpsDiff >= 0 ? 'faster' : 'slower'}" style="font-size:1.1rem">${avgHpsDiff >= 0 ? '+' : ''}${formatNum(avgHpsDiff)} avg HPS</div>
-            <div class="delta ${totalHealDiff >= 0 ? 'faster' : 'slower'}" style="font-size:0.8rem">${totalHealDiff >= 0 ? '+' : ''}${formatNum(totalHealDiff)} total healing</div>
+            <div class="value ${avgHpsDiff >= 0 ? 'slower' : 'faster'}" style="font-size:1.1rem">${avgHpsDiff >= 0 ? '+' : ''}${formatNum(avgHpsDiff)} avg HPS</div>
+            <div class="delta ${totalHealDiff >= 0 ? 'slower' : 'faster'}" style="font-size:0.8rem">${totalHealDiff >= 0 ? '+' : ''}${formatNum(totalHealDiff)} total healing</div>
           </div>`;
         }
       }
