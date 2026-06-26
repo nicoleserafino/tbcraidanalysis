@@ -29,8 +29,8 @@ ENCHANTABLE_SLOTS = {
     7: "Feet",
     8: "Wrist",
     9: "Hands",
-    14: "Main Hand",
-    15: "Off Hand",
+    14: "Back",
+    15: "Main Hand",
 }
 
 # TBC consumable buff names (detected from pre-pull auras)
