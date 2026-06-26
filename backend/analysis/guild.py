@@ -74,9 +74,22 @@ CHEAP_ENCHANT_NAMES = {
     2463: "7 Fire Resistance (Cloak)", 256: "5 Fire Resistance (Cloak)",
 }
 
-# TBC uncommon (green) gem detection: gems with itemLevel < 70 are uncommon quality
-# ilvl 60 = uncommon (green), ilvl 70 = rare (blue), ilvl 130 = epic
-UNCOMMON_GEM_ILVL_THRESHOLD = 70
+# TBC uncommon (green) gem IDs — only these should be flagged as low-quality
+# The WCL itemLevel field is unreliable (some rare gems report ilvl 60)
+UNCOMMON_GEM_IDS = {
+    # Blood Garnet (red)
+    23095, 28595, 23114, 23116,
+    # Golden Draenite (yellow)
+    23112, 23113, 23118, 23120, 28290,
+    # Azure Moonstone (blue)
+    23117, 23119, 23121,
+    # Flame Spessarite (orange)
+    21929, 23098, 23099, 23100, 23101, 31866,
+    # Deep Peridot (green)
+    23079, 23103, 23104, 23105, 23106,
+    # Shadow Draenite (purple)
+    23107, 23108, 23109, 23110, 23111,
+}
 
 
 # TBC consumable buff names (detected from pre-pull auras)
@@ -537,8 +550,8 @@ def _audit_gear(gear_items: list[dict]) -> dict[str, Any]:
             gem_count += len(gems)
             total_gem_slots += len(gems)
             for gem in gems:
-                gem_ilvl = gem.get("itemLevel", 70)
-                if gem_ilvl < UNCOMMON_GEM_ILVL_THRESHOLD:
+                gem_id = gem.get("id", 0)
+                if gem_id in UNCOMMON_GEM_IDS:
                     gear_warnings.append(f"{slot_name or f'Slot {slot_idx}'} [uncommon gem]")
                     break  # only flag once per item
 
