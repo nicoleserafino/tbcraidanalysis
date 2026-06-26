@@ -1012,8 +1012,8 @@
     .positioning-map {
       position: relative;
       width: 100%;
-      aspect-ratio: 1;
-      max-width: 600px;
+      aspect-ratio: 16 / 10;
+      max-width: 960px;
       margin: 0 auto;
       background: var(--panel-2);
       border: 1px solid var(--border);
@@ -1031,7 +1031,8 @@
       opacity: 1 !important;
     }
     .pos-label {
-      font-size: 9px;
+      font-size: 11px;
+      font-weight: 500;
       fill: var(--text);
       pointer-events: none;
     }
@@ -5715,25 +5716,29 @@
       const rangeY = maxY - minY || 1;
       const padding = 0.15; // 15% padding on each side
 
-      // SVG coordinate transform: game coords -> 0-100 viewbox with padding
+      const svgW = 160, svgH = 100;
+      // SVG coordinate transform: game coords -> viewbox with padding
       function toSvg(x, y) {
-        const svgX = padding * 100 + ((x - minX) / rangeX) * (100 - 2 * padding * 100);
-        const svgY = padding * 100 + ((y - minY) / rangeY) * (100 - 2 * padding * 100);
-        return { x: svgX, y: 100 - svgY }; // flip Y for screen coords
+        const svgX = padding * svgW + ((x - minX) / rangeX) * (svgW - 2 * padding * svgW);
+        const svgY = padding * svgH + ((y - minY) / rangeY) * (svgH - 2 * padding * svgH);
+        return { x: svgX, y: svgH - svgY }; // flip Y for screen coords
       }
 
-      let svg = `<div class="positioning-map"><svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">`;
+      let svg = `<div class="positioning-map"><svg viewBox="0 0 160 100" xmlns="http://www.w3.org/2000/svg">`;
 
       // Draw grid lines for reference
+      for (let i = 0; i <= 6; i++) {
+        const posX = 10 + i * 23.3;
+        svg += `<line x1="${posX}" y1="5" x2="${posX}" y2="95" stroke="rgba(255,255,255,0.04)" stroke-width="0.2"/>`;
+      }
       for (let i = 0; i <= 4; i++) {
-        const pos = 15 + i * 17.5;
-        svg += `<line x1="${pos}" y1="5" x2="${pos}" y2="95" stroke="rgba(255,255,255,0.04)" stroke-width="0.2"/>`;
-        svg += `<line x1="5" y1="${pos}" x2="95" y2="${pos}" stroke="rgba(255,255,255,0.04)" stroke-width="0.2"/>`;
+        const posY = 10 + i * 20;
+        svg += `<line x1="5" y1="${posY}" x2="155" y2="${posY}" stroke="rgba(255,255,255,0.04)" stroke-width="0.2"/>`;
       }
 
       // Draw spread range circles around highlighted targets
       if (snapshot.spread_range && snapshot.highlights) {
-        const rangeInSvg = (snapshot.spread_range / Math.max(rangeX, rangeY)) * (100 - 2 * padding * 100);
+        const rangeInSvg = (snapshot.spread_range / Math.max(rangeX, rangeY)) * (svgW - 2 * padding * svgW);
         snapshot.highlights.forEach(target => {
           if (positions[target]) {
             const pos = toSvg(positions[target].x, positions[target].y);
@@ -5748,13 +5753,13 @@
         const isHit = p.hit || (snapshot.highlights && snapshot.highlights.includes(name));
         const classColor = CLASS_COLORS[p.class] || '#999';
         const dotColor = isHit ? '#ff6363' : classColor;
-        const radius = isHit ? 2.2 : 1.6;
+        const radius = isHit ? 2.8 : 2;
         const opacity = isHit ? 1 : 0.85;
 
         svg += `<circle cx="${pos.x}" cy="${pos.y}" r="${radius}" fill="${dotColor}" opacity="${opacity}" class="pos-dot">
           <title>${name} (${p.class})${isHit ? ' — HIT' : ''}</title>
         </circle>`;
-        svg += `<text x="${pos.x}" y="${pos.y - 2.8}" text-anchor="middle" class="pos-label" fill="${isHit ? '#ff9999' : '#aab'}" opacity="${isHit ? 1 : 0.7}">${name}</text>`;
+        svg += `<text x="${pos.x}" y="${pos.y - 3.5}" text-anchor="middle" class="pos-label" fill="${isHit ? '#ff9999' : '#aab'}" opacity="${isHit ? 1 : 0.7}">${name}</text>`;
       });
 
       svg += `</svg></div>`;
