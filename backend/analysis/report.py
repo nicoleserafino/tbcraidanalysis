@@ -6,7 +6,7 @@ import asyncio
 
 from backend.analysis.utils import actor_name, infer_role, spell_name
 from backend.wcl.client import graphql_query
-from backend.wcl.queries import REPORT_FIGHTS, REPORT_EVENTS, REPORT_TABLE
+from backend.wcl.queries import REPORT_FIGHTS, REPORT_EVENTS, REPORT_EVENTS_ENEMY_DEATHS, REPORT_TABLE
 
 
 async def fetch_report_metadata(report_code: str) -> dict:
@@ -50,6 +50,29 @@ async def fetch_events_paginated(
         all_events.extend(events_data.get("data", []))
         current_start = events_data.get("nextPageTimestamp")
 
+    return all_events
+
+
+async def fetch_enemy_deaths(
+    report_code: str,
+    fight_ids: list[int],
+    start_time: float,
+    end_time: float,
+) -> list[dict]:
+    """Fetch enemy/NPC death events for a fight."""
+    all_events = []
+    current_start = start_time
+    while current_start is not None:
+        variables = {
+            "code": report_code,
+            "fightIDs": fight_ids,
+            "startTime": current_start,
+            "endTime": end_time,
+        }
+        data = await graphql_query(REPORT_EVENTS_ENEMY_DEATHS, variables)
+        events_data = data["reportData"]["report"]["events"]
+        all_events.extend(events_data.get("data", []))
+        current_start = events_data.get("nextPageTimestamp")
     return all_events
 
 
@@ -116,6 +139,7 @@ async def fetch_full_report(report_code: str) -> dict:
 
         (
             deaths,
+            enemy_deaths,
             interrupts,
             dispels,
             healing,
@@ -128,6 +152,7 @@ async def fetch_full_report(report_code: str) -> dict:
             heal_table,
         ) = await asyncio.gather(
             fetch_events_paginated(report_code, [fight_id], "Deaths", start, end),
+            fetch_enemy_deaths(report_code, [fight_id], start, end),
             fetch_events_paginated(report_code, [fight_id], "Interrupts", start, end),
             fetch_events_paginated(report_code, [fight_id], "Dispels", start, end),
             fetch_events_paginated(report_code, [fight_id], "Healing", start, end),
@@ -142,7 +167,7 @@ async def fetch_full_report(report_code: str) -> dict:
 
         pull = build_pull_data(
             fight, actors_by_id, players_by_id, ability_names,
-            deaths, interrupts, dispels, healing, casts,
+            deaths, enemy_deaths, interrupts, dispels, healing, casts,
             damage_taken, damage_done, buffs, threat,
             dmg_table, heal_table,
         )
@@ -213,6 +238,7 @@ def build_pull_data(
     players_by_id: dict,
     ability_names: dict,
     deaths: list,
+    enemy_deaths: list,
     interrupts: list,
     dispels: list,
     healing: list,
@@ -243,6 +269,18 @@ def build_pull_data(
                 "player": players_by_id[target_id]["name"],
                 "relative_time": rel_sec(ev["timestamp"]),
             })
+
+    # Process enemy/creature deaths (weapons, advisors, etc.)
+    creature_deaths_out = []
+    for ev in enemy_deaths:
+        if ev.get("type") != "death":
+            continue
+        target_id = ev.get("targetID")
+        name = actors_by_id.get(target_id, {}).get("name", "Unknown") if target_id else "Unknown"
+        creature_deaths_out.append({
+            "name": name,
+            "relative_time": rel_sec(ev["timestamp"]),
+        })
 
     # Process interrupts
     interrupts_out = []
@@ -443,6 +481,7 @@ def build_pull_data(
         "duration_sec": duration_sec,
         "kill": bool(fight.get("kill")),
         "deaths": deaths_out,
+        "creature_deaths": creature_deaths_out,
         "interrupts": interrupts_out,
         "dispels": dispels_out,
         "heals_by_player": heals_by_player,

@@ -16,9 +16,9 @@ from backend.wcl.client import graphql_query
 
 # Mechanics worth tracking positions for (spell IDs)
 TRACKED_MECHANICS = {
-    # Kael'thas - Conflagration from Capernian
-    37018: {"name": "Conflagration", "boss": "Kael'thas Sunstrider", "spread_range": 1500, "type": "spread"},
-    37019: {"name": "Conflagration", "boss": "Kael'thas Sunstrider", "spread_range": 1500, "type": "spread"},
+    # Kael'thas - Conflagration from Capernian (8yd AoE ~700 game units)
+    37018: {"name": "Conflagration", "boss": "Kael'thas Sunstrider", "spread_range": 700, "type": "spread"},
+    37019: {"name": "Conflagration", "boss": "Kael'thas Sunstrider", "spread_range": 700, "type": "spread"},
     # Hydross - Water Tomb (targets random players)
     38235: {"name": "Water Tomb", "boss": "Hydross the Unstable", "type": "stack"},
     # Vashj - Static Charge (must spread)
@@ -95,6 +95,10 @@ query ($code: String!) {
 def _distance(p1: dict, p2: dict) -> float:
     """Euclidean distance between two position points."""
     return math.sqrt((p1["x"] - p2["x"]) ** 2 + (p1["y"] - p2["y"]) ** 2)
+
+
+# WCL coordinates are ~87.5 units per yard (derived from conflag 8yd = ~700 units)
+UNITS_PER_YARD = 87.5
 
 
 async def _fetch_positions_at_time(
@@ -261,34 +265,39 @@ async def fetch_positioning_data(report_code: str, fight_id: int) -> dict[str, A
         mechanic_info = instance["mechanic"]
         spread_range = mechanic_info.get("spread_range", 3000)
 
-        # Calculate proximity analysis
+        # Calculate proximity analysis: find clusters of hit players
         proximity_issues = []
         if mechanic_info.get("type") == "spread" and len(targets) > 1:
-            # Multiple targets = spread happened. First target is primary, rest are spread victims.
-            primary = targets[0]
-            spread_victims = targets[1:]
-            if primary in positions:
-                # Show distances from primary to spread victims
-                for victim in spread_victims:
-                    if victim in positions:
-                        dist = _distance(positions[primary], positions[victim])
-                        proximity_issues.append({
-                            "player": victim,
-                            "near": primary,
-                            "distance": round(dist),
-                            "was_hit": True,
-                        })
-                # Also show nearby non-targets that were close but safe
-                for name, pos in positions.items():
-                    if name == primary or name in targets:
+            # Find pairs of hit players that were close to each other
+            # This indicates stacking/clustering which causes multi-target hits
+            for i, t1 in enumerate(targets):
+                if t1 not in positions:
+                    continue
+                for t2 in targets[i + 1:]:
+                    if t2 not in positions:
                         continue
-                    dist = _distance(positions[primary], pos)
+                    dist = _distance(positions[t1], positions[t2])
+                    if dist < spread_range:
+                        proximity_issues.append({
+                            "player": t2,
+                            "near": t1,
+                            "distance": round(dist / UNITS_PER_YARD, 1),
+                            "type": "clustered_hit",
+                        })
+            # Find non-hit players who were dangerously close to any hit player
+            for t in targets:
+                if t not in positions:
+                    continue
+                for name, pos in positions.items():
+                    if name in targets:
+                        continue
+                    dist = _distance(positions[t], pos)
                     if dist < spread_range:
                         proximity_issues.append({
                             "player": name,
-                            "near": primary,
-                            "distance": round(dist),
-                            "was_hit": False,
+                            "near": t,
+                            "distance": round(dist / UNITS_PER_YARD, 1),
+                            "type": "close_call",
                         })
             proximity_issues.sort(key=lambda x: x["distance"])
 

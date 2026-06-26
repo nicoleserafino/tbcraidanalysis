@@ -1035,7 +1035,6 @@
       opacity: 1 !important;
     }
     .pos-label {
-      font-size: 10px;
       font-weight: 500;
       fill: var(--text);
       pointer-events: none;
@@ -5660,11 +5659,11 @@
         <h2>Positioning — ${escapeHtml(data.fight_name)}</h2>
         <p class="note">${data.has_mechanics ? 'Showing player positions at key mechanic events. Navigate between events with ◀ ▶.' : 'General position snapshots (no tracked mechanics detected).'}</p>`;
 
-      // Show summary of spread events
+      // Show summary of multi-hit events
       if (data.has_mechanics) {
-        const spreadEvents = data.snapshots.filter(s => s.target_count > 1);
-        if (spreadEvents.length > 0) {
-          html += `<p class="note" style="color:var(--wipe)">${spreadEvents.length} spread event(s) detected — ${spreadEvents.reduce((s, e) => s + e.target_count - 1, 0)} total spread victims</p>`;
+        const multiHits = data.snapshots.filter(s => s.target_count > 1);
+        if (multiHits.length > 0) {
+          html += `<p class="note" style="color:var(--wipe)">${multiHits.length} multi-target hit(s) — ${multiHits.reduce((s, e) => s + e.target_count, 0)} total players hit</p>`;
         }
       }
 
@@ -5697,11 +5696,13 @@
 
       // Proximity issues
       if (snapshot.proximity_issues && snapshot.proximity_issues.length > 0) {
-        html += `<div class="proximity-list"><h4>Spread Analysis (from ${escapeHtml(snapshot.targets?.[0] || 'target')})</h4>`;
+        html += `<div class="proximity-list"><h4>Proximity Analysis</h4>`;
         snapshot.proximity_issues.forEach(issue => {
-          const icon = issue.was_hit ? '●' : '○';
-          const label = issue.was_hit ? 'HIT — spread victim' : 'close but safe';
-          html += `<div class="proximity-item">${icon} ${escapeHtml(issue.player)} — ${issue.distance} units away (${label})</div>`;
+          if (issue.type === 'clustered_hit') {
+            html += `<div class="proximity-item" style="color:var(--wipe)">● ${escapeHtml(issue.player)} and ${escapeHtml(issue.near)} were only ${issue.distance} yards apart (both hit)</div>`;
+          } else {
+            html += `<div class="proximity-item">○ ${escapeHtml(issue.player)} was ${issue.distance} yards from ${escapeHtml(issue.near)} (close call)</div>`;
+          }
         });
         html += `</div>`;
       }
@@ -5769,7 +5770,7 @@
         const isHit = p.hit || (snapshot.highlights && snapshot.highlights.includes(name));
         const classColor = CLASS_COLORS[p.class] || '#999';
         const dotColor = isHit ? '#ff6363' : classColor;
-        const radius = isHit ? 2.5 : 1.8;
+        const radius = isHit ? 1.8 : 1.2;
         const opacity = isHit ? 1 : 0.7;
 
         svg += `<circle cx="${pos.x}" cy="${pos.y}" r="${radius}" fill="${dotColor}" opacity="${opacity}" class="pos-dot">
@@ -5777,18 +5778,18 @@
         </circle>`;
 
         // Label: always show for hit players, hide others (visible on map hover)
-        let labelY = pos.y - 3.2;
+        let labelY = pos.y - 1.5;
         // Simple collision nudge: if another label is within 3 units vertically, offset down
         for (const lp of labelPositions) {
-          if (Math.abs(lp.x - pos.x) < 12 && Math.abs(lp.y - labelY) < 3.5) {
-            labelY = lp.y + 3.5;
+          if (Math.abs(lp.x - pos.x) < 5 && Math.abs(lp.y - labelY) < 1.5) {
+            labelY = lp.y + 1.5;
           }
         }
         labelPositions.push({ x: pos.x, y: labelY });
 
         const labelClass = isHit ? 'pos-label' : 'pos-label pos-label-hidden';
         const labelFill = isHit ? '#ff9999' : '#aab';
-        svg += `<text x="${pos.x}" y="${labelY}" text-anchor="middle" class="${labelClass}" fill="${labelFill}">${name}</text>`;
+        svg += `<text x="${pos.x}" y="${labelY}" text-anchor="middle" class="${labelClass}" fill="${labelFill}" font-size="1.8">${name}</text>`;
       });
 
       svg += `</svg></div>`;

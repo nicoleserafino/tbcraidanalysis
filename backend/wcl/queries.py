@@ -96,6 +96,25 @@ query ReportEvents($code: String!, $fightIDs: [Int]!, $dataType: EventDataType!,
 }
 """
 
+REPORT_EVENTS_ENEMY_DEATHS = """
+query ReportEnemyDeaths($code: String!, $fightIDs: [Int]!, $startTime: Float!, $endTime: Float!) {
+  reportData {
+    report(code: $code) {
+      events(
+        fightIDs: $fightIDs
+        dataType: Deaths
+        startTime: $startTime
+        endTime: $endTime
+        hostilityType: Enemies
+      ) {
+        data
+        nextPageTimestamp
+      }
+    }
+  }
+}
+"""
+
 REPORT_TABLE = """
 query ReportTable($code: String!, $fightIDs: [Int]!, $dataType: TableDataType!, $startTime: Float!, $endTime: Float!, $sourceID: Int, $targetID: Int) {
   reportData {
