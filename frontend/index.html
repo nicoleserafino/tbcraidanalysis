@@ -1012,8 +1012,8 @@
     .positioning-map {
       position: relative;
       width: 100%;
-      aspect-ratio: 16 / 10;
-      max-width: 960px;
+      aspect-ratio: 16 / 9;
+      max-width: 100%;
       margin: 0 auto;
       background: var(--panel-2);
       border: 1px solid var(--border);
@@ -1026,15 +1026,26 @@
     }
     .pos-dot {
       transition: opacity 0.2s;
+      cursor: pointer;
     }
     .pos-dot:hover {
       opacity: 1 !important;
     }
+    .pos-dot:hover + .pos-label {
+      opacity: 1 !important;
+    }
     .pos-label {
-      font-size: 11px;
+      font-size: 10px;
       font-weight: 500;
       fill: var(--text);
       pointer-events: none;
+    }
+    .pos-label-hidden {
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+    .positioning-map:hover .pos-label-hidden {
+      opacity: 0.6;
     }
     .pos-range-circle {
       fill: rgba(255, 99, 99, 0.08);
@@ -5681,6 +5692,7 @@
         <span><span class="dot" style="background:#ff6363"></span> Hit by mechanic</span>
         <span><span class="dot" style="background:#44d17a"></span> Safe</span>
         <span><span class="dot" style="border:2px dashed rgba(255,99,99,0.4);background:none"></span> Spread range</span>
+        <span style="margin-left:12px;opacity:0.7">Hover map to show all names</span>
       </div>`;
 
       // Proximity issues
@@ -5705,7 +5717,7 @@
         return '<div class="card empty">No position data available for this moment.</div>';
       }
 
-      // Calculate bounds
+      // Calculate bounds with outlier-resistant range
       const xs = players.map(([, p]) => p.x);
       const ys = players.map(([, p]) => p.y);
       const minX = Math.min(...xs);
@@ -5714,9 +5726,9 @@
       const maxY = Math.max(...ys);
       const rangeX = maxX - minX || 1;
       const rangeY = maxY - minY || 1;
-      const padding = 0.15; // 15% padding on each side
+      const padding = 0.12; // 12% padding on each side
 
-      const svgW = 160, svgH = 100;
+      const svgW = 160, svgH = 90;
       // SVG coordinate transform: game coords -> viewbox with padding
       function toSvg(x, y) {
         const svgX = padding * svgW + ((x - minX) / rangeX) * (svgW - 2 * padding * svgW);
@@ -5724,16 +5736,16 @@
         return { x: svgX, y: svgH - svgY }; // flip Y for screen coords
       }
 
-      let svg = `<div class="positioning-map"><svg viewBox="0 0 160 100" xmlns="http://www.w3.org/2000/svg">`;
+      let svg = `<div class="positioning-map"><svg viewBox="0 0 ${svgW} ${svgH}" xmlns="http://www.w3.org/2000/svg">`;
 
       // Draw grid lines for reference
-      for (let i = 0; i <= 6; i++) {
-        const posX = 10 + i * 23.3;
-        svg += `<line x1="${posX}" y1="5" x2="${posX}" y2="95" stroke="rgba(255,255,255,0.04)" stroke-width="0.2"/>`;
+      for (let i = 0; i <= 7; i++) {
+        const posX = 8 + i * 20.5;
+        svg += `<line x1="${posX}" y1="3" x2="${posX}" y2="${svgH - 3}" stroke="rgba(255,255,255,0.03)" stroke-width="0.15"/>`;
       }
       for (let i = 0; i <= 4; i++) {
-        const posY = 10 + i * 20;
-        svg += `<line x1="5" y1="${posY}" x2="155" y2="${posY}" stroke="rgba(255,255,255,0.04)" stroke-width="0.2"/>`;
+        const posY = 8 + i * 18.5;
+        svg += `<line x1="3" y1="${posY}" x2="${svgW - 3}" y2="${posY}" stroke="rgba(255,255,255,0.03)" stroke-width="0.15"/>`;
       }
 
       // Draw spread range circles around highlighted targets
@@ -5747,19 +5759,36 @@
         });
       }
 
-      // Draw player dots
-      players.forEach(([name, p]) => {
+      // Collect label positions for collision avoidance
+      const labelPositions = [];
+
+      // Draw player dots — hit players first (rendered on top)
+      const sorted = [...players].sort(([, a], [, b]) => (a.hit ? 1 : 0) - (b.hit ? 1 : 0));
+      sorted.forEach(([name, p]) => {
         const pos = toSvg(p.x, p.y);
         const isHit = p.hit || (snapshot.highlights && snapshot.highlights.includes(name));
         const classColor = CLASS_COLORS[p.class] || '#999';
         const dotColor = isHit ? '#ff6363' : classColor;
-        const radius = isHit ? 2.8 : 2;
-        const opacity = isHit ? 1 : 0.85;
+        const radius = isHit ? 2.5 : 1.8;
+        const opacity = isHit ? 1 : 0.7;
 
         svg += `<circle cx="${pos.x}" cy="${pos.y}" r="${radius}" fill="${dotColor}" opacity="${opacity}" class="pos-dot">
           <title>${name} (${p.class})${isHit ? ' — HIT' : ''}</title>
         </circle>`;
-        svg += `<text x="${pos.x}" y="${pos.y - 3.5}" text-anchor="middle" class="pos-label" fill="${isHit ? '#ff9999' : '#aab'}" opacity="${isHit ? 1 : 0.7}">${name}</text>`;
+
+        // Label: always show for hit players, hide others (visible on map hover)
+        let labelY = pos.y - 3.2;
+        // Simple collision nudge: if another label is within 3 units vertically, offset down
+        for (const lp of labelPositions) {
+          if (Math.abs(lp.x - pos.x) < 12 && Math.abs(lp.y - labelY) < 3.5) {
+            labelY = lp.y + 3.5;
+          }
+        }
+        labelPositions.push({ x: pos.x, y: labelY });
+
+        const labelClass = isHit ? 'pos-label' : 'pos-label pos-label-hidden';
+        const labelFill = isHit ? '#ff9999' : '#aab';
+        svg += `<text x="${pos.x}" y="${labelY}" text-anchor="middle" class="${labelClass}" fill="${labelFill}">${name}</text>`;
       });
 
       svg += `</svg></div>`;
