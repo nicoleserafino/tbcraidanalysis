@@ -1464,6 +1464,7 @@
     function renderPrepSummary(players, report) {
       const fullyConsumed = players.filter(player => player.consumables?.fully_consumed);
       const missingEnchants = players.filter(player => (player.missing_enchants || []).length > 0);
+      const gearIssues = players.filter(player => (player.gear_warnings || []).length > 0);
       const fullyPrepped = players.filter(player => prepStatus(player) === 'good');
       const summaryHtml = `
         <div class="summary-grid">
@@ -1482,6 +1483,11 @@
             <div class="stat-value">${missingEnchants.length}</div>
             <div class="mini-note click-hint">Click to see who</div>
           </div>
+          <div class="summary-card clickable-stat" data-filter="gearIssues">
+            <div class="stat-label">Gear Issues</div>
+            <div class="stat-value">${gearIssues.length}</div>
+            <div class="mini-note click-hint">Cheap enchants / green gems</div>
+          </div>
           <div class="summary-card clickable-stat" data-filter="fullyPrepped">
             <div class="stat-label">Fully Prepped</div>
             <div class="stat-value">${fullyPrepped.length}/${players.length}</div>
@@ -1495,6 +1501,7 @@
       const filterSets = {
         fullyConsumed: new Set(fullyConsumed.map(p => p.name)),
         missingEnchants: new Set(missingEnchants.map(p => p.name)),
+        gearIssues: new Set(gearIssues.map(p => p.name)),
         fullyPrepped: new Set(fullyPrepped.map(p => p.name))
       };
 
@@ -1558,7 +1565,8 @@
                   <span class="audit-label">Enchants</span>
                   <span class="audit-value">${Number(player.enchant_count || 0)}/${Number(player.total_enchantable || 0)} enchanted</span>
                 </div>
-                <div class="audit-list">${(player.missing_enchants || []).length ? `Missing: ${escapeHtml(player.missing_enchants.join(', '))}` : 'All tracked enchant slots covered.'}</div>
+                <div class="audit-list">${(player.missing_enchants || []).length ? `<span class="attendance-low">Missing: ${escapeHtml(player.missing_enchants.join(', '))}</span>` : 'All tracked enchant slots covered.'}</div>
+                ${(player.gear_warnings || []).length ? `<div class="audit-list"><span class="attendance-mid">Issues: ${escapeHtml(player.gear_warnings.join(', '))}</span></div>` : ''}
                 <div class="audit-line">
                   <span class="audit-label">Flask / Elixir</span>
                   <span class="audit-value ${consume.flask || (consume.elixirs || []).length ? 'attendance-good' : 'attendance-low'}">${escapeHtml(consumeText)}</span>

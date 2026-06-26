@@ -33,6 +33,52 @@ ENCHANTABLE_SLOTS = {
     15: "Main Hand",
 }
 
+# Cheap/suboptimal enchant IDs by slot — flagged as warnings, not missing
+# Source: CLA spreadsheet gear issues config
+CHEAP_ENCHANTS = {
+    # Wrist (slot 8) — low stat enchants
+    8: {927, 856, 823, 248, 929, 852, 724, 66, 41, 907, 851, 255, 905, 723, 923, 925, 924,
+        1886, 1885},
+    # Hands (slot 9) — cheap/irrelevant glove enchants
+    9: {1887, 904, 856, 909, 845, 906, 844, 865, 846, 927, 2934},
+    # Feet (slot 7) — low-tier boot enchants
+    7: {255, 904, 849, 247, 852, 724, 66, 929, 1887},
+    # Chest (slot 4) — cheap chest enchants
+    4: {908, 850, 254, 242, 41, 913, 857, 843, 246, 24, 928, 866, 847, 63, 44, 1891, 1893},
+    # Back (slot 14) — cheap cloak enchants
+    14: {910, 903, 65, 2463, 256, 1889, 884, 848, 744, 783, 247, 2938},
+    # Shoulder (slot 2) — Honored rep enchants (not Exalted), ZG
+    2: {2606},
+    # Legs (slot 6) — Silver/Mystic Thread instead of proper leg armor
+    6: {2745, 2747},
+    # Main Hand (slot 15) — cheap weapon enchants
+    15: {1903, 255, 1904, 723, 1896, 963, 943, 241, 2443, 1899, 1898, 803, 854, 805, 2646,
+         2568},
+}
+
+# Shoulder enchants that are Honored-tier (suboptimal vs Exalted)
+CHEAP_SHOULDER_ENCHANTS = {
+    2978: "Aldor Honored",
+    2980: "Scryer Honored",
+    2982: "Aldor Honored",
+    2986: "Scryer Honored",
+}
+
+# Cheap enchant names for display
+CHEAP_ENCHANT_NAMES = {
+    2745: "Silver Thread (Legs)", 2747: "Mystic Thread (Legs)",
+    2938: "Spell Penetration (Cloak)", 803: "Fiery Weapon",
+    1898: "Lifestealing", 1899: "Unholy Weapon", 854: "Elemental Weapon",
+    2646: "25 Agility (Weapon)", 2568: "22 Intellect (Weapon)",
+    2606: "ZG Shoulder", 2934: "Blasting (Gloves)",
+    2463: "7 Fire Resistance (Cloak)", 256: "5 Fire Resistance (Cloak)",
+}
+
+# TBC uncommon (green) gem detection: gems with itemLevel < 70 are uncommon quality
+# ilvl 60 = uncommon (green), ilvl 70 = rare (blue), ilvl 130 = epic
+UNCOMMON_GEM_ILVL_THRESHOLD = 70
+
+
 # TBC consumable buff names (detected from pre-pull auras)
 FLASK_BUFFS = {
     "Flask of Pure Death", "Flask of Blinding Light", "Flask of Supreme Power",
@@ -355,6 +401,7 @@ async def fetch_gear_audit(report_code: str) -> dict[str, Any]:
             "avg_ilvl": gear_audit["avg_ilvl"],
             "missing_enchants": gear_audit["missing_enchants"],
             "missing_gems": gear_audit["missing_gems"],
+            "gear_warnings": gear_audit["gear_warnings"],
             "enchant_count": gear_audit["enchant_count"],
             "gem_count": gear_audit["gem_count"],
             "total_enchantable": gear_audit["total_enchantable"],
@@ -383,7 +430,7 @@ async def _fetch_combatant_info(
 
 
 def _audit_gear(gear_items: list[dict]) -> dict[str, Any]:
-    """Analyze gear for missing enchants and gems."""
+    """Analyze gear for missing enchants, cheap enchants, and uncommon gems."""
     items = []
     total_ilvl = 0
     equipped_count = 0
@@ -393,6 +440,7 @@ def _audit_gear(gear_items: list[dict]) -> dict[str, Any]:
     total_gem_slots = 0
     missing_enchants = []
     missing_gems = []
+    gear_warnings = []  # cheap enchants, uncommon gems, etc.
 
     for slot_idx, item in enumerate(gear_items):
         item_id = item.get("id", 0)
@@ -423,13 +471,28 @@ def _audit_gear(gear_items: list[dict]) -> dict[str, Any]:
             total_enchantable += 1
             if enchant_id > 0:
                 enchant_count += 1
+                # Check if it's a cheap/suboptimal enchant
+                cheap_ids = CHEAP_ENCHANTS.get(slot_idx, set())
+                if enchant_id in cheap_ids:
+                    name = CHEAP_ENCHANT_NAMES.get(enchant_id, f"Enchant {enchant_id}")
+                    gear_warnings.append(f"{slot_name} [cheap enchant: {name}]")
+                # Check shoulder honored-tier enchants
+                if slot_idx == 2 and enchant_id in CHEAP_SHOULDER_ENCHANTS:
+                    gear_warnings.append(
+                        f"Shoulder [{CHEAP_SHOULDER_ENCHANTS[enchant_id]}]"
+                    )
             else:
                 missing_enchants.append(slot_name)
 
-        # Count gems (any socket that has gems)
+        # Check gems for uncommon quality
         if gems:
             gem_count += len(gems)
             total_gem_slots += len(gems)
+            for gem in gems:
+                gem_ilvl = gem.get("itemLevel", 70)
+                if gem_ilvl < UNCOMMON_GEM_ILVL_THRESHOLD:
+                    gear_warnings.append(f"{slot_name or f'Slot {slot_idx}'} [uncommon gem]")
+                    break  # only flag once per item
 
     avg_ilvl = round(total_ilvl / equipped_count) if equipped_count > 0 else 0
 
@@ -441,6 +504,7 @@ def _audit_gear(gear_items: list[dict]) -> dict[str, Any]:
         "gem_count": gem_count,
         "total_gem_slots": total_gem_slots,
         "missing_gems": missing_gems,
+        "gear_warnings": gear_warnings,
         "items": items,
     }
 
