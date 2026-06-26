@@ -4942,8 +4942,27 @@
         });
       }
 
-      // TODO: Innervate Value — requires tracking Innervate buff targets + mana restored
       // TODO: Healthstone Dealer — requires tracking who created the stones (not in data)
+
+      // Innervate Value — who received the most Innervates
+      const innervateTargets = {};
+      pulls.forEach(p => {
+        safeEntries(p.buff_events || {}).forEach(([player, events]) => {
+          (events || []).forEach(e => {
+            if (e.type === 'applybuff' && /innervate/i.test(e.spell)) {
+              innervateTargets[player] = (innervateTargets[player] || 0) + 1;
+            }
+          });
+        });
+      });
+      const topInnervate = topN(innervateTargets);
+      if (topInnervate.length && topInnervate[0][1] >= 2) {
+        awards.utility.push({
+          title: 'Innervate Magnet', winner: topInnervate[0][0],
+          value: `${topInnervate[0][1]} Innervates received`,
+          detail: topInnervate.slice(1).map(([p, c]) => `${p}: ${c}`).join(', ') || null,
+        });
+      }
 
       // ─── THROUGHPUT / BIG NUMBERS ──────────────────────────────────
       // Pump Lord — top total damage
@@ -4971,7 +4990,28 @@
       }
 
       // Trash Tyrant — skip, only boss data available in this view
-      // TODO: Snap Healer — requires rolling window analysis on heal timeline
+
+      // Snap Healer — highest HPS in a single pull (burst healing)
+      let bestHPS = { player: null, hps: 0, bossName: '', duration: 0, healing: 0 };
+      allBossPulls.forEach(({ pull, bossName }) => {
+        if (!pull.duration_sec || pull.duration_sec < 15) return; // skip very short pulls
+        safeEntries(pull.heal_details).forEach(([player, spells]) => {
+          if (allPlayers[player]?.role !== 'Healer') return;
+          let pullHealing = 0;
+          safeEntries(spells).forEach(([, info]) => { pullHealing += (info.total || 0); });
+          const hps = pullHealing / pull.duration_sec;
+          if (hps > bestHPS.hps) {
+            bestHPS = { player, hps, bossName, duration: pull.duration_sec, healing: pullHealing };
+          }
+        });
+      });
+      if (bestHPS.player && bestHPS.hps > 500) {
+        awards.pump.push({
+          title: 'Snap Healer', winner: bestHPS.player,
+          value: `${Math.round(bestHPS.hps)} HPS peak`,
+          detail: `${(bestHPS.healing / 1000).toFixed(0)}k healing in ${Math.round(bestHPS.duration)}s on ${bestHPS.bossName}`,
+        });
+      }
 
       // Biggest Crit — from per-event data (clutch_heals/biggest_crits fields)
       const allCrits = pulls.flatMap(p => p.biggest_crits || []);
@@ -5153,7 +5193,26 @@
         });
       }
 
-      // TODO: Threat Enjoyer — aggro/threat data not available from WCL v1 API
+      // Threat Enjoyer — non-tanks who took boss melee hits (pulled aggro)
+      const playerBossMelee = {};
+      allBossPulls.forEach(({ pull }) => {
+        safeEntries(pull.player_damage_taken || {}).forEach(([player, sources]) => {
+          if (allPlayers[player]?.role === 'Tank') return;
+          safeEntries(sources).forEach(([source, count]) => {
+            if (/melee/i.test(source) || /strike|crush|Gore|Hateful/i.test(source)) {
+              playerBossMelee[player] = (playerBossMelee[player] || 0) + Number(count || 0);
+            }
+          });
+        });
+      });
+      const topThreatEnjoyers = topN(playerBossMelee);
+      if (topThreatEnjoyers.length && topThreatEnjoyers[0][1] > 2 && hasClearWinner(topThreatEnjoyers)) {
+        awards.fun.push({
+          title: 'Threat Enjoyer', winner: topThreatEnjoyers[0][0],
+          value: `${topThreatEnjoyers[0][1]} boss melee hits taken`,
+          detail: `Non-tank who pulled aggro the most. ${topThreatEnjoyers.slice(1, 3).map(([p, c]) => `${p}: ${c}`).join(', ')}`,
+        });
+      }
 
       // Prepared Gamer — player with most consistent flask + food buff presence
       const FOOD_BUFFS = /well fed|food|fortitude of the|blessed sunfruit|grilled mudfish|blackened basilisk|ravager dog|warp burger/i;
