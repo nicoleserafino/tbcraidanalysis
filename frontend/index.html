@@ -5652,7 +5652,7 @@
       if (data.has_mechanics) {
         const spreadEvents = data.snapshots.filter(s => s.target_count > 1);
         if (spreadEvents.length > 0) {
-          html += `<p class="note" style="color:var(--wipe)">🔥 ${spreadEvents.length} spread event(s) detected — ${spreadEvents.reduce((s, e) => s + e.target_count - 1, 0)} total spread victims</p>`;
+          html += `<p class="note" style="color:var(--wipe)">${spreadEvents.length} spread event(s) detected — ${spreadEvents.reduce((s, e) => s + e.target_count - 1, 0)} total spread victims</p>`;
         }
       }
 
@@ -5667,7 +5667,7 @@
       if (snapshot.targets && snapshot.targets.length) {
         html += `<div class="snapshot-targets">`;
         snapshot.targets.forEach(t => {
-          html += `<span class="target-pill">🎯 ${escapeHtml(t)}</span>`;
+          html += `<span class="target-pill">${escapeHtml(t)}</span>`;
         });
         html += `</div>`;
       }
@@ -5684,9 +5684,9 @@
 
       // Proximity issues
       if (snapshot.proximity_issues && snapshot.proximity_issues.length > 0) {
-        html += `<div class="proximity-list"><h4>⚠️ Spread Analysis (from ${escapeHtml(snapshot.targets?.[0] || 'target')})</h4>`;
+        html += `<div class="proximity-list"><h4>Spread Analysis (from ${escapeHtml(snapshot.targets?.[0] || 'target')})</h4>`;
         snapshot.proximity_issues.forEach(issue => {
-          const icon = issue.was_hit ? '🔥' : '⚠️';
+          const icon = issue.was_hit ? '●' : '○';
           const label = issue.was_hit ? 'HIT — spread victim' : 'close but safe';
           html += `<div class="proximity-item">${icon} ${escapeHtml(issue.player)} — ${issue.distance} units away (${label})</div>`;
         });
