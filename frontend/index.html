@@ -1007,6 +1007,118 @@
         padding: 12px 14px;
       }
     }
+
+    /* Positioning Map */
+    .positioning-map {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 1;
+      max-width: 600px;
+      margin: 0 auto;
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      overflow: hidden;
+    }
+    .positioning-map svg {
+      width: 100%;
+      height: 100%;
+    }
+    .pos-dot {
+      transition: opacity 0.2s;
+    }
+    .pos-dot:hover {
+      opacity: 1 !important;
+    }
+    .pos-label {
+      font-size: 9px;
+      fill: var(--text);
+      pointer-events: none;
+    }
+    .pos-range-circle {
+      fill: rgba(255, 99, 99, 0.08);
+      stroke: rgba(255, 99, 99, 0.4);
+      stroke-width: 1;
+      stroke-dasharray: 4 2;
+    }
+    .snapshot-nav {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      justify-content: center;
+      margin: 16px 0;
+    }
+    .snapshot-nav button {
+      background: var(--panel-3);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 6px 14px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 0.85rem;
+    }
+    .snapshot-nav button:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+    .snapshot-nav .snapshot-label {
+      font-size: 0.9rem;
+      color: var(--muted);
+      min-width: 220px;
+      text-align: center;
+    }
+    .snapshot-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: center;
+      margin: 12px 0;
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+    .snapshot-legend span {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .snapshot-legend .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+    .proximity-list {
+      margin: 12px 0;
+      padding: 12px;
+      background: var(--panel);
+      border-radius: var(--radius-sm);
+      border-left: 3px solid var(--wipe);
+    }
+    .proximity-list h4 {
+      margin: 0 0 8px;
+      color: var(--wipe);
+      font-size: 0.85rem;
+    }
+    .proximity-item {
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin: 4px 0;
+    }
+    .snapshot-targets {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      justify-content: center;
+      margin: 8px 0;
+    }
+    .snapshot-targets .target-pill {
+      background: rgba(255, 99, 99, 0.2);
+      border: 1px solid rgba(255, 99, 99, 0.4);
+      padding: 3px 10px;
+      border-radius: 12px;
+      font-size: 0.78rem;
+      color: #ff9999;
+    }
   </style>
 </head>
 <body>
@@ -1116,6 +1228,7 @@
       { id: 'healer', label: 'Healers' },
       { id: 'dps', label: 'DPS' },
       { id: 'threat', label: 'Threat' },
+      { id: 'positioning', label: 'Positioning' },
       { id: 'individual', label: 'Individual' },
       { id: '_separator' },
       { id: 'awards', label: 'Awards (Raid-wide)' },
@@ -5483,6 +5596,171 @@
       return html;
     }
 
+    // ── Positioning View ────────────────────────────────────────────────────
+    function renderPositioningView() {
+      const pull = getPull();
+      if (!pull) {
+        return '<div class="card empty">Select a specific pull to view positioning data.</div>';
+      }
+      const fightId = pull.fight_id;
+      if (!fightId) {
+        return '<div class="card empty">No fight ID available for this pull.</div>';
+      }
+
+      const cacheKey = `pos_${state.reportCode}_${fightId}`;
+      if (!state._posCache) state._posCache = {};
+      if (state._posCache[cacheKey]) {
+        return renderPositioningSnapshots(state._posCache[cacheKey]);
+      }
+
+      fetchPositioningData(fightId, cacheKey);
+      return '<div class="card"><div class="loading-spinner"></div> Loading positioning data...</div>';
+    }
+
+    async function fetchPositioningData(fightId, cacheKey) {
+      try {
+        const resp = await fetch(`/api/report/${state.reportCode}/positioning?fight_id=${fightId}`);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json();
+        state._posCache[cacheKey] = data;
+        renderContent();
+      } catch (e) {
+        console.error('Positioning fetch failed:', e);
+        state._posCache[cacheKey] = { error: e.message, snapshots: [] };
+        renderContent();
+      }
+    }
+
+    function renderPositioningSnapshots(data) {
+      if (data.error) {
+        return `<div class="card empty">Failed to load positioning data: ${escapeHtml(data.error)}</div>`;
+      }
+      if (!data.snapshots || data.snapshots.length === 0) {
+        return '<div class="card empty">No positioning data available for this fight.</div>';
+      }
+
+      // Use state to track current snapshot index
+      if (state._posSnapshotIdx === undefined) state._posSnapshotIdx = 0;
+      const idx = Math.min(state._posSnapshotIdx, data.snapshots.length - 1);
+      const snapshot = data.snapshots[idx];
+
+      let html = `<section class="card">
+        <h2>Positioning — ${escapeHtml(data.fight_name)}</h2>
+        <p class="note">${data.has_mechanics ? 'Showing player positions at key mechanic events. Navigate between events with ◀ ▶.' : 'General position snapshots (no tracked mechanics detected).'}</p>`;
+
+      // Show summary of spread events
+      if (data.has_mechanics) {
+        const spreadEvents = data.snapshots.filter(s => s.target_count > 1);
+        if (spreadEvents.length > 0) {
+          html += `<p class="note" style="color:var(--wipe)">🔥 ${spreadEvents.length} spread event(s) detected — ${spreadEvents.reduce((s, e) => s + e.target_count - 1, 0)} total spread victims</p>`;
+        }
+      }
+
+      // Navigation
+      html += `<div class="snapshot-nav">
+        <button class="pos-prev" ${idx === 0 ? 'disabled' : ''}>◀ Prev</button>
+        <span class="snapshot-label">${escapeHtml(snapshot.label)} (${idx + 1}/${data.snapshots.length})</span>
+        <button class="pos-next" ${idx === data.snapshots.length - 1 ? 'disabled' : ''}>Next ▶</button>
+      </div>`;
+
+      // Show targets if mechanic
+      if (snapshot.targets && snapshot.targets.length) {
+        html += `<div class="snapshot-targets">`;
+        snapshot.targets.forEach(t => {
+          html += `<span class="target-pill">🎯 ${escapeHtml(t)}</span>`;
+        });
+        html += `</div>`;
+      }
+
+      // Render the map
+      html += renderPositionMap(snapshot, data);
+
+      // Legend
+      html += `<div class="snapshot-legend">
+        <span><span class="dot" style="background:#ff6363"></span> Hit by mechanic</span>
+        <span><span class="dot" style="background:#44d17a"></span> Safe</span>
+        <span><span class="dot" style="border:2px dashed rgba(255,99,99,0.4);background:none"></span> Spread range</span>
+      </div>`;
+
+      // Proximity issues
+      if (snapshot.proximity_issues && snapshot.proximity_issues.length > 0) {
+        html += `<div class="proximity-list"><h4>⚠️ Spread Analysis (from ${escapeHtml(snapshot.targets?.[0] || 'target')})</h4>`;
+        snapshot.proximity_issues.forEach(issue => {
+          const icon = issue.was_hit ? '🔥' : '⚠️';
+          const label = issue.was_hit ? 'HIT — spread victim' : 'close but safe';
+          html += `<div class="proximity-item">${icon} ${escapeHtml(issue.player)} — ${issue.distance} units away (${label})</div>`;
+        });
+        html += `</div>`;
+      }
+
+      html += `</section>`;
+      return html;
+    }
+
+    function renderPositionMap(snapshot, data) {
+      const positions = snapshot.positions || {};
+      const players = Object.entries(positions);
+      if (players.length === 0) {
+        return '<div class="card empty">No position data available for this moment.</div>';
+      }
+
+      // Calculate bounds
+      const xs = players.map(([, p]) => p.x);
+      const ys = players.map(([, p]) => p.y);
+      const minX = Math.min(...xs);
+      const maxX = Math.max(...xs);
+      const minY = Math.min(...ys);
+      const maxY = Math.max(...ys);
+      const rangeX = maxX - minX || 1;
+      const rangeY = maxY - minY || 1;
+      const padding = 0.15; // 15% padding on each side
+
+      // SVG coordinate transform: game coords -> 0-100 viewbox with padding
+      function toSvg(x, y) {
+        const svgX = padding * 100 + ((x - minX) / rangeX) * (100 - 2 * padding * 100);
+        const svgY = padding * 100 + ((y - minY) / rangeY) * (100 - 2 * padding * 100);
+        return { x: svgX, y: 100 - svgY }; // flip Y for screen coords
+      }
+
+      let svg = `<div class="positioning-map"><svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">`;
+
+      // Draw grid lines for reference
+      for (let i = 0; i <= 4; i++) {
+        const pos = 15 + i * 17.5;
+        svg += `<line x1="${pos}" y1="5" x2="${pos}" y2="95" stroke="rgba(255,255,255,0.04)" stroke-width="0.2"/>`;
+        svg += `<line x1="5" y1="${pos}" x2="95" y2="${pos}" stroke="rgba(255,255,255,0.04)" stroke-width="0.2"/>`;
+      }
+
+      // Draw spread range circles around highlighted targets
+      if (snapshot.spread_range && snapshot.highlights) {
+        const rangeInSvg = (snapshot.spread_range / Math.max(rangeX, rangeY)) * (100 - 2 * padding * 100);
+        snapshot.highlights.forEach(target => {
+          if (positions[target]) {
+            const pos = toSvg(positions[target].x, positions[target].y);
+            svg += `<circle cx="${pos.x}" cy="${pos.y}" r="${rangeInSvg}" class="pos-range-circle"/>`;
+          }
+        });
+      }
+
+      // Draw player dots
+      players.forEach(([name, p]) => {
+        const pos = toSvg(p.x, p.y);
+        const isHit = p.hit || (snapshot.highlights && snapshot.highlights.includes(name));
+        const classColor = CLASS_COLORS[p.class] || '#999';
+        const dotColor = isHit ? '#ff6363' : classColor;
+        const radius = isHit ? 2.2 : 1.6;
+        const opacity = isHit ? 1 : 0.85;
+
+        svg += `<circle cx="${pos.x}" cy="${pos.y}" r="${radius}" fill="${dotColor}" opacity="${opacity}" class="pos-dot">
+          <title>${name} (${p.class})${isHit ? ' — HIT' : ''}</title>
+        </circle>`;
+        svg += `<text x="${pos.x}" y="${pos.y - 2.8}" text-anchor="middle" class="pos-label" fill="${isHit ? '#ff9999' : '#aab'}" opacity="${isHit ? 1 : 0.7}">${name}</text>`;
+      });
+
+      svg += `</svg></div>`;
+      return svg;
+    }
+
     function renderContent() {
       destroyCharts();
       if (!state.report) {
@@ -5516,9 +5794,11 @@
                   ? renderAllPullsRoleSummary('DPS')
                   : state.tab === 'threat'
                     ? renderThreatView()
-                    : state.tab === 'individual'
-                      ? renderAllPullsIndividual()
-                      : renderProgressionSummary();
+                    : state.tab === 'positioning'
+                      ? renderPositioningView()
+                      : state.tab === 'individual'
+                        ? renderAllPullsIndividual()
+                        : renderProgressionSummary();
         els.content.innerHTML = html;
         bindDynamicControls();
         return;
@@ -5536,7 +5816,9 @@
                 ? renderRoleSummary('DPS') + renderRoleTable('DPS')
                 : state.tab === 'threat'
                   ? renderThreatView()
-                  : renderIndividual();
+                  : state.tab === 'positioning'
+                    ? renderPositioningView()
+                    : renderIndividual();
 
       els.content.innerHTML = html;
       bindDynamicControls();
@@ -5669,6 +5951,24 @@
           renderContent();
         });
       });
+
+      // Positioning snapshot navigation
+      const posPrev = document.querySelector('.pos-prev');
+      const posNext = document.querySelector('.pos-next');
+      if (posPrev) {
+        posPrev.addEventListener('click', () => {
+          if (state._posSnapshotIdx > 0) {
+            state._posSnapshotIdx--;
+            renderContent();
+          }
+        });
+      }
+      if (posNext) {
+        posNext.addEventListener('click', () => {
+          state._posSnapshotIdx = (state._posSnapshotIdx || 0) + 1;
+          renderContent();
+        });
+      }
 
       // Timeline scrubber — only update map SVG, not full page
       const scrubber = document.getElementById('mapTimeScrubber');
@@ -5847,6 +6147,7 @@
       const pulls = getBossData().pulls || [];
       state.pullIndex = Math.max(0, pulls.length - 1);
       state.mapMomentIndex = 0;
+      state._posSnapshotIdx = 0;
       const availablePlayers = getPullPlayers();
       if (!availablePlayers.includes(state.player)) state.player = '';
       populateSelectors();
@@ -5858,6 +6159,7 @@
       const val = event.target.value;
       state.pullIndex = val === 'summary' ? 'summary' : Number(val || 0);
       state.mapMomentIndex = 0;
+      state._posSnapshotIdx = 0;
       const availablePlayers = getPullPlayers();
       if (!availablePlayers.includes(state.player)) state.player = '';
       populateSelectors();

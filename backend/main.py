@@ -309,6 +309,24 @@ async def get_threat_data(report_code: str, fight_id: int):
         raise HTTPException(status_code=500, detail=f"Threat data failed: {e}")
 
 
+# ── Positioning Data Endpoint ─────────────────────────────────────────────────
+
+@app.get("/api/report/{report_code}/positioning")
+async def get_positioning_data(report_code: str, fight_id: int):
+    """Fetch player positioning snapshots around key mechanic events."""
+    from backend.analysis.positioning import fetch_positioning_data
+    try:
+        code = extract_report_code(report_code)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    try:
+        result = await fetch_positioning_data(code, fight_id)
+        return result
+    except Exception as e:
+        logger.error("Positioning data error: %s\n%s", e, traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Positioning data failed: {e}")
+
+
 # Serve frontend static files
 FRONTEND_DIR = Path(__file__).parent.parent / "frontend"
 
