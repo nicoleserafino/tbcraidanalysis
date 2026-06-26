@@ -89,4 +89,4 @@ jobs:
           containerAppName: lcdguildanalysis
           resourceGroup: ${{ secrets.AZURE_RESOURCE_GROUP }}
           imageToDeploy: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
-          environmentVariables: WCL_CLIENT_ID=${{ secrets.WCL_CLIENT_ID }} WCL_CLIENT_SECRET=${{ secrets.WCL_CLIENT_SECRET }} API_KEY=${{ secrets.API_KEY }}
+          environmentVariables: WCL_CLIENT_ID=${{ secrets.WCL_CLIENT_ID }} WCL_CLIENT_SECRET=${{ secrets.WCL_CLIENT_SECRET }} API_KEY=${{ secrets.API_KEY }} AZURE_OPENAI_ENDPOINT=${{ secrets.AZURE_OPENAI_ENDPOINT }} AZURE_OPENAI_KEY=${{ secrets.AZURE_OPENAI_KEY }} AZURE_OPENAI_DEPLOYMENT=${{ secrets.AZURE_OPENAI_DEPLOYMENT }}
