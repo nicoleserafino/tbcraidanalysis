@@ -959,6 +959,28 @@
       line-height: 1.5;
     }
 
+    .uptime-pct {
+      font-size: 0.75rem;
+      opacity: 0.8;
+      margin-left: 4px;
+    }
+
+    .toggle-fights-btn {
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--accent);
+      font-size: 0.75rem;
+      padding: 4px 10px;
+      margin-top: 8px;
+      cursor: pointer;
+    }
+    .toggle-fights-btn:hover { background: rgba(87, 166, 255, 0.1); }
+
+    .consumable-table { font-size: 0.78rem; margin-top: 8px; }
+    .consumable-table td, .consumable-table th { padding: 3px 6px; }
+    .consumable-table .attendance-low { color: #ff6363; }
+
     .badge-stack {
       display: flex;
       flex-wrap: wrap;
@@ -1543,9 +1565,32 @@
             const status = prepStatus(player);
             const roleClass = String(player.role || '').toLowerCase();
             const consume = player.consumables || {};
+            const uptimes = player.consumable_uptimes || {};
+            const perFight = player.consumable_per_fight || [];
             const consumeText = consume.flask || (consume.elixirs || []).join(', ') || 'Missing flask/elixirs';
             const foodText = consume.food ? 'Well Fed present' : 'Missing food buff';
             const weaponText = consume.weapon_buff || 'Missing weapon buff';
+
+            const uptimeColor = (pct) => pct >= 90 ? 'attendance-good' : pct >= 50 ? 'attendance-mid' : 'attendance-low';
+
+            const perFightHtml = perFight.length > 1 ? `
+              <div class="per-fight-grid" style="display:none">
+                <table class="mini-table consumable-table">
+                  <thead><tr><th>Fight</th><th>Flask/Elixir</th><th>Food</th><th>Weapon</th></tr></thead>
+                  <tbody>${perFight.map(f => {
+                    const fe = f.flask || (f.elixirs || []).join(', ') || '—';
+                    const fo = f.food ? '✓' : '✗';
+                    const wb = f.weapon_buff || '—';
+                    return `<tr>
+                      <td>${escapeHtml(f.fight)}</td>
+                      <td class="${f.flask || (f.elixirs||[]).length ? '' : 'attendance-low'}">${escapeHtml(fe)}</td>
+                      <td class="${f.food ? '' : 'attendance-low'}">${fo}</td>
+                      <td class="${f.weapon_buff ? '' : 'attendance-low'}">${escapeHtml(wb)}</td>
+                    </tr>`;
+                  }).join('')}</tbody>
+                </table>
+              </div>` : '';
+
             return `
               <article class="prep-card ${status} ${escapeHtml(roleClass)}">
                 <div class="prep-top">
@@ -1554,6 +1599,7 @@
                     <div class="badge-stack">
                       ${classBadge(player.class)}
                       <span class="pill">Avg ilvl ${Number(player.avg_ilvl || 0)}</span>
+                      ${uptimes.overall !== undefined ? `<span class="pill ${uptimeColor(uptimes.overall)}">${uptimes.overall}% overall</span>` : ''}
                     </div>
                   </div>
                   <div class="pill">
@@ -1569,16 +1615,18 @@
                 ${(player.gear_warnings || []).length ? `<div class="audit-list"><span class="attendance-mid">Issues: ${escapeHtml(player.gear_warnings.join(', '))}</span></div>` : ''}
                 <div class="audit-line">
                   <span class="audit-label">Flask / Elixir</span>
-                  <span class="audit-value ${consume.flask || (consume.elixirs || []).length ? 'attendance-good' : 'attendance-low'}">${escapeHtml(consumeText)}</span>
+                  <span class="audit-value ${uptimeColor(uptimes.flask_or_elixir || 0)}">${escapeHtml(consumeText)} <span class="uptime-pct">${uptimes.flask_or_elixir || 0}%</span></span>
                 </div>
                 <div class="audit-line">
                   <span class="audit-label">Food</span>
-                  <span class="audit-value ${consume.food ? 'attendance-good' : 'attendance-low'}">${escapeHtml(foodText)}</span>
+                  <span class="audit-value ${uptimeColor(uptimes.food || 0)}">${escapeHtml(foodText)} <span class="uptime-pct">${uptimes.food || 0}%</span></span>
                 </div>
                 <div class="audit-line">
                   <span class="audit-label">Weapon Buff</span>
-                  <span class="audit-value ${consume.weapon_buff ? 'attendance-good' : 'attendance-mid'}">${escapeHtml(weaponText)}</span>
+                  <span class="audit-value ${uptimeColor(uptimes.weapon_buff || 0)}">${escapeHtml(weaponText)} <span class="uptime-pct">${uptimes.weapon_buff || 0}%</span></span>
                 </div>
+                ${perFight.length > 1 ? `<button class="toggle-fights-btn" onclick="this.nextElementSibling.style.display = this.nextElementSibling.style.display === 'none' ? '' : 'none'; this.textContent = this.nextElementSibling.style.display === 'none' ? 'Show per-fight ▸' : 'Hide per-fight ▾'">Show per-fight ▸</button>` : ''}
+                ${perFightHtml}
               </article>
             `;
           }).join('')}

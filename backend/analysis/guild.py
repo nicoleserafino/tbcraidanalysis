@@ -327,8 +327,8 @@ async def compute_attendance(
 async def fetch_gear_audit(report_code: str) -> dict[str, Any]:
     """Fetch gear, enchant, gem, and consumable data for all players in a report.
 
-    Checks CombatantInfo across all boss fights and picks the best consumable
-    snapshot per player (most buffs active).
+    Tracks consumable usage per-fight for uptime percentages, and uses gear
+    from first appearance (doesn't change mid-raid).
     """
     metadata = await fetch_report_metadata(report_code)
     fights = metadata.get("fights", [])
@@ -336,24 +336,26 @@ async def fetch_gear_audit(report_code: str) -> dict[str, Any]:
 
     players_by_id = {a["id"]: a for a in actors if a.get("type") == "Player"}
 
-    if not fights:
-        return {"players": [], "report_code": report_code}
+    # Only check boss fights (have encounterID)
+    boss_fights = [f for f in fights if f.get("encounterID")]
+    if not boss_fights:
+        return {"players": [], "report_code": report_code, "fights": []}
 
-    # Fetch CombatantInfo from all fights in parallel
+    # Fetch CombatantInfo from all boss fights in parallel
     import asyncio as _aio
     fight_tasks = [
         _fetch_combatant_info(report_code, f["id"], f["startTime"], f["endTime"])
-        for f in fights
+        for f in boss_fights
     ]
     all_fight_events = await _aio.gather(*fight_tasks)
 
-    # For each player, pick the fight snapshot with the best consumable coverage
-    # Use gear from first appearance (gear doesn't change mid-raid)
-    best_consumables: dict[int, dict] = {}  # sourceID -> best consumable audit
+    # Track per-fight consumable data for each player
     player_gear: dict[int, list] = {}       # sourceID -> gear from first seen
-    player_auras: dict[int, list] = {}      # sourceID -> auras from best fight
+    player_fight_data: dict[int, list] = {} # sourceID -> list of per-fight audits
 
-    for fight_events in all_fight_events:
+    fight_names = [f.get("name", f"Fight {i+1}") for i, f in enumerate(boss_fights)]
+
+    for fight_idx, fight_events in enumerate(all_fight_events):
         for ev in fight_events:
             source_id = ev.get("sourceID")
             if source_id not in players_by_id:
@@ -369,21 +371,16 @@ async def fetch_gear_audit(report_code: str) -> dict[str, Any]:
 
             # Audit consumables for this fight
             consumable_audit = _audit_consumables(auras, gear_items, player_class)
+            consumable_audit["fight_idx"] = fight_idx
+            consumable_audit["fight_name"] = fight_names[fight_idx]
 
-            # Score: count how many consumable slots are filled
-            score = sum([
-                bool(consumable_audit.get("flask")),
-                bool(consumable_audit.get("elixirs")),
-                bool(consumable_audit.get("food")),
-                bool(consumable_audit.get("weapon_buff")),
-            ])
+            if source_id not in player_fight_data:
+                player_fight_data[source_id] = []
+            player_fight_data[source_id].append(consumable_audit)
 
-            prev = best_consumables.get(source_id)
-            if prev is None or score > prev["_score"]:
-                consumable_audit["_score"] = score
-                best_consumables[source_id] = consumable_audit
+    total_fights = len(boss_fights)
 
-    # Build final audit using best consumables + gear from first appearance
+    # Build final audit with per-fight tracking and summary percentages
     player_audits = []
     for source_id, gear_items in player_gear.items():
         player = players_by_id.get(source_id)
@@ -391,8 +388,56 @@ async def fetch_gear_audit(report_code: str) -> dict[str, Any]:
             continue
 
         gear_audit = _audit_gear(gear_items)
-        consumable_audit = best_consumables.get(source_id, {})
-        consumable_audit.pop("_score", None)
+        fight_data = player_fight_data.get(source_id, [])
+        player_class = player.get("subType", "")
+
+        # Compute per-category uptime percentages
+        fights_present = len(fight_data)
+        flask_count = sum(1 for f in fight_data if f.get("flask"))
+        elixir_count = sum(1 for f in fight_data if f.get("elixirs"))
+        food_count = sum(1 for f in fight_data if f.get("food"))
+        weapon_count = sum(1 for f in fight_data if f.get("weapon_buff"))
+        flask_or_elixir = sum(1 for f in fight_data if f.get("flask") or f.get("elixirs"))
+
+        # Best snapshot for backwards-compatible "consumables" field
+        best = max(fight_data, key=lambda f: sum([
+            bool(f.get("flask")), bool(f.get("elixirs")),
+            bool(f.get("food")), bool(f.get("weapon_buff")),
+        ])) if fight_data else {}
+
+        consumable_summary = {
+            "flask": best.get("flask"),
+            "elixirs": best.get("elixirs", []),
+            "food": best.get("food", False),
+            "weapon_buff": best.get("weapon_buff"),
+            "fully_consumed": bool(best.get("flask") or best.get("elixirs")) and best.get("food", False),
+        }
+
+        # Per-fight breakdown
+        per_fight = []
+        for f in fight_data:
+            per_fight.append({
+                "fight": f.get("fight_name", ""),
+                "flask": f.get("flask"),
+                "elixirs": f.get("elixirs", []),
+                "food": bool(f.get("food")),
+                "weapon_buff": f.get("weapon_buff"),
+            })
+
+        # Uptimes as percentages
+        uptimes = {
+            "flask_or_elixir": round(flask_or_elixir / max(fights_present, 1) * 100),
+            "flask": round(flask_count / max(fights_present, 1) * 100),
+            "elixir": round(elixir_count / max(fights_present, 1) * 100),
+            "food": round(food_count / max(fights_present, 1) * 100),
+            "weapon_buff": round(weapon_count / max(fights_present, 1) * 100),
+            "fights_present": fights_present,
+            "total_fights": total_fights,
+        }
+
+        # Overall score (avg of flask/elixir, food, weapon)
+        scores = [uptimes["flask_or_elixir"], uptimes["food"], uptimes["weapon_buff"]]
+        uptimes["overall"] = round(sum(scores) / len(scores))
 
         player_audits.append({
             "name": player["name"],
@@ -406,7 +451,9 @@ async def fetch_gear_audit(report_code: str) -> dict[str, Any]:
             "gem_count": gear_audit["gem_count"],
             "total_enchantable": gear_audit["total_enchantable"],
             "total_gem_slots": gear_audit["total_gem_slots"],
-            "consumables": consumable_audit,
+            "consumables": consumable_summary,
+            "consumable_uptimes": uptimes,
+            "consumable_per_fight": per_fight,
             "gear": gear_audit["items"],
         })
 
@@ -414,7 +461,8 @@ async def fetch_gear_audit(report_code: str) -> dict[str, Any]:
 
     return {
         "report_code": report_code,
-        "fight_name": fights[0].get("name", "Unknown") if fights else "Unknown",
+        "fight_name": boss_fights[0].get("name", "Unknown") if boss_fights else "Unknown",
+        "fight_names": fight_names,
         "players": player_audits,
     }
 
