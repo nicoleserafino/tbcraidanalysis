@@ -259,17 +259,27 @@
       cursor: wait;
     }
 
-    /* Threat View */
-    .threat-ranking { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
-    .threat-row { display: flex; align-items: center; gap: 10px; font-size: 0.9rem; }
-    .threat-rank { font-weight: 700; width: 28px; color: var(--muted); }
-    .threat-name { width: 100px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .threat-bar-wrap { flex: 1; height: 18px; background: rgba(255,255,255,0.06); border-radius: 4px; overflow: hidden; }
-    .threat-bar { height: 100%; border-radius: 4px; transition: width 0.4s ease; }
-    .threat-value { width: 70px; text-align: right; font-weight: 600; }
-    .threat-tps { width: 80px; text-align: right; color: var(--muted); font-size: 0.8rem; }
-    .threat-details-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; margin-top: 16px; }
-    .threat-detail-card h4 { margin: 0 0 8px; font-size: 0.9rem; }
+    /* Threat Timeline View */
+    .threat-timeline-section { margin-bottom: 24px; }
+    .threat-timeline-section h4 { margin: 0 0 8px; font-size: 0.95rem; color: var(--text); }
+    .threat-timeline-wrap { position: relative; height: 32px; background: rgba(255,255,255,0.04); border-radius: 4px; overflow: visible; margin-bottom: 4px; }
+    .threat-seg { position: absolute; top: 0; height: 100%; border-radius: 3px; opacity: 0.85; transition: opacity 0.2s; }
+    .threat-seg:hover { opacity: 1; z-index: 2; }
+    .threat-transition { position: absolute; top: -4px; width: 2px; height: 40px; background: var(--text); cursor: pointer; z-index: 3; }
+    .threat-transition::after { content: ''; position: absolute; top: -4px; left: -4px; width: 10px; height: 10px; border-radius: 50%; }
+    .threat-transition[data-reason="taunt"]::after { background: #4fc3f7; }
+    .threat-transition[data-reason="death"]::after { background: #ef5350; }
+    .threat-transition[data-reason="drop"]::after { background: #ffb74d; }
+    .threat-transition[data-reason="rip"]::after { background: #ce93d8; }
+    .threat-tooltip { position: absolute; bottom: 44px; left: 50%; transform: translateX(-50%); background: #1e1e2e; border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; padding: 6px 10px; font-size: 0.78rem; white-space: nowrap; pointer-events: none; opacity: 0; transition: opacity 0.2s; z-index: 10; color: var(--text); }
+    .threat-transition:hover .threat-tooltip { opacity: 1; }
+    .threat-legend { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 12px; font-size: 0.82rem; }
+    .threat-legend-item { display: flex; align-items: center; gap: 5px; }
+    .threat-legend-swatch { width: 12px; height: 12px; border-radius: 3px; }
+    .threat-time-axis { display: flex; justify-content: space-between; font-size: 0.72rem; color: var(--muted); margin-top: 2px; padding: 0 2px; }
+    .threat-key { display: flex; gap: 14px; margin-top: 10px; font-size: 0.75rem; color: var(--muted); }
+    .threat-key-item { display: flex; align-items: center; gap: 4px; }
+    .threat-key-dot { width: 8px; height: 8px; border-radius: 50%; }
 
     .issue-item {
       background: rgba(255, 255, 255, 0.04);
@@ -5467,7 +5477,7 @@
     function renderThreatView() {
       const pull = getPull();
       if (!pull) {
-        return '<div class="card empty">Select a specific pull to view threat/aggro data.</div>';
+        return '<div class="card empty">Select a specific pull to view the threat timeline.</div>';
       }
       const fightId = pull.fight_id;
       if (!fightId) {
@@ -5476,11 +5486,11 @@
 
       const cacheKey = `threat_${state.reportCode}_${fightId}`;
       if (state._threatCache && state._threatCache[cacheKey]) {
-        return renderThreatCards(state._threatCache[cacheKey]);
+        return renderThreatTimeline(state._threatCache[cacheKey]);
       }
 
       fetchThreatData(fightId, cacheKey);
-      return '<div class="card"><div class="loading-spinner"></div> Loading threat/aggro data...</div>';
+      return '<div class="card"><div class="loading-spinner"></div> Loading threat timeline...</div>';
     }
 
     async function fetchThreatData(fightId, cacheKey) {
@@ -5494,69 +5504,101 @@
       } catch (e) {
         console.error('Threat fetch failed:', e);
         if (!state._threatCache) state._threatCache = {};
-        state._threatCache[cacheKey] = { error: e.message, players: [] };
+        state._threatCache[cacheKey] = { error: e.message, enemies: [] };
         renderContent();
       }
     }
 
-    function renderThreatCards(data) {
-      if (data.error && (!data.players || data.players.length === 0)) {
+    function renderThreatTimeline(data) {
+      if (data.error && (!data.enemies || data.enemies.length === 0)) {
         return `<div class="card empty">Failed to load threat data: ${data.error}</div>`;
       }
-      if (!data.players || data.players.length === 0) {
-        return '<div class="card empty">No aggro data available for this fight.</div>';
+      if (!data.enemies || data.enemies.length === 0) {
+        return '<div class="card empty">No threat timeline data available for this fight.</div>';
       }
 
-      const maxUptime = Math.max(...data.players.map(p => p.total_uptime_ms));
-      const players = getAllPlayers();
+      const durationMs = data.duration_ms || 1;
 
       let html = `<div class="card">
-        <h3>Aggro / Threat — ${data.fight_name} (${data.duration_s}s)</h3>
-        <p class="card-subtitle">Who held aggro and for how long (from WCL threat table)</p>
-        <div class="threat-ranking">`;
+        <h3>Threat Timeline — ${data.fight_name} (${data.duration_s}s)</h3>
+        <p class="card-subtitle">Who held aggro on each enemy over time. Hover markers for transition details.</p>`;
 
-      data.players.forEach((p, i) => {
-        const pct = maxUptime > 0 ? (p.total_uptime_ms / maxUptime * 100) : 0;
-        const classColor = CLASS_COLORS[p.class] || '#999';
-        const role = getPlayerRole(p.name);
-        const roleTag = role === 'Tank' ? ' <span style="color:#f5a623;font-size:0.7rem;font-weight:700">[TANK]</span>' : '';
-        const targetNames = (p.targets || []).map(t => t.name).join(', ');
-        html += `
-          <div class="threat-row">
-            <span class="threat-rank">#${i + 1}</span>
-            <span class="threat-name" style="color:${classColor}">${p.name}${roleTag}</span>
-            <div class="threat-bar-wrap">
-              <div class="threat-bar" style="width:${pct}%;background:${classColor}"></div>
-            </div>
-            <span class="threat-value">${p.uptime_sec}s</span>
-            <span class="threat-tps">${p.uptime_pct}%</span>
+      // Transition type key
+      html += `<div class="threat-key">
+        <span class="threat-key-item"><span class="threat-key-dot" style="background:#4fc3f7"></span> Taunt</span>
+        <span class="threat-key-item"><span class="threat-key-dot" style="background:#ef5350"></span> Death</span>
+        <span class="threat-key-item"><span class="threat-key-dot" style="background:#ffb74d"></span> Threat Drop</span>
+        <span class="threat-key-item"><span class="threat-key-dot" style="background:#ce93d8"></span> Rip</span>
+      </div>`;
+
+      // Render each enemy timeline
+      data.enemies.forEach(enemy => {
+        html += `<div class="threat-timeline-section">
+          <h4>${enemy.enemy_name}</h4>
+          <div class="threat-timeline-wrap">`;
+
+        // Render segments
+        enemy.segments.forEach(seg => {
+          const left = (seg.start_ms / durationMs) * 100;
+          const width = ((seg.end_ms - seg.start_ms) / durationMs) * 100;
+          const classColor = CLASS_COLORS[getPlayerClass(seg.player)] || '#999';
+          const durSec = ((seg.end_ms - seg.start_ms) / 1000).toFixed(1);
+          html += `<div class="threat-seg" style="left:${left}%;width:${Math.max(width, 0.3)}%;background:${classColor}" title="${seg.player} (${durSec}s)"></div>`;
+        });
+
+        // Render transition markers
+        enemy.transitions.forEach(tr => {
+          const left = (tr.timestamp_ms / durationMs) * 100;
+          html += `<div class="threat-transition" data-reason="${tr.reason}" style="left:${left}%">
+            <div class="threat-tooltip">${tr.timestamp_s}s — ${tr.detail}<br>${tr.from_player} → ${tr.to_player}</div>
           </div>`;
-      });
-      html += `</div></div>`;
+        });
 
-      // Per-player breakdown: what they tanked
-      const tankers = data.players.filter(p => p.targets && p.targets.length > 0).slice(0, 8);
-      if (tankers.length > 0) {
-        html += '<div class="threat-details-grid">';
-        tankers.forEach(p => {
-          const classColor = CLASS_COLORS[p.class] || '#999';
-          html += `<div class="card threat-detail-card">
-            <h4 style="color:${classColor}">${p.name} — Aggro Targets</h4>
-            <table class="mini-table">
-              <thead><tr><th>Enemy</th><th>Uptime</th></tr></thead>
-              <tbody>`;
-          const sorted = (p.targets || []).sort((a, b) => b.uptime_ms - a.uptime_ms);
-          sorted.forEach(t => {
-            const secs = (t.uptime_ms / 1000).toFixed(1);
-            const pctOfFight = (t.uptime_ms / data.total_time_ms * 100).toFixed(1);
-            html += `<tr><td>${t.name}</td><td>${secs}s (${pctOfFight}%)</td></tr>`;
-          });
-          html += `</tbody></table></div>`;
+        html += `</div>`;
+
+        // Time axis
+        const halfSec = Math.round(data.duration_s / 2);
+        html += `<div class="threat-time-axis"><span>0:00</span><span>${formatFightTime(halfSec)}</span><span>${formatFightTime(data.duration_s)}</span></div>`;
+        html += `</div>`;
+      });
+
+      // Player legend
+      if (data.legend && data.legend.length > 0) {
+        html += '<div class="threat-legend">';
+        data.legend.forEach(p => {
+          const color = CLASS_COLORS[p.class] || '#999';
+          html += `<span class="threat-legend-item"><span class="threat-legend-swatch" style="background:${color}"></span>${p.name}</span>`;
         });
         html += '</div>';
       }
 
+      html += '</div>';
       return html;
+    }
+
+    function getPlayerClass(playerName) {
+      // Try to find class from report data
+      const players = getAllPlayers();
+      const p = players.find(pl => pl.name === playerName);
+      if (p) return p.type || p.class || 'Unknown';
+      // Try legend from threat data
+      const pull = getPull();
+      if (pull) {
+        const cacheKey = `threat_${state.reportCode}_${pull.fight_id}`;
+        const cached = state._threatCache && state._threatCache[cacheKey];
+        if (cached && cached.legend) {
+          const leg = cached.legend.find(l => l.name === playerName);
+          if (leg) return leg.class;
+        }
+      }
+      return 'Unknown';
+    }
+
+    function formatFightTime(seconds) {
+      const s = Math.round(seconds);
+      const m = Math.floor(s / 60);
+      const sec = s % 60;
+      return `${m}:${sec.toString().padStart(2, '0')}`;
     }
 
     function formatNumber(n) {
