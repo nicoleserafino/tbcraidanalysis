@@ -252,7 +252,7 @@ def _detect_instance(fights: list[dict]) -> set[str]:
 
 async def _fetch_report_instances(report_code: str) -> set[str]:
     """Fetch fights for a report and determine which instances were run."""
-    data = await graphql_query(REPORT_FIGHTS, {"code": report_code})
+    data = await graphql_query(REPORT_FIGHTS, {"code": report_code, "killType": "Encounters"})
     report = data.get("reportData", {}).get("report", {})
     fights = report.get("fights", [])
     return _detect_instance(fights)

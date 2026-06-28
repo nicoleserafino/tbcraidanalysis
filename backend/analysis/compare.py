@@ -8,7 +8,7 @@ from typing import Any
 from backend.analysis.utils import infer_role, spell_name
 from backend.analysis.report import fetch_events_paginated, fetch_table
 from backend.wcl.client import graphql_query
-from backend.wcl.queries import REPORT_FIGHTS_ALL
+from backend.wcl.queries import REPORT_FIGHTS
 
 PLAYER_CLASSES = {
     "Warrior", "Paladin", "Hunter", "Rogue", "Priest",
@@ -153,7 +153,7 @@ def normalize_cast_events(events: list[dict[str, Any]], ability_names: dict[int,
 
 
 async def fetch_compare_metadata(report_code: str) -> dict[str, Any]:
-    data = await graphql_query(REPORT_FIGHTS_ALL, {"code": report_code})
+    data = await graphql_query(REPORT_FIGHTS, {"code": report_code})
     return data["reportData"]["report"]
 
 

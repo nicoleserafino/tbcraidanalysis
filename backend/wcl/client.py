@@ -2,13 +2,19 @@
 
 from __future__ import annotations
 
+import asyncio
+import logging
+
 import httpx
 from backend.wcl.auth import get_access_token
 
 GRAPHQL_URL = "https://www.warcraftlogs.com/api/v2/client"
+RETRY_STATUS_CODES = {429, 500, 502, 503, 504}
+RETRY_BACKOFFS = (1, 2, 4)
 
 # Shared client for connection reuse (HTTP/2 multiplexing, keep-alive)
 _client: httpx.AsyncClient | None = None
+logger = logging.getLogger(__name__)
 
 
 def _get_client() -> httpx.AsyncClient:
@@ -26,16 +32,44 @@ async def graphql_query(query: str, variables: dict | None = None) -> dict:
         payload["variables"] = variables
 
     client = _get_client()
-    resp = await client.post(
-        GRAPHQL_URL,
-        json=payload,
-        headers={"Authorization": f"Bearer {token}"},
-    )
-    resp.raise_for_status()
-    data = resp.json()
+    for attempt in range(len(RETRY_BACKOFFS) + 1):
+        try:
+            resp = await client.post(
+                GRAPHQL_URL,
+                json=payload,
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            if resp.status_code in RETRY_STATUS_CODES and attempt < len(RETRY_BACKOFFS):
+                backoff = RETRY_BACKOFFS[attempt]
+                logger.warning(
+                    "Retrying WCL GraphQL request after status %s (attempt %s/%s) in %ss",
+                    resp.status_code,
+                    attempt + 1,
+                    len(RETRY_BACKOFFS),
+                    backoff,
+                )
+                await asyncio.sleep(backoff)
+                continue
 
-    if "errors" in data:
-        errors = data["errors"]
-        raise RuntimeError(f"WCL GraphQL error: {errors[0].get('message', errors)}")
+            resp.raise_for_status()
+            data = resp.json()
 
-    return data.get("data", {})
+            if "errors" in data:
+                errors = data["errors"]
+                raise RuntimeError(f"WCL GraphQL error: {errors[0].get('message', errors)}")
+
+            return data.get("data", {})
+        except (httpx.ConnectError, httpx.ConnectTimeout) as exc:
+            if attempt >= len(RETRY_BACKOFFS):
+                raise
+            backoff = RETRY_BACKOFFS[attempt]
+            logger.warning(
+                "Retrying WCL GraphQL request after connection error %s (attempt %s/%s) in %ss",
+                exc.__class__.__name__,
+                attempt + 1,
+                len(RETRY_BACKOFFS),
+                backoff,
+            )
+            await asyncio.sleep(backoff)
+
+    raise RuntimeError("WCL GraphQL request failed after retries")

@@ -6,6 +6,7 @@ import logging
 import re
 import time
 import traceback
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
 
@@ -34,6 +35,21 @@ def _is_cache_fresh(timestamp: float, ttl: float = CACHE_TTL) -> bool:
     return (time.time() - timestamp) < ttl
 
 
+async def _cache_get(
+    cache: dict[Any, tuple[float, Any]],
+    key: Any,
+    fetcher: Callable[[], Awaitable[Any]],
+    ttl: float = CACHE_TTL,
+) -> Any:
+    cached = cache.get(key)
+    if cached and _is_cache_fresh(cached[0], ttl):
+        return cached[1]
+    cache.pop(key, None)
+    result = await fetcher()
+    cache[key] = (time.time(), result)
+    return result
+
+
 def extract_report_code(url_or_code: str) -> str:
     """Extract report code from URL or return as-is."""
     match = re.search(r"reports/([A-Za-z0-9]+)", url_or_code)
@@ -58,23 +74,12 @@ async def get_report(report_code: str):
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    # Check cache
-    cached = _report_cache.get(code)
-    if cached and _is_cache_fresh(cached[0]):
-        return cached[1]
-    if cached:
-        _report_cache.pop(code, None)
-
     try:
-        report = await fetch_full_report(code)
+        return await _cache_get(_report_cache, code, lambda: fetch_full_report(code))
     except RuntimeError as e:
         raise HTTPException(status_code=502, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch report: {e}")
-
-    # Cache result
-    _report_cache[code] = (time.time(), report)
-    return report
 
 
 @app.get("/api/report/{report_code}/fights")
@@ -200,20 +205,17 @@ async def get_guild_reports(
     guild_id = settings.guild_id
 
     cache_key = guild_id * 1000 + page
-    cached = _guild_reports_cache.get(cache_key)
-    if cached and _is_cache_fresh(cached[0]):
-        return cached[1]
-
     try:
-        result = await fetch_guild_reports(guild_id, limit=limit, page=page)
+        return await _cache_get(
+            _guild_reports_cache,
+            cache_key,
+            lambda: fetch_guild_reports(guild_id, limit=limit, page=page),
+        )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         logger.error("Guild reports error: %s\n%s", e, traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Failed to fetch guild reports: {e}")
-
-    _guild_reports_cache[cache_key] = (time.time(), result)
-    return result
 
 
 @app.get("/api/guild/attendance")
@@ -222,20 +224,17 @@ async def get_guild_attendance():
     settings = get_settings()
     guild_id = settings.guild_id
 
-    cached = _guild_attendance_cache.get(guild_id)
-    if cached and _is_cache_fresh(cached[0]):
-        return cached[1]
-
     try:
-        result = await compute_attendance(guild_id)
+        return await _cache_get(
+            _guild_attendance_cache,
+            guild_id,
+            lambda: compute_attendance(guild_id),
+        )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         logger.error("Guild attendance error: %s\n%s", e, traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Failed to compute attendance: {e}")
-
-    _guild_attendance_cache[guild_id] = (time.time(), result)
-    return result
 
 
 @app.get("/api/report/{report_code}/gear")
@@ -246,18 +245,11 @@ async def get_gear_audit(report_code: str):
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    cached = _gear_audit_cache.get(code)
-    if cached and _is_cache_fresh(cached[0]):
-        return cached[1]
-
     try:
-        result = await fetch_gear_audit(code)
+        return await _cache_get(_gear_audit_cache, code, lambda: fetch_gear_audit(code))
     except Exception as e:
         logger.error("Gear audit error: %s\n%s", e, traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Failed to fetch gear audit: {e}")
-
-    _gear_audit_cache[code] = (time.time(), result)
-    return result
 
 
 @app.get("/api/guild/player-prep")

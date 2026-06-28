@@ -1,43 +1,7 @@
 """GraphQL query templates for WCL v2 API."""
 
 REPORT_FIGHTS = """
-query ReportFights($code: String!) {
-  reportData {
-    report(code: $code) {
-      title
-      startTime
-      endTime
-      fights(killType: Encounters) {
-        id
-        name
-        encounterID
-        kill
-        startTime
-        endTime
-        difficulty
-        fightPercentage
-      }
-      masterData {
-        actors {
-          id
-          name
-          type
-          subType
-          server
-        }
-        abilities {
-          gameID
-          name
-          type
-        }
-      }
-    }
-  }
-}
-"""
-
-REPORT_FIGHTS_ALL = """
-query ReportFightsAll($code: String!) {
+query ReportFights($code: String!, $killType: KillType) {
   reportData {
     report(code: $code) {
       title
@@ -46,7 +10,7 @@ query ReportFightsAll($code: String!) {
       }
       startTime
       endTime
-      fights {
+      fights(killType: $killType) {
         id
         name
         encounterID

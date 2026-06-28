@@ -11,7 +11,7 @@ from backend.wcl.queries import REPORT_FIGHTS, REPORT_EVENTS, REPORT_EVENTS_ENEM
 
 async def fetch_report_metadata(report_code: str) -> dict:
     """Fetch report fights and actors."""
-    data = await graphql_query(REPORT_FIGHTS, {"code": report_code})
+    data = await graphql_query(REPORT_FIGHTS, {"code": report_code, "killType": "Encounters"})
     report = data["reportData"]["report"]
     return report
 
@@ -130,47 +130,54 @@ async def fetch_full_report(report_code: str) -> dict:
     agg_damage_done: dict[str, int] = {}
     agg_damage_taken: dict[str, int] = {}
 
+    async def process_fight(fight: dict, semaphore: asyncio.Semaphore) -> tuple[dict, dict]:
+        async with semaphore:
+            fight_id = fight["id"]
+            start = fight["startTime"]
+            end = fight["endTime"]
+
+            (
+                deaths,
+                enemy_deaths,
+                interrupts,
+                dispels,
+                healing,
+                casts,
+                damage_taken,
+                damage_done,
+                buffs,
+                threat,
+                dmg_table,
+                heal_table,
+            ) = await asyncio.gather(
+                fetch_events_paginated(report_code, [fight_id], "Deaths", start, end),
+                fetch_enemy_deaths(report_code, [fight_id], start, end),
+                fetch_events_paginated(report_code, [fight_id], "Interrupts", start, end),
+                fetch_events_paginated(report_code, [fight_id], "Dispels", start, end),
+                fetch_events_paginated(report_code, [fight_id], "Healing", start, end),
+                fetch_events_paginated(report_code, [fight_id], "Casts", start, end),
+                fetch_events_paginated(report_code, [fight_id], "DamageTaken", start, end),
+                fetch_events_paginated(report_code, [fight_id], "DamageDone", start, end),
+                fetch_events_paginated(report_code, [fight_id], "Buffs", start, end),
+                fetch_events_paginated(report_code, [fight_id], "Threat", start, end),
+                fetch_table(report_code, [fight_id], "DamageDone", start, end),
+                fetch_table(report_code, [fight_id], "Healing", start, end),
+            )
+
+            pull = build_pull_data(
+                fight, actors_by_id, players_by_id, ability_names,
+                deaths, enemy_deaths, interrupts, dispels, healing, casts,
+                damage_taken, damage_done, buffs, threat,
+                dmg_table, heal_table,
+            )
+            return fight, pull
+
+    semaphore = asyncio.Semaphore(4)
+    fight_results = await asyncio.gather(*(process_fight(fight, semaphore) for fight in fights))
+
     bosses: dict[str, dict] = {}
-    for fight in fights:
+    for fight, pull in fight_results:
         boss_name = fight["name"]
-        fight_id = fight["id"]
-        start = fight["startTime"]
-        end = fight["endTime"]
-
-        (
-            deaths,
-            enemy_deaths,
-            interrupts,
-            dispels,
-            healing,
-            casts,
-            damage_taken,
-            damage_done,
-            buffs,
-            threat,
-            dmg_table,
-            heal_table,
-        ) = await asyncio.gather(
-            fetch_events_paginated(report_code, [fight_id], "Deaths", start, end),
-            fetch_enemy_deaths(report_code, [fight_id], start, end),
-            fetch_events_paginated(report_code, [fight_id], "Interrupts", start, end),
-            fetch_events_paginated(report_code, [fight_id], "Dispels", start, end),
-            fetch_events_paginated(report_code, [fight_id], "Healing", start, end),
-            fetch_events_paginated(report_code, [fight_id], "Casts", start, end),
-            fetch_events_paginated(report_code, [fight_id], "DamageTaken", start, end),
-            fetch_events_paginated(report_code, [fight_id], "DamageDone", start, end),
-            fetch_events_paginated(report_code, [fight_id], "Buffs", start, end),
-            fetch_events_paginated(report_code, [fight_id], "Threat", start, end),
-            fetch_table(report_code, [fight_id], "DamageDone", start, end),
-            fetch_table(report_code, [fight_id], "Healing", start, end),
-        )
-
-        pull = build_pull_data(
-            fight, actors_by_id, players_by_id, ability_names,
-            deaths, enemy_deaths, interrupts, dispels, healing, casts,
-            damage_taken, damage_done, buffs, threat,
-            dmg_table, heal_table,
-        )
 
         # Aggregate for role inference
         for player, spells in pull.get("spell_casts", {}).items():
