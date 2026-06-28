@@ -30,8 +30,8 @@ _compare_report_cache: dict[str, tuple[float, dict[str, Any], dict[int, str]]] =
 _player_details_cache: dict[tuple[str, int, int], tuple[float, dict[str, Any]]] = {}
 
 
-def _is_cache_fresh(timestamp: float) -> bool:
-    return (time.time() - timestamp) < CACHE_TTL
+def _is_cache_fresh(timestamp: float, ttl: float = CACHE_TTL) -> bool:
+    return (time.time() - timestamp) < ttl
 
 
 def extract_report_code(url_or_code: str) -> str:
@@ -260,6 +260,61 @@ async def get_gear_audit(report_code: str):
     return result
 
 
+@app.get("/api/guild/player-prep")
+async def get_player_prep_history(
+    player: str = Query(..., description="Player name"),
+    raids: int = Query(8, ge=1, le=20, description="Number of recent raids to check"),
+):
+    """Fetch prep/gear audit for a specific player across recent raids."""
+    settings = get_settings()
+    guild_id = settings.guild_id
+
+    # Get recent raid reports
+    try:
+        reports_data = await fetch_guild_reports(guild_id, limit=raids, page=1)
+    except Exception as e:
+        logger.error("Player prep history error (reports): %s", e)
+        raise HTTPException(status_code=500, detail=f"Failed to fetch guild reports: {e}")
+
+    reports = reports_data.get("reports", [])
+    if not reports:
+        return {"player": player, "raids": []}
+
+    # Fetch gear audit for each report (use cache where possible)
+    results = []
+    for report in reports:
+        code = report.get("code")
+        if not code:
+            continue
+        # Check cache
+        cached = _gear_audit_cache.get(code)
+        if cached and _is_cache_fresh(cached[0]):
+            audit = cached[1]
+        else:
+            try:
+                audit = await fetch_gear_audit(code)
+                _gear_audit_cache[code] = (time.time(), audit)
+            except Exception:
+                continue
+
+        # Find the player in this audit
+        players = audit.get("players", [])
+        player_data = next(
+            (p for p in players if p.get("name", "").lower() == player.lower()),
+            None,
+        )
+        if player_data:
+            results.append({
+                "report_code": code,
+                "zone": report.get("zone", "Unknown"),
+                "date": report.get("date") or report.get("startTime"),
+                "player": player_data,
+            })
+
+    return {"player": player, "raids": results}
+
+
+
 # ── AI Advice Endpoint ───────────────────────────────────────────────────────
 
 from pydantic import BaseModel
@@ -273,10 +328,24 @@ class AIAdviceRequest(BaseModel):
     pull_data: dict[str, Any]
 
 
+_ai_advice_cache: dict[str, tuple[float, str]] = {}
+
+
 @app.post("/api/report/ai-advice")
 async def post_ai_advice(req: AIAdviceRequest):
     """Get AI-powered individual player advice for a specific fight."""
     from backend.analysis.ai_advice import get_ai_advice
+    import hashlib, json
+
+    # Cache key based on player + boss + pull summary
+    cache_key = hashlib.md5(
+        f"{req.player_name}:{req.boss_name}:{json.dumps(req.pull_data, sort_keys=True, default=str)[:2000]}".encode()
+    ).hexdigest()
+
+    cached = _ai_advice_cache.get(cache_key)
+    if cached and _is_cache_fresh(cached[0], ttl=1800):  # 30min TTL
+        return {"advice": cached[1]}
+
     try:
         advice = await get_ai_advice(
             player_name=req.player_name,
@@ -285,6 +354,7 @@ async def post_ai_advice(req: AIAdviceRequest):
             boss_name=req.boss_name,
             pull_data=req.pull_data,
         )
+        _ai_advice_cache[cache_key] = (time.time(), advice)
         return {"advice": advice}
     except Exception as e:
         logger.error("AI advice error: %s\n%s", e, traceback.format_exc())

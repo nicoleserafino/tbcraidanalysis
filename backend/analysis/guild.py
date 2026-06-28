@@ -47,8 +47,7 @@ CHEAP_ENCHANTS = {
     4: {908, 850, 254, 242, 41, 913, 857, 843, 246, 24, 928, 866, 847, 63, 44, 1891, 1893},
     # Back (slot 14) — cheap cloak enchants
     14: {910, 903, 65, 2463, 256, 1889, 884, 848, 744, 783, 247, 2938},
-    # Shoulder (slot 2) — Honored rep enchants (not Exalted), ZG
-    2: {2606},
+    # Shoulder (slot 2) — handled separately via CHEAP_SHOULDER_ENCHANTS
     # Legs (slot 6) — Silver/Mystic Thread instead of proper leg armor
     6: {2745, 2747},
     # Main Hand (slot 15) — cheap weapon enchants
@@ -57,11 +56,13 @@ CHEAP_ENCHANTS = {
 }
 
 # Shoulder enchants that are Honored-tier (suboptimal vs Exalted)
+# Exalted: Aldor 2983 (DPS), 2997 (Heal); Scryer 2996 (DPS), 2986 (Heal)
+# Honored: Aldor 2979 (DPS), 2980 (Heal); Scryer 2978 (DPS), 2981 (Heal)
 CHEAP_SHOULDER_ENCHANTS = {
-    2978: "Aldor Honored",
-    2980: "Scryer Honored",
-    2982: "Aldor Honored",
-    2986: "Scryer Honored",
+    2978: "Scryer Honored (Blade)",
+    2979: "Aldor Honored (Vengeance)",
+    2980: "Aldor Honored (Discipline)",
+    2981: "Scryer Honored (Oracle)",
 }
 
 # Cheap enchant names for display
@@ -102,15 +103,29 @@ FLASK_BUFFS = {
     "Unstable Flask of the Soldier", "Unstable Flask of the Sorcerer",
 }
 
-ELIXIR_BUFFS = {
+BATTLE_ELIXIRS = {
     "Elixir of Major Agility", "Elixir of Major Firepower",
-    "Elixir of Major Shadow Power", "Elixir of Healing Power",
-    "Elixir of Draenic Wisdom", "Elixir of Major Mageblood",
-    "Elixir of Major Strength", "Elixir of Mastery",
-    "Elixir of Major Fortitude", "Elixir of Major Defense",
-    "Elixir of Demonslaying", "Adept's Elixir", "Onslaught Elixir",
+    "Elixir of Major Shadow Power", "Major Shadow Power",
+    "Elixir of Healing Power", "Healing Power",
+    "Elixir of Major Mageblood",
+    "Elixir of Major Strength",
+    "Elixir of Mastery",
+    "Elixir of Demonslaying",
+    "Adept's Elixir", "Onslaught Elixir",
     "Mighty Agility",
+    "Fel Strength Elixir", "Fel Strength",
+    "Elixir of Major Frost Power",
+    "Elixir of the Mongoose",
+    "Spellpower Elixir",
 }
+
+GUARDIAN_ELIXIRS = {
+    "Elixir of Major Fortitude", "Elixir of Major Defense",
+    "Elixir of Ironshield", "Earthen Elixir",
+    "Elixir of Draenic Wisdom",
+}
+
+ELIXIR_BUFFS = BATTLE_ELIXIRS | GUARDIAN_ELIXIRS
 
 FOOD_BUFFS = {"Well Fed"}
 
@@ -378,9 +393,14 @@ async def fetch_gear_audit(report_code: str) -> dict[str, Any]:
             auras = ev.get("auras", [])
             player_class = players_by_id[source_id].get("subType", "")
 
-            # Keep first gear snapshot (doesn't change)
+            # Keep gear snapshot with the most enchants (best representation)
             if source_id not in player_gear:
                 player_gear[source_id] = gear_items
+            else:
+                existing_enchants = sum(1 for g in player_gear[source_id] if g.get("permanentEnchant", 0))
+                new_enchants = sum(1 for g in gear_items if g.get("permanentEnchant", 0))
+                if new_enchants > existing_enchants:
+                    player_gear[source_id] = gear_items
 
             # Audit consumables for this fight
             consumable_audit = _audit_consumables(auras, gear_items, player_class)
@@ -414,16 +434,24 @@ async def fetch_gear_audit(report_code: str) -> dict[str, Any]:
 
         # Best snapshot for backwards-compatible "consumables" field
         best = max(fight_data, key=lambda f: sum([
-            bool(f.get("flask")), bool(f.get("elixirs")),
+            bool(f.get("flask")), len(f.get("elixirs", [])),
             bool(f.get("food")), bool(f.get("weapon_buff")),
         ])) if fight_data else {}
 
+        # Aggregate all unique elixirs seen across fights for display
+        all_elixirs = set()
+        for f in fight_data:
+            all_elixirs.update(f.get("elixirs", []))
+
         consumable_summary = {
             "flask": best.get("flask"),
-            "elixirs": best.get("elixirs", []),
+            "elixirs": sorted(all_elixirs) if all_elixirs else best.get("elixirs", []),
             "food": best.get("food", False),
             "weapon_buff": best.get("weapon_buff"),
-            "fully_consumed": bool(best.get("flask") or best.get("elixirs")) and best.get("food", False),
+            "has_battle_elixir": best.get("has_battle_elixir", False),
+            "has_guardian_elixir": best.get("has_guardian_elixir", False),
+            "has_both_elixirs": best.get("has_both_elixirs", False),
+            "fully_consumed": bool(best.get("flask") or best.get("has_both_elixirs")) and best.get("food", False),
         }
 
         # Per-fight breakdown
@@ -433,6 +461,9 @@ async def fetch_gear_audit(report_code: str) -> dict[str, Any]:
                 "fight": f.get("fight_name", ""),
                 "flask": f.get("flask"),
                 "elixirs": f.get("elixirs", []),
+                "has_battle_elixir": f.get("has_battle_elixir", False),
+                "has_guardian_elixir": f.get("has_guardian_elixir", False),
+                "has_both_elixirs": f.get("has_both_elixirs", False),
                 "food": bool(f.get("food")),
                 "weapon_buff": f.get("weapon_buff"),
             })
@@ -573,7 +604,8 @@ def _audit_gear(gear_items: list[dict]) -> dict[str, Any]:
 def _audit_consumables(auras: list[dict], gear_items: list[dict] | None = None, player_class: str = "") -> dict[str, Any]:
     """Check pre-pull auras and gear for consumable usage."""
     has_flask = False
-    has_elixir = False
+    has_battle = False
+    has_guardian = False
     has_food = False
     has_weapon_buff = False
     flask_name = ""
@@ -586,8 +618,11 @@ def _audit_consumables(auras: list[dict], gear_items: list[dict] | None = None, 
         if name in FLASK_BUFFS:
             has_flask = True
             flask_name = name
-        elif name in ELIXIR_BUFFS:
-            has_elixir = True
+        elif name in BATTLE_ELIXIRS:
+            has_battle = True
+            elixir_names.append(name)
+        elif name in GUARDIAN_ELIXIRS:
+            has_guardian = True
             elixir_names.append(name)
         if name in FOOD_BUFFS:
             has_food = True
@@ -611,10 +646,16 @@ def _audit_consumables(auras: list[dict], gear_items: list[dict] | None = None, 
                     weapon_buff_name = name
                     break
 
+    has_elixir = has_battle or has_guardian
+    has_both_elixirs = has_battle and has_guardian
+
     return {
         "flask": flask_name if has_flask else None,
         "elixirs": elixir_names if has_elixir else [],
+        "has_battle_elixir": has_battle,
+        "has_guardian_elixir": has_guardian,
+        "has_both_elixirs": has_both_elixirs,
         "food": has_food,
         "weapon_buff": weapon_buff_name if has_weapon_buff else None,
-        "fully_consumed": (has_flask or has_elixir) and has_food,
+        "fully_consumed": (has_flask or has_both_elixirs) and has_food,
     }

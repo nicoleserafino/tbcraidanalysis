@@ -895,7 +895,7 @@
 
     .prep-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
       gap: 14px;
     }
 
@@ -914,6 +914,14 @@
     .prep-card.good { box-shadow: inset 0 1px 0 rgba(255,255,255,0.03), 0 0 0 1px rgba(68,209,122,0.08); }
     .prep-card.warn { box-shadow: inset 0 1px 0 rgba(255,255,255,0.03), 0 0 0 1px rgba(255,209,102,0.08); }
     .prep-card.bad { box-shadow: inset 0 1px 0 rgba(255,255,255,0.03), 0 0 0 1px rgba(255,99,99,0.08); }
+
+    .player-prep-history { display: flex; flex-direction: column; gap: 12px; }
+
+    .pp-dropdown { position: absolute; top: 100%; left: 0; right: 0; max-height: 220px; overflow-y: auto; background: #1e1e2e; border: 1px solid rgba(179,169,255,0.2); border-radius: 8px; z-index: 20; display: none; box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
+    .pp-dropdown.open { display: block; }
+    .pp-option { padding: 8px 12px; cursor: pointer; font-size: 0.85rem; display: flex; align-items: center; gap: 8px; transition: background 0.1s; }
+    .pp-option:hover, .pp-option.highlighted { background: rgba(143,124,255,0.15); }
+    .pp-option .pp-class-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 
     .prep-top {
       display: flex;
@@ -977,9 +985,13 @@
     }
     .toggle-fights-btn:hover { background: rgba(87, 166, 255, 0.1); }
 
-    .consumable-table { font-size: 0.78rem; margin-top: 8px; }
-    .consumable-table td, .consumable-table th { padding: 3px 6px; }
-    .consumable-table .attendance-low { color: #ff6363; }
+    .per-fight-grid { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+    .per-fight-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 0.75rem; }
+    .per-fight-name { font-weight: 600; min-width: 80px; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+    .pf-pill { padding: 1px 6px; border-radius: 8px; font-size: 0.7rem; white-space: nowrap; }
+    .pf-good { background: rgba(68,209,122,0.12); color: #44d17a; }
+    .pf-warn { background: rgba(255,209,102,0.12); color: #ffd166; }
+    .pf-bad { background: rgba(255,99,99,0.1); color: #ff6363; }
 
     .badge-stack {
       display: flex;
@@ -1133,6 +1145,7 @@
           </div>
           <div class="detail-view-tabs" aria-label="Dashboard views">
             <button type="button" class="detail-tab view-active" data-view-target="attendance">Attendance</button>
+            <button type="button" class="detail-tab" data-view-target="playerPrep">Player Prep</button>
             <button type="button" class="detail-tab" data-view-target="manual">Analyze Report</button>
           </div>
         </div>
@@ -1174,6 +1187,26 @@
             <div id="prepContainer">
               <div class="status-box">Select a raid to load prep audit.</div>
             </div>
+          </section>
+
+          <section class="detail-view" data-view="playerPrep">
+            <div class="detail-view-header" style="justify-content:flex-end;">
+              <div class="controls-row">
+                <div style="position:relative;">
+                  <label for="playerPrepInput">Player</label>
+                  <input id="playerPrepInput" type="text" placeholder="Search player..." autocomplete="off" role="combobox" aria-expanded="false" aria-autocomplete="list" aria-controls="playerPrepDropdown" style="min-width:180px;" />
+                  <input id="playerPrepSelect" type="hidden" />
+                  <div id="playerPrepDropdown" class="pp-dropdown" role="listbox"></div>
+                </div>
+                <div>
+                  <label for="playerPrepCount">Raids</label>
+                  <input id="playerPrepCount" type="number" min="1" max="20" value="8" style="width:60px;" />
+                </div>
+                <button id="playerPrepLoadBtn" class="button primary" type="button">Load</button>
+              </div>
+            </div>
+            <div id="playerPrepMeta" class="mini-note" style="margin-bottom:12px;"></div>
+            <div id="playerPrepContainer"></div>
           </section>
 
           <section class="detail-view" data-view="manual">
@@ -1260,6 +1293,7 @@
       views: {
         attendance: document.querySelector('[data-view="attendance"]'),
         prep: document.querySelector('[data-view="prep"]'),
+        playerPrep: document.querySelector('[data-view="playerPrep"]'),
         manual: document.querySelector('[data-view="manual"]')
       }
     };
@@ -1272,6 +1306,10 @@
       prep: {
         title: 'Raid Prep',
         subtitle: 'Consumables, enchants, and gear for the selected raid.'
+      },
+      playerPrep: {
+        title: 'Player Prep History',
+        subtitle: 'Track a player\'s consumable and gear readiness across recent raids.'
       },
       manual: {
         title: 'Report Analysis',
@@ -1398,6 +1436,7 @@
         state.attendance = await fetchJson('/api/guild/attendance');
         els.attendanceMeta.textContent = `${state.attendance.total_weeks || 0} lockout weeks tracked · SSC + TK per week`;
         renderAttendance();
+        populatePlayerPrepSelect();
       } catch (error) {
         els.attendanceMeta.textContent = 'Failed to load attendance';
         els.attendanceContainer.innerHTML = `<div class="status-box error">${escapeHtml(error.message)}</div>`;
@@ -1568,6 +1607,7 @@
             const uptimes = player.consumable_uptimes || {};
             const perFight = player.consumable_per_fight || [];
             const consumeText = consume.flask || (consume.elixirs || []).join(', ') || 'Missing flask/elixirs';
+            const elixirColor = consume.flask || consume.has_both_elixirs ? 'attendance-good' : (consume.has_battle_elixir || consume.has_guardian_elixir) ? 'attendance-mid' : 'attendance-low';
             const foodText = consume.food ? 'Well Fed present' : 'Missing food buff';
             const weaponText = consume.weapon_buff || 'Missing weapon buff';
 
@@ -1575,20 +1615,17 @@
 
             const perFightHtml = perFight.length > 1 ? `
               <div class="per-fight-grid" style="display:none">
-                <table class="mini-table consumable-table">
-                  <thead><tr><th>Fight</th><th>Flask/Elixir</th><th>Food</th><th>Weapon</th></tr></thead>
-                  <tbody>${perFight.map(f => {
-                    const fe = f.flask || (f.elixirs || []).join(', ') || '—';
-                    const fo = f.food ? '✓' : '✗';
-                    const wb = f.weapon_buff || '—';
-                    return `<tr>
-                      <td>${escapeHtml(f.fight)}</td>
-                      <td class="${f.flask || (f.elixirs||[]).length ? '' : 'attendance-low'}">${escapeHtml(fe)}</td>
-                      <td class="${f.food ? '' : 'attendance-low'}">${fo}</td>
-                      <td class="${f.weapon_buff ? '' : 'attendance-low'}">${escapeHtml(wb)}</td>
-                    </tr>`;
-                  }).join('')}</tbody>
-                </table>
+                ${perFight.map(f => {
+                  const elixirClass = f.flask || f.has_both_elixirs ? 'pf-good' : (f.has_battle_elixir || f.has_guardian_elixir) ? 'pf-warn' : 'pf-bad';
+                  const elixirIcon = f.flask || f.has_both_elixirs ? '✓' : (f.has_battle_elixir || f.has_guardian_elixir) ? '~' : '✗';
+                  const feLabel = f.flask || (f.elixirs || []).join(', ') || '';
+                  return `<div class="per-fight-row">
+                    <span class="per-fight-name">${escapeHtml(f.fight)}</span>
+                    <span class="pf-pill ${elixirClass}" title="${escapeHtml(feLabel || 'None')}">${elixirIcon} Elixir</span>
+                    <span class="pf-pill ${f.food ? 'pf-good' : 'pf-bad'}">  ${f.food ? '✓' : '✗'} Food</span>
+                    <span class="pf-pill ${f.weapon_buff ? 'pf-good' : 'pf-bad'}" title="${escapeHtml(f.weapon_buff || 'None')}">  ${f.weapon_buff ? '✓' : '✗'} Weapon</span>
+                  </div>`;
+                }).join('')}
               </div>` : '';
 
             return `
@@ -1615,7 +1652,7 @@
                 ${(player.gear_warnings || []).length ? `<div class="audit-list"><span class="attendance-mid">Issues: ${escapeHtml(player.gear_warnings.join(', '))}</span></div>` : ''}
                 <div class="audit-line">
                   <span class="audit-label">Flask / Elixir</span>
-                  <span class="audit-value ${uptimeColor(uptimes.flask_or_elixir || 0)}">${escapeHtml(consumeText)} <span class="uptime-pct">${uptimes.flask_or_elixir || 0}%</span></span>
+                  <span class="audit-value ${elixirColor}">${escapeHtml(consumeText)} <span class="uptime-pct">${uptimes.flask_or_elixir || 0}%</span></span>
                 </div>
                 <div class="audit-line">
                   <span class="audit-label">Food</span>
@@ -1657,6 +1694,182 @@
     function goToReport(code) {
       window.location.href = `/report?code=${encodeURIComponent(code)}`;
     }
+
+    // ── Player Prep History ─────────────────────────────────────────────
+    const CLASS_HEX = {
+      Warrior: '#c79c6e', Paladin: '#f58cba', Hunter: '#abd473', Rogue: '#fff569',
+      Priest: '#f0f0f0', Shaman: '#0070de', Mage: '#69ccf0', Warlock: '#9482c9', Druid: '#ff7d0a'
+    };
+
+    const playerPrepEls = {
+      input: document.getElementById('playerPrepInput'),
+      hidden: document.getElementById('playerPrepSelect'),
+      dropdown: document.getElementById('playerPrepDropdown'),
+      count: document.getElementById('playerPrepCount'),
+      loadBtn: document.getElementById('playerPrepLoadBtn'),
+      container: document.getElementById('playerPrepContainer'),
+      meta: document.getElementById('playerPrepMeta'),
+    };
+
+    let ppPlayers = []; // [{name, class}]
+    let ppHighlight = -1;
+
+    function populatePlayerPrepSelect() {
+      const players = state.attendance?.players || [];
+      ppPlayers = players.map(p => ({ name: p.name, class: p.class || '' })).sort((a, b) => a.name.localeCompare(b.name));
+    }
+
+    function renderPPDropdown(filter) {
+      const q = (filter || '').toLowerCase();
+      const matches = q ? ppPlayers.filter(p => p.name.toLowerCase().includes(q)) : ppPlayers;
+      ppHighlight = -1;
+      if (!matches.length) {
+        playerPrepEls.dropdown.innerHTML = '<div class="pp-option" style="color:var(--muted);pointer-events:none">No matches</div>';
+        playerPrepEls.dropdown.classList.add('open');
+        playerPrepEls.input.setAttribute('aria-expanded', 'true');
+        return;
+      }
+      playerPrepEls.dropdown.innerHTML = matches.map((p, i) => {
+        const hex = CLASS_HEX[p.class] || '#999';
+        return `<div class="pp-option" role="option" data-name="${escapeHtml(p.name)}" data-idx="${i}"><span class="pp-class-dot" style="background:${hex}"></span>${escapeHtml(p.name)}</div>`;
+      }).join('');
+      playerPrepEls.dropdown.classList.add('open');
+      playerPrepEls.input.setAttribute('aria-expanded', 'true');
+
+      playerPrepEls.dropdown.querySelectorAll('.pp-option[data-name]').forEach(opt => {
+        opt.addEventListener('mousedown', e => {
+          e.preventDefault();
+          selectPPPlayer(opt.dataset.name);
+        });
+      });
+    }
+
+    function selectPPPlayer(name) {
+      playerPrepEls.input.value = name;
+      playerPrepEls.hidden.value = name;
+      playerPrepEls.dropdown.classList.remove('open');
+      playerPrepEls.input.setAttribute('aria-expanded', 'false');
+    }
+
+    playerPrepEls.input.addEventListener('focus', () => renderPPDropdown(playerPrepEls.input.value));
+    playerPrepEls.input.addEventListener('input', () => renderPPDropdown(playerPrepEls.input.value));
+    playerPrepEls.input.addEventListener('blur', () => {
+      setTimeout(() => { playerPrepEls.dropdown.classList.remove('open'); playerPrepEls.input.setAttribute('aria-expanded', 'false'); }, 150);
+    });
+    playerPrepEls.input.addEventListener('keydown', e => {
+      const opts = playerPrepEls.dropdown.querySelectorAll('.pp-option[data-name]');
+      if (e.key === 'ArrowDown') { e.preventDefault(); ppHighlight = Math.min(ppHighlight + 1, opts.length - 1); updatePPHighlight(opts); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); ppHighlight = Math.max(ppHighlight - 1, 0); updatePPHighlight(opts); }
+      else if (e.key === 'Enter') { e.preventDefault(); if (ppHighlight >= 0 && opts[ppHighlight]) selectPPPlayer(opts[ppHighlight].dataset.name); }
+      else if (e.key === 'Escape') { playerPrepEls.dropdown.classList.remove('open'); playerPrepEls.input.setAttribute('aria-expanded', 'false'); }
+    });
+
+    function updatePPHighlight(opts) {
+      opts.forEach((o, i) => o.classList.toggle('highlighted', i === ppHighlight));
+      if (opts[ppHighlight]) opts[ppHighlight].scrollIntoView({ block: 'nearest' });
+    }
+
+    async function loadPlayerPrepHistory() {
+      const player = playerPrepEls.hidden.value || playerPrepEls.input.value;
+      const raids = parseInt(playerPrepEls.count.value) || 8;
+      if (!player) return;
+
+      playerPrepEls.meta.textContent = `Loading prep history for ${player}...`;
+      playerPrepEls.container.innerHTML = '<div class="status-box loading">Loading prep history across recent raids...</div>';
+
+      try {
+        const data = await fetchJson(`/api/guild/player-prep?player=${encodeURIComponent(player)}&raids=${raids}`);
+        renderPlayerPrepHistory(data);
+      } catch (e) {
+        playerPrepEls.meta.textContent = 'Failed to load prep history';
+        playerPrepEls.container.innerHTML = `<div class="status-box error">${escapeHtml(e.message)}</div>`;
+      }
+    }
+
+    function renderPlayerPrepHistory(data) {
+      const raids = data.raids || [];
+      if (!raids.length) {
+        playerPrepEls.meta.textContent = `${data.player} not found in recent raids.`;
+        playerPrepEls.container.innerHTML = '<div class="empty">This player was not found in any of the recent raids checked.</div>';
+        return;
+      }
+
+      playerPrepEls.meta.textContent = `${data.player} — ${raids.length} raid(s) found`;
+
+      let html = '<div class="player-prep-history">';
+      raids.forEach(raid => {
+        const player = raid.player;
+        const status = prepStatus(player);
+        const roleClass = String(player.role || '').toLowerCase();
+        const consume = player.consumables || {};
+        const uptimes = player.consumable_uptimes || {};
+        const perFight = player.consumable_per_fight || [];
+        const consumeText = consume.flask || (consume.elixirs || []).join(', ') || 'Missing flask/elixirs';
+        const elixirColor = consume.flask || consume.has_both_elixirs ? 'attendance-good' : (consume.has_battle_elixir || consume.has_guardian_elixir) ? 'attendance-mid' : 'attendance-low';
+        const foodText = consume.food ? 'Well Fed present' : 'Missing food buff';
+        const weaponText = consume.weapon_buff || 'Missing weapon buff';
+
+        const uptimeColor = (pct) => pct >= 90 ? 'attendance-good' : pct >= 50 ? 'attendance-mid' : 'attendance-low';
+
+        const perFightHtml = perFight.length > 1 ? `
+          <div class="per-fight-grid" style="display:none">
+            ${perFight.map(f => {
+              const elixirClass = f.flask || f.has_both_elixirs ? 'pf-good' : (f.has_battle_elixir || f.has_guardian_elixir) ? 'pf-warn' : 'pf-bad';
+              const elixirIcon = f.flask || f.has_both_elixirs ? '✓' : (f.has_battle_elixir || f.has_guardian_elixir) ? '~' : '✗';
+              const feLabel = f.flask || (f.elixirs || []).join(', ') || '';
+              return `<div class="per-fight-row">
+                <span class="per-fight-name">${escapeHtml(f.fight)}</span>
+                <span class="pf-pill ${elixirClass}" title="${escapeHtml(feLabel || 'None')}">${elixirIcon} Elixir</span>
+                <span class="pf-pill ${f.food ? 'pf-good' : 'pf-bad'}">  ${f.food ? '✓' : '✗'} Food</span>
+                <span class="pf-pill ${f.weapon_buff ? 'pf-good' : 'pf-bad'}" title="${escapeHtml(f.weapon_buff || 'None')}">  ${f.weapon_buff ? '✓' : '✗'} Weapon</span>
+              </div>`;
+            }).join('')}
+          </div>` : '';
+
+        html += `
+          <article class="prep-card ${status} ${escapeHtml(roleClass)}">
+            <div class="prep-top">
+              <div>
+                <div class="prep-name">${escapeHtml(raid.zone || 'Unknown')} — ${escapeHtml(formatDate(raid.date))}</div>
+                <div class="badge-stack">
+                  ${classBadge(player.class)}
+                  <span class="pill">Avg ilvl ${Number(player.avg_ilvl || 0)}</span>
+                  ${uptimes.overall !== undefined ? `<span class="pill ${uptimeColor(uptimes.overall)}">${uptimes.overall}% overall</span>` : ''}
+                </div>
+              </div>
+              <div class="pill">
+                <span class="status-dot ${status === 'good' ? 'dot-good' : status === 'warn' ? 'dot-warn' : 'dot-bad'}"></span>
+                ${status === 'good' ? 'Ready' : status === 'warn' ? 'Minor issues' : 'Needs prep'}
+              </div>
+            </div>
+            <div class="audit-line">
+              <span class="audit-label">Enchants</span>
+              <span class="audit-value">${Number(player.enchant_count || 0)}/${Number(player.total_enchantable || 0)} enchanted</span>
+            </div>
+            <div class="audit-list">${(player.missing_enchants || []).length ? `<span class="attendance-low">Missing: ${escapeHtml(player.missing_enchants.join(', '))}</span>` : 'All tracked enchant slots covered.'}</div>
+            ${(player.gear_warnings || []).length ? `<div class="audit-list"><span class="attendance-mid">Issues: ${escapeHtml(player.gear_warnings.join(', '))}</span></div>` : ''}
+            <div class="audit-line">
+              <span class="audit-label">Flask / Elixir</span>
+              <span class="audit-value ${elixirColor}">${escapeHtml(consumeText)} <span class="uptime-pct">${uptimes.flask_or_elixir || 0}%</span></span>
+            </div>
+            <div class="audit-line">
+              <span class="audit-label">Food</span>
+              <span class="audit-value ${uptimeColor(uptimes.food || 0)}">${escapeHtml(foodText)} <span class="uptime-pct">${uptimes.food || 0}%</span></span>
+            </div>
+            <div class="audit-line">
+              <span class="audit-label">Weapon Buff</span>
+              <span class="audit-value ${uptimeColor(uptimes.weapon_buff || 0)}">${escapeHtml(weaponText)} <span class="uptime-pct">${uptimes.weapon_buff || 0}%</span></span>
+            </div>
+            ${perFight.length > 1 ? `<button class="toggle-fights-btn" onclick="this.nextElementSibling.style.display = this.nextElementSibling.style.display === 'none' ? '' : 'none'; this.textContent = this.nextElementSibling.style.display === 'none' ? 'Show per-fight ▸' : 'Hide per-fight ▾'">Show per-fight ▸</button>` : ''}
+            ${perFightHtml}
+          </article>
+        `;
+      });
+      html += '</div>';
+      playerPrepEls.container.innerHTML = html;
+    }
+
+    playerPrepEls.loadBtn.addEventListener('click', loadPlayerPrepHistory);
 
     function setActiveDetailView(view) {
       activeDetailView = DETAIL_VIEW_META[view] ? view : 'attendance';
