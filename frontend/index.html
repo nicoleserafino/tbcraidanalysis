@@ -1367,17 +1367,22 @@
 
     function cleanDamageLabel(label) {
       if (!label || typeof label !== 'string') return 'Unknown';
-      const parts = label.split(/:\s(.+)/);
-      const source = parts[0]?.trim() || label;
-      const ability = parts[1]?.trim();
-      if (!ability || ability === source) return source;
-      if (/Dreamscythe-US/i.test(ability)) return `${source} • Targeted ability`;
-      return `${source} • ${ability}`;
+      // Format: "Ability (SourceNPC)" or just "Ability"
+      const match = label.match(/^(.+?)\s*\((.+)\)$/);
+      if (match) {
+        const ability = match[1].trim();
+        const source = match[2].trim();
+        if (source === ability) return ability;
+        return `${ability} • ${source}`;
+      }
+      return label;
     }
 
     function sourceName(label) {
       if (!label || typeof label !== 'string') return 'Unknown';
-      return label.split(':')[0].trim();
+      // Extract source NPC from "Ability (SourceNPC)" format
+      const match = label.match(/\((.+)\)$/);
+      return match ? match[1].trim() : label;
     }
 
     function aggregateDamageSources(pull) {
@@ -2989,7 +2994,7 @@
       const sources = getPull()?.player_damage_taken?.[player] || {};
       const meleeCandidates = safeEntries(sources)
         .map(([label, count]) => ({ label, count: Number(count || 0) }))
-        .filter(item => /Melee/i.test(item.label) || /: [^:]+$/.test(item.label));
+        .filter(item => /Melee/i.test(item.label));
       meleeCandidates.sort((a, b) => b.count - a.count);
       return meleeCandidates.length ? sourceName(meleeCandidates[0].label) : '—';
     }
@@ -3805,7 +3810,8 @@
       content.textContent = 'Analyzing fight data...';
 
       const pull = getPull();
-      const meta = state.playerInfo?.[playerName] || {};
+      const players = state.report?.players || {};
+      const meta = players[playerName] || {};
 
       try {
         const resp = await fetch('/api/report/ai-advice', {
@@ -3815,7 +3821,7 @@
             player_name: playerName,
             player_class: meta.class || 'Unknown',
             player_role: getPlayerRole(playerName),
-            boss_name: state.selectedBoss || 'Unknown',
+            boss_name: state.boss || 'Unknown',
             pull_data: pull || {}
           })
         });

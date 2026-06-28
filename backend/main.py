@@ -204,7 +204,7 @@ async def get_guild_reports(
     settings = get_settings()
     guild_id = settings.guild_id
 
-    cache_key = guild_id * 1000 + page
+    cache_key = (guild_id, page, limit)
     try:
         return await _cache_get(
             _guild_reports_cache,
