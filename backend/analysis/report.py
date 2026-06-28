@@ -272,9 +272,16 @@ def build_pull_data(
             continue
         target_id = ev.get("targetID")
         if target_id in players_by_id:
+            # Extract killing blow ability if available
+            killing_ability = ""
+            if ev.get("killingAbility"):
+                killing_ability = ev["killingAbility"].get("name", "") or ability_names.get(ev["killingAbility"].get("guid", 0), "")
+            elif ev.get("ability"):
+                killing_ability = ev["ability"].get("name", "") or ability_names.get(ev["ability"].get("guid", 0), "")
             deaths_out.append({
                 "player": players_by_id[target_id]["name"],
                 "relative_time": rel_sec(ev["timestamp"]),
+                "ability": killing_ability,
             })
 
     # Process enemy/creature deaths (weapons, advisors, etc.)
@@ -412,10 +419,15 @@ def build_pull_data(
         spell_casts.setdefault(player, {})
         spell_casts[player][spell] = spell_casts[player].get(spell, 0) + 1
 
-    # Process damage taken
+    # Process damage taken — label includes source NPC name for mechanic identification
     player_damage_taken = {}
     player_damage_taken_total = {}
     damage_sources = {}
+    conflagrations = []
+
+    # Conflagration spell IDs (Kael'thas - Capernian)
+    CONFLAG_IDS = {36965, 37018, 37019}
+
     for ev in damage_taken:
         if ev.get("type") != "damage":
             continue
@@ -423,12 +435,32 @@ def build_pull_data(
         if target_id not in players_by_id:
             continue
         player = actor_name(target_id, actors_by_id)
-        source = spell_name(ev, ability_names)
+        ability = spell_name(ev, ability_names)
         amount = ev.get("amount", 0) + ev.get("absorbed", 0)
+
+        # Build label: include source NPC name when source is not a player
+        source_id = ev.get("sourceID")
+        source_npc = ""
+        if source_id and source_id not in players_by_id:
+            source_npc = actors_by_id.get(source_id, {}).get("name", "")
+        if source_npc and source_npc.lower() != ability.lower():
+            label = f"{ability} ({source_npc})"
+        else:
+            label = ability
+
         player_damage_taken.setdefault(player, {})
-        player_damage_taken[player][source] = player_damage_taken[player].get(source, 0) + 1
+        player_damage_taken[player][label] = player_damage_taken[player].get(label, 0) + 1
         player_damage_taken_total[player] = player_damage_taken_total.get(player, 0) + amount
-        damage_sources[source] = damage_sources.get(source, 0) + 1
+        damage_sources[label] = damage_sources.get(label, 0) + 1
+
+        # Track conflagration events
+        ability_id = ev.get("abilityGameID") or (ev.get("ability") or {}).get("guid")
+        if ability_id in CONFLAG_IDS or "conflag" in ability.lower():
+            conflagrations.append({
+                "target": player,
+                "relative_time": rel_sec(ev["timestamp"]),
+                "amount": amount,
+            })
 
     # Process damage done table
     damage_done_out = {}
@@ -502,6 +534,7 @@ def build_pull_data(
         "player_damage_taken_total": player_damage_taken_total,
         "buff_events": buff_events,
         "threat_events": threat_events,
+        "conflagrations": conflagrations,
         "clutch_heals": clutch_heals[:10],
         "biggest_heals": biggest_heals[:5],
         "biggest_crits": biggest_crits[:5],
