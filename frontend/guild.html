@@ -1491,7 +1491,8 @@
       }
 
       els.attendanceContainer.innerHTML = `
-        <table>
+        <div style="overflow-x:auto; border-radius:12px; border:1px solid var(--border);">
+        <table style="min-width:${400 + weeks.length * 60}px;">
           <thead>
             <tr>
               <th data-sort-key="name" style="position:sticky;left:0;background:var(--panel);z-index:2;">Player${sortIndicator('name')}</th>
@@ -1526,6 +1527,7 @@
             }).join('')}
           </tbody>
         </table>
+        </div>
       `;
     }
 

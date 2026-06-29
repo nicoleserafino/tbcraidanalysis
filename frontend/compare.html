@@ -502,7 +502,7 @@
 
     <div class="hero">
       <h1>⚔️ Raid Log Comparison</h1>
-      <div class="subtitle">Side-by-side breakdown — green means improvement (Report 2 ahead), red means regression (Report 1 was better).</div>
+      <div class="subtitle">Side-by-side breakdown — <span style="color:#8df0b2">green</span> = newer raid improved, <span style="color:#ffb2b2">red</span> = older raid was better.</div>
       <div id="reportInfo"></div>
     </div>
 
@@ -522,13 +522,13 @@
         <thead>
           <tr>
             <th>Boss</th>
-            <th>Report 1 Time</th>
-            <th>Report 2 Time</th>
+            <th>Older Time</th>
+            <th>Newer Time</th>
             <th>Delta</th>
-            <th>Report 1 DPS</th>
-            <th>Report 2 DPS</th>
-            <th>Report 1 Pulls</th>
-            <th>Report 2 Pulls</th>
+            <th>Older DPS</th>
+            <th>Newer DPS</th>
+            <th>Older Pulls</th>
+            <th>Newer Pulls</th>
           </tr>
         </thead>
         <tbody id="bossBody"></tbody>
@@ -596,8 +596,8 @@
   <script>
     // ===== State =====
     let data = window.__COMPARE_DATA__;
-    const REPORT_1_LABEL = 'Report 1';
-    const REPORT_2_LABEL = 'Report 2';
+    const REPORT_1_LABEL = 'Older';
+    const REPORT_2_LABEL = 'Newer';
 
     const CLASS_COLORS = {
       Warrior: '#C79C6E', Paladin: '#F58CBA', Hunter: '#ABD473', Rogue: '#FFF569',
