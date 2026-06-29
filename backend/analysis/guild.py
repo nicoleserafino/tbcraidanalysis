@@ -56,12 +56,15 @@ CHEAP_ENCHANTS = {
 }
 
 # Shoulder enchants that are Honored-tier (suboptimal vs Exalted)
-# Exalted: Aldor 2983 (DPS), 2997 (Heal); Scryer 2996 (DPS), 2986 (Heal)
-# Honored: Aldor 2979 (DPS), 2980 (Heal); Scryer 2978 (DPS), 2981 (Heal)
+# Shoulder enchant IDs — Honored tier (confirmed on Dreamscythe fresh):
+# 2979 = Inscription of Faith (Aldor Honored, healing)
+# 2981 = Inscription of Discipline (Aldor Honored, caster)
+# 2978 = Inscription (Scryer Honored)
+# Exalted versions (NOT flagged): 2980, 2983, 2986, 2993, 2994, 2995, 2996, 2997
 CHEAP_SHOULDER_ENCHANTS = {
     2978: "Scryer Honored — upgrade to Exalted",
-    2979: "Aldor Honored — upgrade to Exalted",
-    2981: "Scryer Honored — upgrade to Exalted",
+    2979: "Aldor Honored (Faith) — upgrade to Exalted",
+    2981: "Aldor Honored (Discipline) — upgrade to Exalted",
 }
 
 # Cheap enchant names for display
