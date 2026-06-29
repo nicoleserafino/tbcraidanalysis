@@ -4989,14 +4989,8 @@
           });
         });
 
-        // Buff events for drums
-        safeEntries(pull.buff_events).forEach(([player, events]) => {
-          (events || []).forEach(ev => {
-            if (/Drums of/i.test(ev.spell) && ev.type === 'applybuff') {
-              playerDrumUses[player] = (playerDrumUses[player] || 0) + 1;
-            }
-          });
-        });
+        // Buff events — skip drums here (already counted from spell_casts above)
+        // buff_events tracks the TARGET receiving the buff, not the caster
 
         // Total damage done
         safeEntries(pull.damage_done).forEach(([player, spells]) => {
