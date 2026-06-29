@@ -31,6 +31,7 @@ ENCHANTABLE_SLOTS = {
     9: "Hands",
     14: "Back",
     15: "Main Hand",
+    16: "Off Hand",
 }
 
 # Cheap/suboptimal enchant IDs by slot — flagged as warnings, not missing
@@ -75,6 +76,7 @@ CHEAP_ENCHANT_NAMES = {
     2646: "25 Agility (Weapon)", 2568: "22 Intellect (Weapon)",
     2606: "ZG Shoulder", 2934: "Blasting (Gloves)",
     2463: "7 Fire Resistance (Cloak)", 256: "5 Fire Resistance (Cloak)",
+    904: "Minor Stamina", 1886: "Minor Intellect",
 }
 
 # TBC uncommon (green) gem IDs — only these should be flagged as low-quality
@@ -89,7 +91,7 @@ UNCOMMON_GEM_IDS = {
     # Flame Spessarite (orange)
     21929, 23098, 23099, 23100, 23101, 31866,
     # Deep Peridot (green)
-    23079, 23103, 23104, 23105, 23106,
+    23079, 23094, 23096, 23097, 23103, 23104, 23105, 23106,
     # Shadow Draenite (purple)
     23107, 23108, 23109, 23110, 23111,
 }
@@ -100,13 +102,14 @@ FLASK_BUFFS = {
     "Flask of Pure Death", "Flask of Blinding Light", "Flask of Supreme Power",
     "Flask of Relentless Assault", "Flask of Mighty Versatility",
     "Flask of Fortification", "Flask of the Titans",
+    "Supreme Power", "Greater Versatility",  # alternate buff names
     "Unstable Flask of the Bandit", "Unstable Flask of the Elder",
     "Unstable Flask of the Beast", "Unstable Flask of the Physician",
     "Unstable Flask of the Soldier", "Unstable Flask of the Sorcerer",
 }
 
 BATTLE_ELIXIRS = {
-    "Elixir of Major Agility", "Elixir of Major Firepower",
+    "Elixir of Major Agility", "Elixir of Major Firepower", "Major Firepower",
     "Elixir of Major Shadow Power", "Major Shadow Power",
     "Elixir of Healing Power", "Healing Power",
     "Elixir of Major Mageblood",

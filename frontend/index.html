@@ -4983,7 +4983,11 @@
             if (/Dark Rune|Demonic Rune/i.test(spell)) {
               playerDarkRuneUses[player] = (playerDarkRuneUses[player] || 0) + count;
             }
-            if (/Super Mana Potion|Destruction Potion|Haste Potion|Ironshield Potion|Super Healing Potion/i.test(spell)) {
+            if (/Super Mana Potion|Destruction Potion|Haste Potion|Ironshield Potion|Super Healing Potion|Potion of Heroes/i.test(spell)) {
+              playerPotionUses[player] = (playerPotionUses[player] || 0) + count;
+            }
+            if (/Flame Cap/i.test(spell)) {
+              // Flame Cap is a consumable DPS cooldown — count as potion-equivalent
               playerPotionUses[player] = (playerPotionUses[player] || 0) + count;
             }
           });
