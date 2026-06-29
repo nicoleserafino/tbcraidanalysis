@@ -68,7 +68,6 @@
       border: 1px solid rgba(179, 169, 255, 0.14);
       border-radius: var(--radius);
       box-shadow: var(--shadow);
-      backdrop-filter: blur(14px);
     }
 
     .hero {
@@ -100,9 +99,9 @@
       padding: 14px 18px;
       border-radius: 20px;
       border: 1px solid rgba(179, 169, 255, 0.16);
-      background: rgba(12, 17, 30, 0.76);
+      background: rgba(12, 17, 30, 0.92);
       box-shadow: 0 18px 40px rgba(0, 0, 0, 0.28);
-      backdrop-filter: blur(16px);
+      will-change: transform, opacity;
       transition: transform 0.3s ease, opacity 0.3s ease;
     }
 
@@ -562,11 +561,10 @@
     .card {
       padding: 18px;
       position: relative;
-      transition: transform 0.22s ease, border-color 0.22s ease, box-shadow 0.22s ease;
+      transition: border-color 0.22s ease, box-shadow 0.22s ease;
     }
 
     .card:hover, .summary-card:hover {
-      transform: translateY(-2px);
       border-color: rgba(232, 102, 168, 0.22);
       box-shadow: 0 24px 52px rgba(0, 0, 0, 0.34);
     }
@@ -2027,8 +2025,9 @@
       const nav = document.getElementById('appNav');
       const hoverZone = document.getElementById('navHoverZone');
       const root = document.documentElement;
-      const navHeight = nav.offsetHeight + 20; // nav height + gap
+      const navHeight = nav.offsetHeight + 20;
       let lastScroll = 0;
+      let ticking = false;
 
       function showNav() {
         nav.classList.remove('nav-hidden');
@@ -2043,14 +2042,16 @@
       root.style.setProperty('--sidebar-top', navHeight + 'px');
 
       window.addEventListener('scroll', () => {
-        const y = window.scrollY;
-        if (y > 80 && y > lastScroll) {
-          hideNav();
-        } else if (y < lastScroll) {
-          showNav();
-        }
-        if (y <= 20) showNav();
-        lastScroll = y;
+        if (ticking) return;
+        ticking = true;
+        requestAnimationFrame(() => {
+          const y = window.scrollY;
+          if (y > 80 && y > lastScroll + 5) hideNav();
+          else if (y < lastScroll - 5) showNav();
+          if (y <= 20) showNav();
+          lastScroll = y;
+          ticking = false;
+        });
       }, { passive: true });
 
       hoverZone.addEventListener('mouseenter', showNav);

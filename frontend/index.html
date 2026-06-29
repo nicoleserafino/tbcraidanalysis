@@ -599,10 +599,9 @@
       padding: 16px;
       position: relative;
       overflow: hidden;
-      transition: transform 0.15s, box-shadow 0.15s;
+      transition: box-shadow 0.15s;
     }
     .award-card:hover {
-      transform: translateY(-2px);
       box-shadow: 0 8px 24px rgba(0,0,0,0.3);
     }
     .award-card .award-title {
@@ -665,9 +664,9 @@
       padding: 14px 18px;
       border-radius: 20px;
       border: 1px solid rgba(179, 169, 255, 0.16);
-      background: rgba(12, 17, 30, 0.76);
+      background: rgba(12, 17, 30, 0.92);
       box-shadow: 0 18px 40px rgba(0, 0, 0, 0.28);
-      backdrop-filter: blur(16px);
+      will-change: transform, opacity;
       transition: transform 0.3s ease, opacity 0.3s ease;
     }
 
@@ -782,15 +781,13 @@
       background: linear-gradient(180deg, rgba(24, 31, 52, 0.94), rgba(14, 19, 33, 0.86));
       border: 1px solid rgba(179, 169, 255, 0.14);
       box-shadow: var(--shadow);
-      backdrop-filter: blur(14px);
     }
 
     .hero, .controls, .card, .summary-card, .issue-item, .issue-card, .action-item, .award-card, .stat, .metric, .list-item {
-      transition: transform 0.22s ease, border-color 0.22s ease, box-shadow 0.22s ease;
+      transition: border-color 0.22s ease, box-shadow 0.22s ease;
     }
 
     .controls:hover, .card:hover, .summary-card:hover, .award-card:hover {
-      transform: translateY(-2px);
       border-color: rgba(232, 102, 168, 0.22);
       box-shadow: 0 24px 52px rgba(0, 0, 0, 0.34);
     }
@@ -857,9 +854,9 @@
       padding: 12px;
       border-radius: 18px;
       border: 1px solid rgba(179, 169, 255, 0.14);
-      background: rgba(12, 17, 30, 0.72);
+      background: rgba(12, 17, 30, 0.92);
       box-shadow: 0 18px 40px rgba(0, 0, 0, 0.24);
-      backdrop-filter: blur(16px);
+      will-change: top;
       transition: top 0.3s ease;
     }
 
@@ -929,8 +926,7 @@
       position: sticky;
       top: 0;
       z-index: 1;
-      background: rgba(17, 22, 38, 0.94);
-      backdrop-filter: blur(16px);
+      background: rgba(17, 22, 38, 0.98);
       box-shadow: inset 0 -1px 0 rgba(143, 124, 255, 0.25);
     }
 
@@ -6325,6 +6321,7 @@
       if (!nav || !hoverZone) return;
       const root = document.documentElement;
       let lastScroll = 0;
+      let ticking = false;
 
       function showNav() {
         nav.classList.remove('nav-hidden');
@@ -6336,11 +6333,16 @@
       }
 
       window.addEventListener('scroll', () => {
-        const y = window.scrollY;
-        if (y > 80 && y > lastScroll) hideNav();
-        else if (y < lastScroll) showNav();
-        if (y <= 20) showNav();
-        lastScroll = y;
+        if (ticking) return;
+        ticking = true;
+        requestAnimationFrame(() => {
+          const y = window.scrollY;
+          if (y > 80 && y > lastScroll + 5) hideNav();
+          else if (y < lastScroll - 5) showNav();
+          if (y <= 20) showNav();
+          lastScroll = y;
+          ticking = false;
+        });
       }, { passive: true });
 
       hoverZone.addEventListener('mouseenter', showNav);
