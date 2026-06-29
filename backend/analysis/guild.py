@@ -61,7 +61,6 @@ CHEAP_ENCHANTS = {
 CHEAP_SHOULDER_ENCHANTS = {
     2978: "Scryer Honored — upgrade to Exalted",
     2979: "Aldor Honored — upgrade to Exalted",
-    2980: "Aldor Honored (+15 heal) — upgrade to Exalted (+33 heal)",
     2981: "Scryer Honored — upgrade to Exalted",
 }
 
