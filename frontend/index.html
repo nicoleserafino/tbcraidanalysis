@@ -6685,18 +6685,28 @@
     const fetchProgress = document.getElementById('fetchProgress');
     const backBtn = document.getElementById('backBtn');
 
-    // Populate guild raid dropdown (retry on cold-start timeout)
+    // Populate guild raid dropdown (fetch 2 pages of 25 for full history)
     (async function loadGuildRaids() {
       raidSelect.innerHTML = '<option value="">Loading guild raids…</option>';
       for (let attempt = 1; attempt <= 2; attempt++) {
         try {
           const controller = new AbortController();
           const timeout = setTimeout(() => controller.abort(), 45000);
-          const res = await fetch('/api/guild/reports?limit=50&page=1', { signal: controller.signal });
+          const res = await fetch('/api/guild/reports?limit=25&page=1', { signal: controller.signal });
           clearTimeout(timeout);
           if (!res.ok) throw new Error('Failed');
           const data = await res.json();
-          const reports = data.reports || [];
+          let reports = data.reports || [];
+          // Fetch page 2 if available
+          if (data.has_more) {
+            try {
+              const res2 = await fetch('/api/guild/reports?limit=25&page=2', { signal: controller.signal });
+              if (res2.ok) {
+                const data2 = await res2.json();
+                reports = reports.concat(data2.reports || []);
+              }
+            } catch (_) { /* page 2 is best-effort */ }
+          }
           const options = reports.map(r => {
             const d = new Date(r.date);
             const label = `${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} — ${r.zone} (${r.player_count} players)`;

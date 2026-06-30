@@ -198,7 +198,7 @@ _gear_audit_cache: dict[str, tuple[float, dict[str, Any]]] = {}
 @app.get("/api/guild/reports")
 async def get_guild_reports(
     page: int = Query(1, ge=1),
-    limit: int = Query(25, ge=1, le=50),
+    limit: int = Query(25, ge=1, le=25),
 ):
     """Fetch guild report list with attendance."""
     settings = get_settings()

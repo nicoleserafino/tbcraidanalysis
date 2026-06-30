@@ -170,9 +170,11 @@ async def fetch_guild_reports(
     guild_id: int, limit: int = 25, page: int = 1
 ) -> dict[str, Any]:
     """Fetch guild attendance/report list with resolved zone names."""
+    # WCL API caps limit at 25
+    api_limit = min(limit, 25)
     data = await graphql_query(GUILD_ATTENDANCE, {
         "guildID": guild_id,
-        "limit": limit,
+        "limit": api_limit,
         "page": page,
     })
     guild = data.get("guildData", {}).get("guild")
