@@ -182,19 +182,29 @@ async def fetch_guild_reports(
     attendance = guild.get("attendance", {})
     raw_reports = attendance.get("data", [])
 
-    # Resolve actual instances for each report in parallel
-    codes = [entry["code"] for entry in raw_reports]
-    instance_tasks = [_fetch_report_instances(code) for code in codes]
-    instance_results = await asyncio.gather(*instance_tasks, return_exceptions=True)
+    # Use zone name from attendance data directly (avoids 50+ extra API calls)
+    # Only resolve instances if zone name is missing or "Unknown"
+    reports_needing_instances = []
+    report_indices = []
+    for i, entry in enumerate(raw_reports):
+        zone_name = (entry.get("zone") or {}).get("name", "")
+        if not zone_name or zone_name == "Unknown":
+            reports_needing_instances.append(entry["code"])
+            report_indices.append(i)
+
+    # Only fetch instances for reports with missing zone data
+    instance_map = {}
+    if reports_needing_instances:
+        instance_tasks = [_fetch_report_instances(code) for code in reports_needing_instances]
+        instance_results = await asyncio.gather(*instance_tasks, return_exceptions=True)
+        for idx, instances in zip(report_indices, instance_results):
+            if not isinstance(instances, Exception) and instances:
+                instance_map[idx] = " / ".join(sorted(instances))
 
     reports = []
-    for entry, instances in zip(raw_reports, instance_results):
+    for i, entry in enumerate(raw_reports):
         players = entry.get("players", [])
-        # Determine zone from actual encounters
-        if isinstance(instances, Exception) or not instances:
-            zone = (entry.get("zone") or {}).get("name", "Unknown")
-        else:
-            zone = " / ".join(sorted(instances))
+        zone = instance_map.get(i) or (entry.get("zone") or {}).get("name", "Unknown")
 
         reports.append({
             "code": entry["code"],

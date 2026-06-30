@@ -1173,11 +1173,11 @@
     <div class="card" style="max-width:600px;margin:0 auto;padding:1.5rem;">
       <div style="margin-bottom:1rem;">
         <label style="display:block;font-weight:600;margin-bottom:0.3rem;">Select a Guild Raid</label>
-        <select id="raidSelect" style="width:100%;font-size:0.95rem;margin-bottom:0.6rem;">
+        <select id="raidSelect" style="width:100%;font-size:0.95rem;margin-bottom:0.6rem;padding:0.6rem 0.9rem;">
           <option value="">Loading guild raids…</option>
         </select>
         <label for="logUrlInput" style="display:block;font-weight:600;margin-bottom:0.3rem;margin-top:0.8rem;font-size:0.85rem;color:var(--muted);">Or paste a custom URL</label>
-        <input id="logUrlInput" type="text" placeholder="https://fresh.warcraftlogs.com/reports/ABC123..." style="width:100%;font-size:0.95rem;">
+        <input id="logUrlInput" type="text" placeholder="https://fresh.warcraftlogs.com/reports/ABC123..." style="width:100%;font-size:0.95rem;padding:0.6rem 0.9rem;">
       </div>
       <button id="fetchBtn" class="button primary" style="padding:0.75rem 1.5rem;font-weight:600;cursor:pointer;font-size:0.95rem;">Analyze Report</button>
       <div id="fetchStatus" style="margin-top:1rem;font-size:0.9rem;color:#aaa;"></div>
@@ -6688,7 +6688,10 @@
     // Populate guild raid dropdown
     (async function loadGuildRaids() {
       try {
-        const res = await fetch('/api/guild/reports?limit=50&page=1');
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 15000);
+        const res = await fetch('/api/guild/reports?limit=50&page=1', { signal: controller.signal });
+        clearTimeout(timeout);
         if (!res.ok) throw new Error('Failed');
         const data = await res.json();
         const reports = data.reports || [];
