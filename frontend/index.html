@@ -1985,8 +1985,7 @@
       if (!pull) return [];
       const issues = [];
       const relevantInterrupts = (pull.interrupts || []).filter(entry => /Karathress|Tidalvess|Caribdis|Sharkkis/i.test(entry.target || ''));
-      const spitfireTotemDeaths = (pull.creature_deaths || []).filter(death => /Spitfire Totem/i.test(death.name || ''));
-      const spitfireHits = totalMechanicHits(pull, /Spitfire Totem|Fireball/i);
+      const spitfireHits = totalMechanicHits(pull, /Spitfire Totem/i);
       const boltTankDeaths = (pull.deaths || []).filter(death => getPlayerRole(death.player) === 'Tank' && /Cataclysmic Bolt/i.test(topDamageLabel(pull, death.player)));
 
       if (pull.duration_sec > 90 && relevantInterrupts.length === 0) {
@@ -1996,10 +1995,10 @@
           severity: 'critical'
         });
       }
-      if (spitfireHits > 0 || (pull.duration_sec > 60 && spitfireTotemDeaths.length === 0)) {
+      if (spitfireHits > 0) {
         issues.push({
-          title: 'Spitfire Totem is living too long',
-          body: `${spitfireHits} hit(s) were attributed to Spitfire Totem sources and only ${spitfireTotemDeaths.length} totem death(s) were logged. Totems must be called and deleted instantly.`,
+          title: 'Spitfire Totem dealing damage',
+          body: `${spitfireHits} hit(s) from Spitfire Totem sources. Totems should be killed instantly on spawn to minimize raid damage.`,
           severity: spitfireHits > 6 ? 'critical' : 'warning'
         });
       }
@@ -4832,11 +4831,10 @@
         if (chaosDeaths.length > 0) actionItems.push({ severity: 'critical', priority: 3, title: 'Protect the demon tank', description: `${chaosDeaths.length} death(s) were driven by Chaos Blast.`, who: 'Warlock tank + healer pair', fix: 'Give the Warlock a dedicated healer, keep threat clean on demon form swaps, and plan personals for each Chaos Blast burst.' });
       } else if (bossKey === BOSS_KEYS.KARATHRESS) {
         const councilInterrupts = pulls.reduce((sum, pull) => sum + (pull.interrupts || []).filter(entry => /Karathress|Tidalvess|Caribdis|Sharkkis/i.test(entry.target || '')).length, 0);
-        const spitfireHits = pulls.reduce((sum, pull) => sum + totalMechanicHits(pull, /Spitfire Totem|Fireball/i), 0);
-        const spitfireDeaths = pulls.reduce((sum, pull) => sum + (pull.creature_deaths || []).filter(entry => /Spitfire Totem/i.test(entry.name || '')).length, 0);
+        const spitfireHits = pulls.reduce((sum, pull) => sum + totalMechanicHits(pull, /Spitfire Totem/i), 0);
         const boltDeaths = aggregateDeathsBy(death => getPlayerRole(death.player) === 'Tank' && /Cataclysmic Bolt/i.test(death.topDamage || ''));
         if (councilInterrupts < pulls.length) actionItems.push({ severity: 'critical', priority: 1, title: 'Lock in a Healing Wave interrupt rotation', description: `${councilInterrupts} council interrupt(s) across ${pulls.length} pulls is too low for Karathress.`, who: `Assign: ${interruptCapable.slice(0, 3).map(player => player.name + ' (' + player.class + ')').join(', ') || 'your best kickers'}`, fix: 'Assign a dedicated order on the shaman add / council heals and call every interrupt on voice.' });
-        if (spitfireHits > 0 || spitfireDeaths === 0) actionItems.push({ severity: 'warning', priority: 2, title: 'Kill Spitfire Totem on spawn', description: `${spitfireHits} totem-related hit(s) landed and only ${spitfireDeaths} totem death(s) were logged.`, who: 'Ranged DPS', fix: 'The moment Spitfire Totem spawns, swap and delete it before resuming the council target.' });
+        if (spitfireHits > 0) actionItems.push({ severity: 'warning', priority: 2, title: 'Kill Spitfire Totem on spawn', description: `${spitfireHits} Spitfire Totem hit(s) landed across ${pulls.length} pull(s). Each hit means the totem survived too long.`, who: 'Ranged DPS', fix: 'The moment Spitfire Totem spawns, swap and delete it before resuming the council target.' });
         if (boltDeaths.length > 0) actionItems.push({ severity: 'critical', priority: 3, title: 'Keep the Karathress tank above 50%', description: `${boltDeaths.length} tank death(s) were led by Cataclysmic Bolt.`, who: 'Karathress tank + assigned healers', fix: 'The Karathress tank should never dip into bolt kill range. Pre-hot, pre-cast, and use externals before each bolt cycle.' });
       } else if (bossKey === BOSS_KEYS.MOROGRIM) {
         const tidalData = aggregateMechanic(/Tidal Wave/i, entry => entry.role !== 'Tank');

@@ -481,13 +481,13 @@ def build_pull_data(
         ability = spell_name(ev, ability_names)
         amount = ev.get("amount", 0) + ev.get("absorbed", 0)
 
-        # Build label: include source NPC name when source is a boss/NPC (not player or pet)
+        # Build label: include source name when source is not a player
+        # This covers boss NPCs and boss pets (e.g., Spitfire Totem)
         source_id = ev.get("sourceID")
         source_npc = ""
         if source_id and source_id not in players_by_id:
             source_actor = actors_by_id.get(source_id, {})
-            if source_actor.get("type") not in ("Pet",):
-                source_npc = source_actor.get("name", "")
+            source_npc = source_actor.get("name", "")
         if source_npc and source_npc.lower() != ability.lower():
             label = f"{ability} ({source_npc})"
         else:
