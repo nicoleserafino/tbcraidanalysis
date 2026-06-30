@@ -430,24 +430,36 @@ def build_pull_data(
         "Shadow Bolt Volley", "Fear", "Bellowing Roar",
     }
     enemy_casts_completed = {}  # {spell_name: count}
+    cancelled_casts = {}  # {player: count} — begincast without matching cast
+    begincast_pending = {}  # {(sourceID, spell): timestamp}
     for ev in casts:
+        source_id = ev.get("sourceID")
+        spell = spell_name(ev, ability_names)
+        if ev.get("type") == "begincast" and source_id in players_by_id:
+            begincast_pending[(source_id, spell)] = ev["timestamp"]
+            continue
         if ev.get("type") != "cast":
             continue
-        source_id = ev.get("sourceID")
         if source_id in players_by_id:
             player = actor_name(source_id, actors_by_id)
-            spell = spell_name(ev, ability_names)
+            # Clear pending begincast (this cast completed)
+            begincast_pending.pop((source_id, spell), None)
             casts_by_player[player] = casts_by_player.get(player, 0) + 1
             cast_timeline.setdefault(player, []).append(rel_sec(ev["timestamp"]))
             spell_casts.setdefault(player, {})
             spell_casts[player][spell] = spell_casts[player].get(spell, 0) + 1
         else:
             # NPC cast that completed — track if it's an interruptible spell
-            spell = spell_name(ev, ability_names)
             if spell in INTERRUPTIBLE_SPELLS:
                 source_name = actor_name(source_id, actors_by_id) if source_id else "Unknown"
                 key = f"{spell} ({source_name})"
                 enemy_casts_completed[key] = enemy_casts_completed.get(key, 0) + 1
+
+    # Count cancelled casts: begincast events that were never followed by a cast
+    for (src_id, _spell), _ts in begincast_pending.items():
+        if src_id in players_by_id:
+            player = actor_name(src_id, actors_by_id)
+            cancelled_casts[player] = cancelled_casts.get(player, 0) + 1
 
     # Process damage taken — label includes source NPC name for mechanic identification
     player_damage_taken = {}
@@ -563,6 +575,7 @@ def build_pull_data(
         "casts_by_player": casts_by_player,
         "cast_timeline": cast_timeline,
         "spell_casts": spell_casts,
+        "cancelled_casts": cancelled_casts,
         "damage_done": damage_done_out,
         "damage_sources": damage_sources,
         "player_damage_taken": player_damage_taken,

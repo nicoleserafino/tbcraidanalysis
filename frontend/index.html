@@ -3835,6 +3835,8 @@
         </section>
 
         ${renderPositionMapCard(player)}
+
+        ${renderPlayerPerformanceMetrics(player)}
       `;
     }
 
@@ -4137,6 +4139,176 @@
         <line x1="${scrubX}" y1="451" x2="${scrubX}" y2="475" stroke="#57a6ff" stroke-width="2"></line>
         <circle cx="${scrubX}" cy="463" r="5" fill="#57a6ff" stroke="#fff" stroke-width="1.5"><title>Current: ${state.mapTime.toFixed(0)}s — ${escapeHtml(getMapPhaseAtTime(state.mapTime))}</title></circle>
       `;
+    }
+
+    // ── WoWAnalyzer-style Per-Player Performance Metrics ────────────────────
+    function renderPlayerPerformanceMetrics(player) {
+      const pull = getPull();
+      if (!pull || !player) return '';
+      const duration = pull.duration_sec || 1;
+      const role = getPlayerRole(player);
+      const playerClass = (getAllPlayers()[player] || {}).class || 'Unknown';
+
+      let html = '';
+
+      // 1. Active Time / Downtime Analysis
+      const timeline = pull.cast_timeline?.[player] || [];
+      const totalCasts = pull.casts_by_player?.[player] || 0;
+      const cancelled = pull.cancelled_casts?.[player] || 0;
+      let activeTime = 0;
+      if (timeline.length > 1) {
+        // Estimate active time: sum gaps between casts, cap each gap at GCD (1.5s)
+        const sorted = [...timeline].sort((a, b) => a - b);
+        const GCD = 1.5;
+        for (let i = 1; i < sorted.length; i++) {
+          const gap = sorted[i] - sorted[i - 1];
+          activeTime += Math.min(gap, GCD + 0.5); // 2s tolerance for latency
+        }
+        activeTime += GCD; // account for first cast
+      }
+      const activePct = Math.min(100, Math.round((activeTime / duration) * 100));
+      const downtimePct = 100 - activePct;
+      const activeColor = activePct >= 85 ? 'var(--kill)' : activePct >= 70 ? 'var(--warning-color, #f0ad4e)' : 'var(--wipe)';
+
+      html += `
+        <section class="card">
+          <h3>Performance Metrics</h3>
+          <div class="grid grid-3" style="gap:16px;margin-bottom:16px;">
+            <div class="mini-stat">
+              <div class="mini-stat-value" style="color:${activeColor}">${activePct}%</div>
+              <div class="mini-stat-label">Active Time</div>
+            </div>
+            <div class="mini-stat">
+              <div class="mini-stat-value">${totalCasts}</div>
+              <div class="mini-stat-label">Casts</div>
+            </div>
+            <div class="mini-stat">
+              <div class="mini-stat-value" style="color:${cancelled > 3 ? 'var(--wipe)' : cancelled > 0 ? 'var(--warning-color, #f0ad4e)' : 'var(--kill)'}">${cancelled}</div>
+              <div class="mini-stat-label">Cancelled</div>
+            </div>
+          </div>
+          <div style="height:6px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden;margin-bottom:8px;">
+            <div style="height:100%;width:${activePct}%;background:${activeColor};border-radius:3px;"></div>
+          </div>
+          <p class="mini-note">${downtimePct > 20 ? `⚠️ ${downtimePct}% downtime — ${role === 'Healer' ? 'consider weaving DPS spells during low-damage periods' : 'Always Be Casting — every GCD should be used'}` : `✓ Good activity — only ${downtimePct}% idle time`}</p>
+        </section>`;
+
+      // 2. Cooldown Efficiency (role-specific)
+      const spells = pull.spell_casts?.[player] || {};
+      const COOLDOWNS = {
+        // Tanks
+        'Shield Wall': { cd: 1800, role: 'Tank' },
+        'Last Stand': { cd: 600, role: 'Tank' },
+        'Shield Block': { cd: 6, role: 'Tank' },
+        // Healers
+        'Mana Tide Totem': { cd: 300, role: 'Healer' },
+        'Innervate': { cd: 360, role: 'Healer' },
+        'Divine Illumination': { cd: 180, role: 'Healer' },
+        "Nature's Swiftness": { cd: 180, role: 'Healer' },
+        'Swiftmend': { cd: 15, role: 'Healer' },
+        'Prayer of Mending': { cd: 10, role: 'Healer' },
+        // DPS
+        'Bloodlust': { cd: 600, role: 'DPS' },
+        'Heroism': { cd: 600, role: 'DPS' },
+        'Adrenaline Rush': { cd: 300, role: 'DPS' },
+        'Blade Flurry': { cd: 120, role: 'DPS' },
+        'Cold Blood': { cd: 180, role: 'DPS' },
+        'Death Wish': { cd: 180, role: 'DPS' },
+        'Recklessness': { cd: 1800, role: 'DPS' },
+        'Rapid Fire': { cd: 300, role: 'DPS' },
+        'Bestial Wrath': { cd: 120, role: 'DPS' },
+        'Arcane Power': { cd: 180, role: 'DPS' },
+        'Icy Veins': { cd: 180, role: 'DPS' },
+        'Combustion': { cd: 180, role: 'DPS' },
+        'Metamorphosis': { cd: 180, role: 'DPS' },
+        'Shadowfiend': { cd: 300, role: 'Healer' },
+      };
+
+      const cdRows = Object.entries(COOLDOWNS)
+        .filter(([spell]) => spells[spell] > 0)
+        .map(([spell, info]) => {
+          const used = spells[spell] || 0;
+          const maxPossible = Math.max(1, Math.floor(duration / info.cd) + 1);
+          const efficiency = Math.min(100, Math.round((used / maxPossible) * 100));
+          return { spell, used, maxPossible, efficiency };
+        })
+        .sort((a, b) => a.efficiency - b.efficiency);
+
+      if (cdRows.length > 0) {
+        html += `
+          <section class="card">
+            <h3>Cooldown Usage</h3>
+            <p class="mini-note" style="margin-bottom:10px;">Did ${escapeHtml(player)} use their major abilities as often as possible?</p>
+            <table class="data-table compact">
+              <thead><tr><th>Ability</th><th>Used</th><th>Max Possible</th><th>Efficiency</th></tr></thead>
+              <tbody>
+                ${cdRows.map(row => `
+                  <tr>
+                    <td>${escapeHtml(row.spell)}</td>
+                    <td class="num">${row.used}</td>
+                    <td class="num">${row.maxPossible}</td>
+                    <td style="font-weight:bold;color:${row.efficiency >= 80 ? 'var(--kill)' : row.efficiency >= 50 ? 'var(--warning-color, #f0ad4e)' : 'var(--wipe)'}">${row.efficiency}%</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </section>`;
+      }
+
+      // 3. Healer-specific: Overheal Analysis + HPM
+      if (role === 'Healer') {
+        const healData = pull.heal_details?.[player] || {};
+        const spellRows = Object.entries(healData)
+          .filter(([, d]) => d.count > 0)
+          .map(([spell, d]) => {
+            const total = d.total + d.overheal;
+            const ohPct = total > 0 ? Math.round((d.overheal / total) * 100) : 0;
+            return { spell, effective: d.total, overheal: d.overheal, count: d.count, ohPct, isHot: d.is_hot };
+          })
+          .sort((a, b) => b.effective - a.effective);
+
+        const totalEffective = spellRows.reduce((s, r) => s + r.effective, 0);
+        const totalOverheal = spellRows.reduce((s, r) => s + r.overheal, 0);
+        const overallOhPct = (totalEffective + totalOverheal) > 0 ? Math.round((totalOverheal / (totalEffective + totalOverheal)) * 100) : 0;
+
+        if (spellRows.length > 0) {
+          html += `
+            <section class="card">
+              <h3>Healing Breakdown</h3>
+              <div class="grid grid-3" style="gap:16px;margin-bottom:16px;">
+                <div class="mini-stat">
+                  <div class="mini-stat-value">${(totalEffective / 1000).toFixed(0)}k</div>
+                  <div class="mini-stat-label">Effective Healing</div>
+                </div>
+                <div class="mini-stat">
+                  <div class="mini-stat-value" style="color:${overallOhPct > 40 ? 'var(--wipe)' : overallOhPct > 25 ? 'var(--warning-color, #f0ad4e)' : 'var(--kill)'}">${overallOhPct}%</div>
+                  <div class="mini-stat-label">Overheal</div>
+                </div>
+                <div class="mini-stat">
+                  <div class="mini-stat-value">${(totalEffective / Math.max(1, duration)).toFixed(0)}</div>
+                  <div class="mini-stat-label">HPS</div>
+                </div>
+              </div>
+              <table class="data-table compact">
+                <thead><tr><th>Spell</th><th>Effective</th><th>Overheal%</th><th>Casts</th><th>Avg/Cast</th></tr></thead>
+                <tbody>
+                  ${spellRows.slice(0, 10).map(row => `
+                    <tr>
+                      <td>${escapeHtml(row.spell)}${row.isHot ? ' <span class="tag">HoT</span>' : ''}</td>
+                      <td class="num">${(row.effective / 1000).toFixed(1)}k</td>
+                      <td style="color:${row.ohPct > 50 ? 'var(--wipe)' : row.ohPct > 30 ? 'var(--warning-color, #f0ad4e)' : 'var(--kill)'}">${row.ohPct}%</td>
+                      <td class="num">${row.count}</td>
+                      <td class="num">${row.count > 0 ? (row.effective / row.count / 1000).toFixed(1) + 'k' : '—'}</td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+              ${overallOhPct > 35 ? `<p class="mini-note" style="margin-top:8px;">⚠️ High overheal (${overallOhPct}%) — consider using more efficient spells or better heal targeting to avoid wasting mana.</p>` : ''}
+            </section>`;
+        }
+      }
+
+      return html;
     }
 
     function renderPositionMapCard(focusPlayer = '') {
@@ -4942,6 +5114,54 @@
       // Color function for scores
       const scoreColor = s => s >= 90 ? 'var(--kill)' : s >= 70 ? 'var(--warning-color, #f0ad4e)' : 'var(--wipe)';
 
+      // Active Time Ranking (Always Be Casting)
+      let activeTimeHtml = '';
+      const activeTimeData = [];
+      const GCD = 1.5;
+      Object.keys(allPlayers).forEach(player => {
+        let totalActive = 0;
+        let totalDuration = 0;
+        let totalCancelled = 0;
+        pulls.forEach(pull => {
+          const timeline = pull.cast_timeline?.[player] || [];
+          const dur = pull.duration_sec || 1;
+          totalDuration += dur;
+          totalCancelled += (pull.cancelled_casts?.[player] || 0);
+          if (timeline.length > 1) {
+            const sorted = [...timeline].sort((a, b) => a - b);
+            let active = GCD;
+            for (let i = 1; i < sorted.length; i++) {
+              active += Math.min(sorted[i] - sorted[i - 1], GCD + 0.5);
+            }
+            totalActive += active;
+          }
+        });
+        const pct = totalDuration > 0 ? Math.min(100, Math.round((totalActive / totalDuration) * 100)) : 0;
+        if (pct > 0) activeTimeData.push({ player, pct, cancelled: totalCancelled, role: getPlayerRole(player) });
+      });
+      activeTimeData.sort((a, b) => b.pct - a.pct);
+      if (activeTimeData.length > 0) {
+        activeTimeHtml = `
+          <section class="card">
+            <h3>Active Time (Always Be Casting)</h3>
+            <p style="font-size:0.82rem;color:var(--muted);margin-bottom:10px;">% of fight time spent casting across ${pulls.length} pull(s). Higher = less downtime. Cancelled = casts started but not completed.</p>
+            <table class="data-table compact">
+              <thead><tr><th>Player</th><th>Role</th><th>Active%</th><th>Cancelled</th><th></th></tr></thead>
+              <tbody>
+                ${activeTimeData.map(p => `
+                  <tr>
+                    <td>${escapeHtml(p.player)}</td>
+                    <td>${p.role}</td>
+                    <td style="font-weight:bold;color:${scoreColor(p.pct >= 85 ? 90 : p.pct >= 70 ? 75 : 50)}">${p.pct}%</td>
+                    <td class="num" style="color:${p.cancelled > 5 ? 'var(--wipe)' : ''}">${p.cancelled || '—'}</td>
+                    <td><div style="width:60px;height:6px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden;"><div style="height:100%;width:${p.pct}%;background:${scoreColor(p.pct >= 85 ? 90 : p.pct >= 70 ? 75 : 50)};border-radius:3px;"></div></div></td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </section>`;
+      }
+
       return `
         <section class="card">
           <h3>Mechanic Performance Scores</h3>
@@ -4966,6 +5186,7 @@
 
         ${missedInterruptsHtml}
         ${dispelHtml ? `<section class="card">${dispelHtml}</section>` : ''}
+        ${activeTimeHtml}
       `;
     }
 
