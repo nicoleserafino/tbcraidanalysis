@@ -4822,9 +4822,150 @@
           </section>
         ` : ''}
 
+        ${renderMechanicPerformance()}
+
         ${renderAssignments()}
 
         ${renderConsumableAudit()}
+      `;
+    }
+
+    // ── Wipefest-style Mechanic Performance Analysis ─────────────────────────
+    function renderMechanicPerformance() {
+      const bossData = state.report?.bosses?.[state.boss];
+      if (!bossData) return '';
+      const pulls = bossData.pulls || [];
+      const bossKey = getBossKey();
+      const allPlayers = getAllPlayers();
+
+      // Define avoidable abilities per boss
+      const AVOIDABLE = {
+        [BOSS_KEYS.KAEL]: [/Conflagration/i, /Arcane Burst/i, /Flame Strike/i],
+        [BOSS_KEYS.HYDROSS]: [/Water Tomb/i],
+        [BOSS_KEYS.LURKER]: [/Spout/i, /Scalding Water/i],
+        [BOSS_KEYS.LEO]: [/Whirlwind/i],
+        [BOSS_KEYS.KARATHRESS]: [/Spitfire Totem/i],
+        [BOSS_KEYS.MOROGRIM]: [/Tidal Wave/i],
+        [BOSS_KEYS.VASHJ]: [/Shock Blast/i, /Toxic Spore/i, /Static Charge/i],
+        [BOSS_KEYS.ALAR]: [/Flame Quills/i, /Flame Patch/i, /Ember Blast/i],
+        [BOSS_KEYS.VOID_REAVER]: [/Arcane Orb/i],
+        [BOSS_KEYS.SOLARIAN]: [/Wrath of the Astromancer/i, /Void/i],
+      };
+      const avoidablePatterns = AVOIDABLE[bossKey] || [];
+
+      // Aggregate avoidable damage per player across all pulls
+      const playerStats = {};
+      pulls.forEach(pull => {
+        const amounts = pull.player_damage_taken_amounts || {};
+        const totals = pull.player_damage_taken_total || {};
+        Object.entries(amounts).forEach(([player, abilities]) => {
+          if (!playerStats[player]) playerStats[player] = { avoidable: 0, total: 0, hits: 0 };
+          playerStats[player].total += (totals[player] || 0);
+          Object.entries(abilities).forEach(([label, dmg]) => {
+            if (avoidablePatterns.some(p => p.test(label))) {
+              playerStats[player].avoidable += dmg;
+              playerStats[player].hits += (pull.player_damage_taken?.[player]?.[label] || 0);
+            }
+          });
+        });
+      });
+
+      // Calculate mechanic scores (100 = perfect, 0 = terrible)
+      const scored = Object.entries(playerStats)
+        .filter(([, s]) => s.total > 0)
+        .map(([player, s]) => {
+          const avoidRatio = s.total > 0 ? s.avoidable / s.total : 0;
+          // Score: 100 means 0% avoidable, 0 means 100% avoidable
+          const score = Math.max(0, Math.round((1 - avoidRatio * 5) * 100));
+          return { player, score: Math.min(100, score), avoidable: s.avoidable, total: s.total, hits: s.hits, role: getPlayerRole(player) };
+        })
+        .sort((a, b) => b.score - a.score);
+
+      if (!scored.length || !avoidablePatterns.length) return '';
+
+      // Missed interrupts analysis
+      let missedInterruptsHtml = '';
+      const enemyCasts = {};
+      pulls.forEach(pull => {
+        Object.entries(pull.enemy_casts_completed || {}).forEach(([key, count]) => {
+          enemyCasts[key] = (enemyCasts[key] || 0) + count;
+        });
+      });
+      const totalInterrupts = pulls.reduce((sum, pull) => sum + (pull.interrupts || []).length, 0);
+      const missedEntries = Object.entries(enemyCasts).filter(([, count]) => count > 0).sort((a, b) => b[1] - a[1]);
+      if (missedEntries.length > 0) {
+        const totalMissed = missedEntries.reduce((sum, [, c]) => sum + c, 0);
+        missedInterruptsHtml = `
+          <section class="card">
+            <h3>Interrupt Analysis</h3>
+            <p style="font-size:0.82rem;color:var(--muted);margin-bottom:10px;">
+              <strong>${totalInterrupts}</strong> successful interrupt(s) | <strong>${totalMissed}</strong> interruptible cast(s) completed across ${pulls.length} pull(s)
+            </p>
+            <table class="data-table compact">
+              <thead><tr><th>Spell (Caster)</th><th>Completed</th><th>Impact</th></tr></thead>
+              <tbody>
+                ${missedEntries.slice(0, 8).map(([key, count]) => {
+                  let impact = 'Low';
+                  if (/Healing Wave|Greater Heal|Heal\b/i.test(key)) impact = 'HIGH — heals boss/adds';
+                  else if (/Pyroblast/i.test(key)) impact = 'CRITICAL — can one-shot tank';
+                  else if (/Fireball.*Kael/i.test(key)) impact = 'HIGH — heavy raid damage';
+                  else if (/Shadow Bolt Volley|Fear|Bellowing Roar/i.test(key)) impact = 'Medium — raid disruption';
+                  return `<tr><td>${escapeHtml(key)}</td><td class="num">${count}</td><td><span class="${/CRITICAL|HIGH/i.test(impact) ? 'severity-badge critical' : /Medium/i.test(impact) ? 'severity-badge warning' : ''}">${impact}</span></td></tr>`;
+                }).join('')}
+              </tbody>
+            </table>
+          </section>`;
+      }
+
+      // Dispel analysis
+      let dispelHtml = '';
+      const dispelsByPlayer = {};
+      pulls.forEach(pull => {
+        (pull.dispels || []).forEach(d => {
+          if (d.source) {
+            dispelsByPlayer[d.source] = (dispelsByPlayer[d.source] || 0) + 1;
+          }
+        });
+      });
+      const dispelRanking = Object.entries(dispelsByPlayer).sort((a, b) => b[1] - a[1]);
+      if (dispelRanking.length > 0) {
+        const totalDispels = dispelRanking.reduce((sum, [, c]) => sum + c, 0);
+        dispelHtml = `
+          <div style="margin-top:12px;">
+            <h4 style="font-size:0.85rem;color:var(--muted);">Dispel Contribution (${totalDispels} total)</h4>
+            <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;">
+              ${dispelRanking.slice(0, 8).map(([name, count]) => `<span class="tag">${escapeHtml(name)}: ${count}</span>`).join('')}
+            </div>
+          </div>`;
+      }
+
+      // Color function for scores
+      const scoreColor = s => s >= 90 ? 'var(--kill)' : s >= 70 ? 'var(--warning-color, #f0ad4e)' : 'var(--wipe)';
+
+      return `
+        <section class="card">
+          <h3>Mechanic Performance Scores</h3>
+          <p style="font-size:0.82rem;color:var(--muted);margin-bottom:10px;">
+            Based on avoidable damage taken across ${pulls.length} pull(s). Score 100 = no avoidable damage, lower = more avoidable hits taken.
+          </p>
+          <table class="data-table compact">
+            <thead><tr><th>Player</th><th>Role</th><th>Score</th><th>Avoidable Dmg</th><th>Hits</th></tr></thead>
+            <tbody>
+              ${scored.map(p => `
+                <tr>
+                  <td>${escapeHtml(p.player)}</td>
+                  <td>${p.role}</td>
+                  <td style="font-weight:bold;color:${scoreColor(p.score)}">${p.score}</td>
+                  <td class="num">${p.avoidable > 0 ? p.avoidable.toLocaleString() : '—'}</td>
+                  <td class="num">${p.hits || '—'}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </section>
+
+        ${missedInterruptsHtml}
+        ${dispelHtml ? `<section class="card">${dispelHtml}</section>` : ''}
       `;
     }
 

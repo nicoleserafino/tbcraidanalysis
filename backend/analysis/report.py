@@ -303,21 +303,30 @@ def build_pull_data(
             continue
         source_id = ev.get("sourceID")
         if source_id in players_by_id:
+            # extraAbilityGameID is the spell that was interrupted
+            interrupted_spell_id = ev.get("extraAbilityGameID")
+            interrupted_name = ability_names.get(interrupted_spell_id, "") if interrupted_spell_id else ""
+            target_id = ev.get("targetID")
             interrupts_out.append({
                 "source": actor_name(source_id, actors_by_id),
                 "ability": spell_name(ev, ability_names),
+                "target": actor_name(target_id, actors_by_id) if target_id else "",
+                "interrupted_spell": interrupted_name,
                 "relative_time": rel_sec(ev["timestamp"]),
             })
 
-    # Process dispels
+    # Process dispels — include target and debuff name for reaction time analysis
     dispels_out = []
     for ev in dispels:
         if ev.get("type") != "dispel":
             continue
         source_id = ev.get("sourceID")
         if source_id in players_by_id:
+            target_id = ev.get("targetID")
             dispels_out.append({
                 "source": actor_name(source_id, actors_by_id),
+                "target": actor_name(target_id, actors_by_id) if target_id in players_by_id else "",
+                "spell": spell_name(ev, ability_names),
                 "relative_time": rel_sec(ev["timestamp"]),
             })
 
@@ -406,22 +415,44 @@ def build_pull_data(
     casts_by_player = {}
     cast_timeline = {}
     spell_casts = {}
+    # Track NPC casts that completed (for missed interrupt detection)
+    # Key spells that SHOULD be interrupted per boss
+    INTERRUPTIBLE_SPELLS = {
+        # Karathress council
+        "Healing Wave", "Greater Healing Wave",
+        # Kael'thas P4
+        "Fireball", "Pyroblast",
+        # Kael P2 weapons
+        "Heal",
+        # Solarian adds
+        "Greater Heal",
+        # General
+        "Shadow Bolt Volley", "Fear", "Bellowing Roar",
+    }
+    enemy_casts_completed = {}  # {spell_name: count}
     for ev in casts:
         if ev.get("type") != "cast":
             continue
         source_id = ev.get("sourceID")
-        if source_id not in players_by_id:
-            continue
-        player = actor_name(source_id, actors_by_id)
-        spell = spell_name(ev, ability_names)
-        casts_by_player[player] = casts_by_player.get(player, 0) + 1
-        cast_timeline.setdefault(player, []).append(rel_sec(ev["timestamp"]))
-        spell_casts.setdefault(player, {})
-        spell_casts[player][spell] = spell_casts[player].get(spell, 0) + 1
+        if source_id in players_by_id:
+            player = actor_name(source_id, actors_by_id)
+            spell = spell_name(ev, ability_names)
+            casts_by_player[player] = casts_by_player.get(player, 0) + 1
+            cast_timeline.setdefault(player, []).append(rel_sec(ev["timestamp"]))
+            spell_casts.setdefault(player, {})
+            spell_casts[player][spell] = spell_casts[player].get(spell, 0) + 1
+        else:
+            # NPC cast that completed — track if it's an interruptible spell
+            spell = spell_name(ev, ability_names)
+            if spell in INTERRUPTIBLE_SPELLS:
+                source_name = actor_name(source_id, actors_by_id) if source_id else "Unknown"
+                key = f"{spell} ({source_name})"
+                enemy_casts_completed[key] = enemy_casts_completed.get(key, 0) + 1
 
     # Process damage taken — label includes source NPC name for mechanic identification
     player_damage_taken = {}
     player_damage_taken_total = {}
+    player_damage_taken_amounts = {}  # per-ability damage amounts (not just counts)
     damage_sources = {}
     conflagrations = []
 
@@ -452,6 +483,8 @@ def build_pull_data(
 
         player_damage_taken.setdefault(player, {})
         player_damage_taken[player][label] = player_damage_taken[player].get(label, 0) + 1
+        player_damage_taken_amounts.setdefault(player, {})
+        player_damage_taken_amounts[player][label] = player_damage_taken_amounts[player].get(label, 0) + amount
         player_damage_taken_total[player] = player_damage_taken_total.get(player, 0) + amount
         damage_sources[label] = damage_sources.get(label, 0) + 1
 
@@ -533,7 +566,9 @@ def build_pull_data(
         "damage_done": damage_done_out,
         "damage_sources": damage_sources,
         "player_damage_taken": player_damage_taken,
+        "player_damage_taken_amounts": player_damage_taken_amounts,
         "player_damage_taken_total": player_damage_taken_total,
+        "enemy_casts_completed": enemy_casts_completed,
         "buff_events": buff_events,
         "threat_events": threat_events,
         "conflagrations": conflagrations,
