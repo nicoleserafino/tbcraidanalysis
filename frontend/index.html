@@ -1642,6 +1642,22 @@
         if (ratio < 0.8) return 'P2';
         return 'P3';
       }
+      if (bossKey === BOSS_KEYS.ALAR) {
+        // P1 ends when Al'ar "dies" on the platforms and is reborn on the ground
+        const alarDeath = (pull.creature_deaths || []).find(e => /Al.ar/i.test(e.name));
+        const p2Start = alarDeath ? alarDeath.relative_time : (pull.duration_sec || 1) * 0.4;
+        return time < p2Start ? 'P1 — Platforms' : 'P2 — Ground';
+      }
+      if (bossKey === BOSS_KEYS.VOID_REAVER) {
+        return 'Single phase';
+      }
+      if (bossKey === BOSS_KEYS.SOLARIAN) {
+        const ratio = time / Math.max(1, pull.duration_sec || 1);
+        if (ratio < 0.2) return 'P1 — Normal';
+        if (ratio > 0.85) return 'P3 — Voidwalker';
+        // Solarian splits every ~50s; approximate
+        return 'P1/Split cycle';
+      }
       const ratio = time / Math.max(1, pull.duration_sec || 1);
       if (ratio < 0.33) return 'Early';
       if (ratio < 0.66) return 'Mid';
@@ -1828,6 +1844,9 @@
         else if (bk === BOSS_KEYS.LEO) dispelNote = 'Whirlwind applies a bleed (Physical — not dispellable). Chaos Blast debuff is not dispellable. Insidious Whisper/Inner Demon is also not dispellable — player must kill their demon.';
         else if (bk === BOSS_KEYS.MOROGRIM) dispelNote = 'Watery Grave is not dispellable. Murloc Pierce Armor is a Physical debuff (not dispellable). There are limited dispel targets on this fight.';
         else if (bk === BOSS_KEYS.VASHJ) dispelNote = 'Static Charge is NOT dispellable — the only counter is spreading 12+ yards apart. Entangle (root in P2/P3) is also NOT dispellable — affected players must be healed through the DoT. Focus on avoiding Shock Blast and passing Tainted Cores quickly instead.';
+        else if (bk === BOSS_KEYS.ALAR) dispelNote = 'Flame Buffet is a stacking fire debuff but is not worth dispelling — it reapplies constantly if no tank is in melee range. Melt Armor (80% armor reduction on tank) is NOT dispellable — tank swap is the only counter. Focus on positioning, not dispels.';
+        else if (bk === BOSS_KEYS.VOID_REAVER) dispelNote = 'Arcane Orb applies a 6-second silence on hit — this is NOT dispellable (it is an Arcane debuff without a dispel type). The only counter is not getting hit by orbs. There are no dispellable mechanics on this fight.';
+        else if (bk === BOSS_KEYS.SOLARIAN) dispelNote = 'Wrath of the Astromancer is NOT dispellable — the player must run out before it explodes. Blinding Light is instant AoE damage (no debuff to dispel). In P3, Void Bolt stacking damage is not dispellable. Focus on positioning for Wrath, not dispels.';
         else dispelNote = 'Check which debuffs are landing — not all boss debuffs in TBC are dispellable. Verify on Wowhead before assigning dispel duties.';
         issues.push({
           title: 'No dispels used',
@@ -2207,6 +2226,28 @@
         if (shockHits > 0 && role !== 'Healer') findings.push({ title: `Shock Blast hit you ${shockHits} time(s)`, body: 'Shock Blast is a melee-range AoE stun + heavy damage. It has a cast time — when you see it, run out immediately. This is fully avoidable for melee. Ranged/healers should never be in range.', severity: 'critical' });
         if (sporeHits > 0) findings.push({ title: `Toxic Spore clipped you ${sporeHits} time(s)`, body: 'Spore Bats leave poison clouds on death. The clouds are avoidable — watch where bats are being kited/killed and stay out of those areas. Assign specific ranged DPS to kill bats away from the raid in P3.', severity: 'warning' });
       }
+      if (bossKey === BOSS_KEYS.ALAR) {
+        const quillHits = hitCount(/Flame Quills/i);
+        const patchHits = hitCount(/Flame Patch/i);
+        const buffetHits = hitCount(/Flame Buffet/i);
+        const emberHits = hitCount(/Ember Blast/i);
+        if (quillHits > 0) findings.push({ title: `Hit by Flame Quills ${quillHits} time(s)`, body: 'Flame Quills hits everyone on the upper platforms when Al\'ar flies to the center. Drop to the lower level immediately when the cast starts — this is fully avoidable and deals massive fire damage.', severity: 'critical' });
+        if (patchHits > 2) findings.push({ title: `Flame Patch ticks: ${patchHits}`, body: 'Flame Patches appear after Dive Bomb / Meteor in P2. Move away from the impact zone immediately — standing in fire is preventable damage.', severity: 'warning' });
+        if (role === 'Tank' && buffetHits > 5) findings.push({ title: `Flame Buffet stacks: ${buffetHits} hit(s)`, body: 'Flame Buffet stacks fire damage increase and is cast when no tank is in melee range. If you see high stacks, you may have been late reaching a platform after Al\'ar moved.', severity: 'warning' });
+        if (emberHits > 0) findings.push({ title: `Ember Blast hit you ${emberHits} time(s)`, body: 'Phoenix adds explode on death dealing AoE fire damage. Kill them and step back immediately. This is avoidable positioning damage.', severity: 'warning' });
+      }
+      if (bossKey === BOSS_KEYS.VOID_REAVER) {
+        const orbHits = hitCount(/Arcane Orb/i);
+        const poundHits = hitCount(/Pounding/i);
+        if (orbHits > 0 && role !== 'Tank') findings.push({ title: `Hit by Arcane Orb ${orbHits} time(s)`, body: 'Arcane Orbs deal massive AoE damage and silence for 6 seconds. They target ranged players — spread 6+ yards apart and keep moving. If you are a healer, getting silenced means your tank assignments go unhealed for 6s. This is fully avoidable.', severity: orbHits > 2 ? 'critical' : 'warning' });
+        if (poundHits > 5 && role !== 'Tank') findings.push({ title: `Pounding hit you ${poundHits} time(s)`, body: 'Pounding is short-range AoE from Void Reaver. If you are ranged, stay at max range. If you are melee, this is expected — ensure healers pre-HoT before each Pounding.', severity: 'info' });
+      }
+      if (bossKey === BOSS_KEYS.SOLARIAN) {
+        const wrathHits = hitCount(/Wrath of the Astromancer/i);
+        const voidHits = hitCount(/Void/i);
+        if (wrathHits > 0) findings.push({ title: `Wrath of the Astromancer hit you ${wrathHits} time(s)`, body: 'Wrath places a bomb debuff that explodes after 6 seconds dealing massive AoE damage. If YOU are the target, run 20+ yards from the raid immediately. If you were hit by someone ELSE\'s Wrath, the raid was too stacked — maintain 5+ yard spread at all times. Wrath is NOT dispellable.', severity: 'critical' });
+        if (voidHits > 0) findings.push({ title: `Void Zone ticks: ${voidHits}`, body: 'In P3 (Voidwalker form), black circles appear on the ground and deal heavy ticking damage. Move out instantly — every extra tick is avoidable damage. Watch foot positioning during the burn phase.', severity: 'warning' });
+      }
     }
 
     function individualAnalysis(player) {
@@ -2284,6 +2325,9 @@
               [BOSS_KEYS.KARATHRESS]: ['Spitfire Totem'],
               [BOSS_KEYS.MOROGRIM]: ['Tidal Wave'],
               [BOSS_KEYS.VASHJ]: ['Shock Blast', 'Toxic Spore'],
+              [BOSS_KEYS.ALAR]: ['Flame Quills', 'Flame Patch', 'Ember Blast'],
+              [BOSS_KEYS.VOID_REAVER]: ['Arcane Orb'],
+              [BOSS_KEYS.SOLARIAN]: ['Wrath of the Astromancer', 'Void Zone'],
             };
             const avoidableSources = avoidableByBoss[bossKey] || ['Conflagration', 'Remote Toy', 'Arcane Burst', 'Flame Strike'];
             const hitByAvoidable = dmgTaken.find(([label]) => avoidableSources.some(s => label.includes(s)));
@@ -4222,6 +4266,23 @@
         if (!pull.kill && pull.duration_sec > 360) pushEvent(cascadeStart - 8, 'trigger', 'Estimated P2 ran long, so add pressure snowballed', 'warning');
       }
 
+      if (bossKey === BOSS_KEYS.ALAR) {
+        const quillDeaths = deaths.filter(death => death.relative_time >= windowStart && countMechanicHitsForPlayer(pull, death.player, /Flame Quills/i) > 0);
+        const meltDeaths = deaths.filter(death => death.relative_time >= windowStart && getPlayerRole(death.player) === 'Tank' && countMechanicHitsForPlayer(pull, death.player, /Melt Armor/i) > 0);
+        if (quillDeaths.length) pushEvent(quillDeaths[0].relative_time - 1, 'trigger', 'Players caught on platforms during Flame Quills', 'critical');
+        if (meltDeaths.length) pushEvent(meltDeaths[0].relative_time - 1, 'escalation', 'Tank dies under Melt Armor — no swap happened', 'critical');
+      }
+
+      if (bossKey === BOSS_KEYS.VOID_REAVER) {
+        const orbDeaths = deaths.filter(death => death.relative_time >= windowStart && countMechanicHitsForPlayer(pull, death.player, /Arcane Orb/i) > 0);
+        if (orbDeaths.length) pushEvent(orbDeaths[0].relative_time - 1, 'trigger', 'Arcane Orb hits stacked players — splash + 6s silence', 'critical');
+      }
+
+      if (bossKey === BOSS_KEYS.SOLARIAN) {
+        const wrathDeaths = deaths.filter(death => death.relative_time >= windowStart && countMechanicHitsForPlayer(pull, death.player, /Wrath of the Astromancer/i) > 0);
+        if (wrathDeaths.length) pushEvent(wrathDeaths[0].relative_time - 1, 'trigger', 'Wrath of the Astromancer bomb detonates in the raid', 'critical');
+      }
+
       deaths.filter(death => death.relative_time >= windowStart).forEach(death => {
         const role = getPlayerRole(death.player);
         const impact = role === 'Healer' ? ' — healing capacity reduced'
@@ -4301,6 +4362,33 @@
           confidence = 'High';
         } else if (!pull.kill && pull.duration_sec > 360) {
           rootCause = 'Phase 2 add control/core handoffs took too long, leading to add overflow';
+          confidence = 'Medium';
+        }
+      } else if (bossKey === BOSS_KEYS.ALAR) {
+        if (deaths.some(death => countMechanicHitsForPlayer(pull, death.player, /Flame Quills/i) > 0)) {
+          rootCause = 'Players stayed on platforms during Flame Quills — avoidable deaths started the cascade';
+          confidence = 'High';
+        } else if (tankDeaths.some(death => countMechanicHitsForPlayer(pull, death.player, /Melt Armor/i) > 0)) {
+          rootCause = 'Tank died under Melt Armor debuff — no tank swap happened';
+          confidence = 'High';
+        } else if (playersHitByMechanic(pull, /Flame Buffet/i).length > 5) {
+          rootCause = 'Excessive Flame Buffet stacks — tanks failed to maintain melee contact on platforms';
+          confidence = 'Medium';
+        }
+      } else if (bossKey === BOSS_KEYS.VOID_REAVER) {
+        if (healerDeaths.some(death => countMechanicHitsForPlayer(pull, death.player, /Arcane Orb/i) > 0)) {
+          rootCause = 'Healers hit by Arcane Orb (6s silence + massive damage) — healing collapsed';
+          confidence = 'High';
+        } else if (deaths.filter(death => countMechanicHitsForPlayer(pull, death.player, /Arcane Orb/i) > 0).length > 2) {
+          rootCause = 'Multiple players hit by Arcane Orbs — ranged was too stacked';
+          confidence = 'High';
+        }
+      } else if (bossKey === BOSS_KEYS.SOLARIAN) {
+        if (deaths.filter(death => countMechanicHitsForPlayer(pull, death.player, /Wrath of the Astromancer/i) > 0).length > 1) {
+          rootCause = 'Wrath of the Astromancer bomb exploded in the raid — multiple players killed by splash';
+          confidence = 'High';
+        } else if (deaths.some(death => countMechanicHitsForPlayer(pull, death.player, /Void/i) > 0)) {
+          rootCause = 'Players stood in Void Zones during P3 burn phase';
           confidence = 'Medium';
         }
       }
@@ -4594,6 +4682,38 @@
         if (shockDeaths.length > 0) actionItems.push({ severity: 'critical', priority: 2, title: 'Call Shock Blast and evacuate melee', description: `${shockDeaths.length} death(s) had Shock Blast as the primary source.`, who: 'Melee group + boss tank', fix: 'Assign one caller for Shock Blast. The moment the cast starts, all melee leave and ranged finish the damage window.' });
         if (longP2Pulls > 0) actionItems.push({ severity: 'warning', priority: 3, title: 'Speed up Phase 2 core/add execution', description: `${longP2Pulls} wipe(s) lasted 6+ minutes, which usually means P2 dragged until adds overwhelmed the raid.`, who: 'Core runners, Strider control, tainted add team', fix: 'Tighten core relay assignments, snap tainted kills, and make sure each Strider is slowed and kited on spawn.' });
         if (sporeData.totalHits > 0) actionItems.push({ severity: 'warning', priority: 4, title: 'Keep Spore Bats off the raid path', description: `${sporeData.totalHits} Toxic Spore hit(s) were logged.`, who: 'Spore Bat kiter + ranged', fix: 'Drag bats around the outer edge and never cut spores across the raid or core handoff lanes.' });
+      } else if (bossKey === BOSS_KEYS.ALAR) {
+        // Al'ar mechanic checks: Flame Quills (35383), Flame Patch (35380), Flame Buffet (34121), Melt Armor (35410), Dive Bomb (35766)
+        const quillData = aggregateMechanic(/Flame Quills/i);
+        const patchData = aggregateMechanic(/Flame Patch/i);
+        const buffetData = aggregateMechanic(/Flame Buffet/i);
+        const meltDeaths = aggregateDeathsBy(death => getPlayerRole(death.player) === 'Tank' && /Melt Armor/i.test(death.topDamage || ''));
+        const diveBombData = aggregateMechanic(/Dive Bomb|Meteor/i, entry => entry.role !== 'Tank');
+        const emberData = aggregateMechanic(/Ember Blast/i);
+        if (quillData.totalHits > 0) actionItems.push({ severity: 'critical', priority: 1, title: 'Drop to the lower level for Flame Quills', description: `${quillData.totalHits} Flame Quills hit(s) across ${pulls.length} pulls. Most hit: ${quillData.worst.map(([name, count]) => `${name} (${count})`).join(', ')}.`, who: 'Everyone on platforms', fix: 'When Al\'ar flies to the center, everyone must immediately drop to the lower level. Flame Quills hits all platform targets for massive fire damage.' });
+        if (patchData.totalHits > pulls.length * 3) actionItems.push({ severity: 'warning', priority: 2, title: 'Move out of Flame Patches', description: `${patchData.totalHits} Flame Patch tick(s) across all pulls. Most hit: ${patchData.worst.map(([name, count]) => `${name} (${count})`).join(', ')}.`, who: 'Everyone in P2', fix: 'Fire patches appear after Meteor/Dive Bomb. Move away from the landing zone immediately — standing in fire is preventable damage.' });
+        if (buffetData.totalHits > pulls.length * 10) actionItems.push({ severity: 'critical', priority: 3, title: 'Reduce Flame Buffet stacks — tanks must be in melee', description: `${buffetData.totalHits} Flame Buffet hit(s) across all pulls — this means Al\'ar had no melee target and spammed raid-wide fire damage.`, who: 'Platform tanks', fix: 'A tank must be in melee range on every platform Al\'ar moves to. Pre-position tanks to intercept immediately after each move.' });
+        if (diveBombData.totalHits > pulls.length * 2) actionItems.push({ severity: 'warning', priority: 4, title: 'Spread for Dive Bomb / Meteor', description: `${diveBombData.totalHits} Dive Bomb/Meteor hit(s) on non-tanks. Splash damage is hitting too many players.`, who: 'Ranged DPS and healers', fix: 'In P2, spread at least 8 yards apart so a single Dive Bomb doesn\'t cleave multiple players.' });
+        if (meltDeaths.length > 0) actionItems.push({ severity: 'critical', priority: 5, title: 'Tank swap for Melt Armor', description: `${meltDeaths.length} tank death(s) were led by Melt Armor damage. This debuff reduces armor by 80% for 60s.`, who: 'Tank team', fix: 'Swap immediately when Melt Armor is applied. The debuffed tank should not be tanking Al\'ar.' });
+        if (emberData.totalHits > pulls.length * 3) actionItems.push({ severity: 'warning', priority: 6, title: 'Kill phoenix adds and move away', description: `${emberData.totalHits} Ember Blast hit(s). Players are standing too close when adds die.`, who: 'Everyone near add spawns', fix: 'Kill phoenix adds quickly, then move away — they explode on death dealing AoE fire damage.' });
+      } else if (bossKey === BOSS_KEYS.VOID_REAVER) {
+        // Void Reaver mechanic checks: Arcane Orb (34172), Pounding (34162), Knock Away (25778)
+        const orbData = aggregateMechanic(/Arcane Orb/i, entry => entry.role !== 'Tank');
+        const poundingDeaths = aggregateDeathsBy(death => /Pounding/i.test(death.topDamage || ''));
+        const orbSilenceDeaths = aggregateDeathsBy(death => /Arcane Orb/i.test(death.topDamage || ''));
+        if (orbData.totalHits > pulls.length * 5) actionItems.push({ severity: 'critical', priority: 1, title: 'Dodge Arcane Orbs — spread and move', description: `${orbData.totalHits} Arcane Orb hit(s) on non-tanks across ${pulls.length} pulls. Most hit: ${orbData.worst.map(([name, count]) => `${name} (${count})`).join(', ')}.`, who: 'All ranged and healers', fix: 'Spread at least 6 yards apart and keep moving when orbs are incoming. Orbs deal massive AoE damage and silence for 6 seconds — stacking kills multiple players.' });
+        if (orbSilenceDeaths.length > 0) actionItems.push({ severity: 'critical', priority: 2, title: 'Arcane Orbs are killing players', description: `${orbSilenceDeaths.length} death(s) had Arcane Orb as the primary damage source.`, who: 'Ranged DPS and healers', fix: 'Watch the ground indicators and move early. If hit, the 6s silence prevents self-healing. Healers especially should never be standing with other healers.' });
+        if (poundingDeaths.length > 0) actionItems.push({ severity: 'warning', priority: 3, title: 'Heal through Pounding', description: `${poundingDeaths.length} death(s) were led by Pounding damage.`, who: 'Melee + healers', fix: 'Pounding does AoE damage to melee. Healers should pre-HoT melee before each Pounding and be ready with fast heals during the channel.' });
+      } else if (bossKey === BOSS_KEYS.SOLARIAN) {
+        // Solarian mechanic checks: Wrath of the Astromancer (42783), Arcane Missiles (29951), Blinding Light, Void Zone
+        const wrathData = aggregateMechanic(/Wrath of the Astromancer/i);
+        const wrathDeaths = aggregateDeathsBy(death => /Wrath of the Astromancer/i.test(death.topDamage || ''));
+        const voidData = aggregateMechanic(/Void/i);
+        const addDeaths = aggregateDeathsBy(death => /Solarian Agent|Solarian Priest/i.test(death.topDamage || ''));
+        if (wrathData.totalHits > pulls.length * 3) actionItems.push({ severity: 'critical', priority: 1, title: 'Run out with Wrath of the Astromancer', description: `${wrathData.totalHits} Wrath hit(s) across ${pulls.length} pulls — the bomb is splashing too many players. Most hit: ${wrathData.worst.map(([name, count]) => `${name} (${count})`).join(', ')}.`, who: 'Whoever gets the debuff + nearby players', fix: 'The targeted player has 6 seconds to run 20+ yards away from the raid. Everyone else should not be in a position where the bomb can reach them. Spread at least 5 yards at all times.' });
+        if (wrathDeaths.length > 0) actionItems.push({ severity: 'critical', priority: 2, title: 'Wrath of the Astromancer is killing players', description: `${wrathDeaths.length} death(s) were caused by the Wrath explosion.`, who: 'Entire raid', fix: 'Call the Wrath target on voice immediately. The target runs out, everyone else checks spacing. If multiple people die to one Wrath, the raid was too stacked.' });
+        if (voidData.totalHits > 0) actionItems.push({ severity: 'warning', priority: 3, title: 'Move from Void Zones in P3', description: `${voidData.totalHits} Void Zone tick(s) hit players.`, who: 'Entire raid', fix: 'In P3 (Voidwalker form), black circles appear on the ground. Move out immediately — ticking damage stacks fast.' });
+        if (addDeaths.length > 0) actionItems.push({ severity: 'warning', priority: 4, title: 'Control split-phase adds faster', description: `${addDeaths.length} death(s) occurred during add waves or had add damage as a primary source.`, who: 'DPS + off-tanks', fix: 'Kill Priests first (they heal), then agents. Have the off-tank pick up Priests immediately on spawn.' });
       }
 
       if (!actionItems.length) {
@@ -4626,6 +4746,19 @@
         [BOSS_KEYS.VASHJ]: [
           { phase: 'P1 → P2', items: ['Maintain 12-yard spread for Static Charge', 'Melee leave for every Shock Blast', 'Core runners know the first relay positions'] },
           { phase: 'P2 → P3', items: ['Kill the final tainted and generator on call', 'Reset spreads as Vashj becomes attackable', 'Start the Spore Bat kite path wide around the room'] }
+        ],
+        [BOSS_KEYS.ALAR]: [
+          { phase: 'P1 — Platform rotation', items: ['Tank is in melee on each platform before Al\'ar lands (prevents Flame Buffet)', 'Drop to lower level immediately for Flame Quills', 'Kill phoenix adds quickly, move away before they explode'] },
+          { phase: 'P1 → P2 (Al\'ar dies on platform → reborn on ground)', items: ['All DPS move to ground level', 'MT picks up Al\'ar immediately', 'OT ready for Melt Armor swap'] },
+          { phase: 'P2 — Ground phase', items: ['Spread for Dive Bomb / Meteor', 'Move out of Flame Patches', 'Tank swap immediately on Melt Armor', 'Kill adds, move away from corpses'] }
+        ],
+        [BOSS_KEYS.VOID_REAVER]: [
+          { phase: 'Entire fight', items: ['Ranged and healers spread 6+ yards apart', 'Move from Arcane Orbs immediately', 'Tank against wall to minimize Knock Away repositioning', 'Heal through Pounding on melee'] }
+        ],
+        [BOSS_KEYS.SOLARIAN]: [
+          { phase: 'P1 — Normal', items: ['Spread 5+ yards apart at all times', 'Wrath target runs 20+ yards away from raid immediately', 'Call Wrath target on voice', 'Heal through Arcane Missiles'] },
+          { phase: 'Split phase (every ~50s)', items: ['Kill Priests first (they heal other adds)', 'Off-tank picks up Priests immediately', 'AoE agents after Priests are dead', 'Resume boss DPS when Solarian reappears'] },
+          { phase: 'P3 — Voidwalker (below 20%)', items: ['Use Bloodlust/Heroism', 'Move from Void Zones instantly', 'Burn fast — Void Bolt stacks increase raid damage over time', 'Healers use mana CDs'] }
         ]
       };
       const phaseChecklist = phaseChecklistMap[bossKey] || [];

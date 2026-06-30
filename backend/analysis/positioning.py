@@ -29,6 +29,10 @@ TRACKED_MECHANICS = {
     42783: {"name": "Wrath of the Astromancer", "boss": "High Astromancer Solarian", "spread_range": 4000, "type": "spread"},
     # Al'ar - Flame Quills (players must be below platform)
     35383: {"name": "Flame Quills", "boss": "Al'ar", "type": "positioning"},
+    # Al'ar - Dive Bomb / Meteor (spread to minimize splash)
+    35181: {"name": "Dive Bomb", "boss": "Al'ar", "spread_range": 700, "type": "spread"},
+    # Void Reaver - Arcane Orb (spread to avoid splash + silence)
+    34172: {"name": "Arcane Orb", "boss": "Void Reaver", "spread_range": 500, "type": "spread"},
 }
 
 POSITION_QUERY = """
