@@ -577,6 +577,18 @@ def _audit_gear(gear_items: list[dict]) -> dict[str, Any]:
 
         # Check enchants on enchantable slots
         if slot_name:
+            # Off-hand slot: only shields and weapons are enchantable
+            # Held-in-hand items (orbs, books, offhands) cannot be enchanted
+            if slot_idx == 16:
+                icon = (item.get("icon") or "").lower()
+                is_enchantable_oh = ("shield" in icon or "sword" in icon or
+                                     "axe" in icon or "mace" in icon or
+                                     "knife" in icon or "dagger" in icon or
+                                     "fist" in icon)
+                if not is_enchantable_oh:
+                    items[-1]["slot_name"] = "Off Hand (not enchantable)"
+                    continue
+
             total_enchantable += 1
             if enchant_id > 0:
                 enchant_count += 1
