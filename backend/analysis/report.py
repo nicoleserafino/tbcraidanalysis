@@ -345,6 +345,10 @@ def build_pull_data(
         "Improved Leader of the Pack", "Leader of the Pack",
     }
 
+    # Track last seen (sourceID, spell, timestamp) to deduplicate AoE heal casts
+    # AoE heals like Circle of Healing emit one event per target at the same timestamp
+    _last_heal_cast = {}  # (source_id, spell) -> last_timestamp
+
     for ev in healing:
         if ev.get("type") != "heal":
             continue
@@ -355,6 +359,7 @@ def build_pull_data(
         spell = spell_name(ev, ability_names)
         amount = ev.get("amount", 0)
         overheal = ev.get("overheal", 0)
+        timestamp = ev.get("timestamp", 0)
 
         heals_by_player[player] = heals_by_player.get(player, 0) + 1
         if player not in heal_details:
@@ -363,7 +368,14 @@ def build_pull_data(
             heal_details[player][spell] = {"total": 0, "overheal": 0, "count": 0, "is_hot": False}
         heal_details[player][spell]["total"] += amount
         heal_details[player][spell]["overheal"] += overheal
-        heal_details[player][spell]["count"] += 1
+
+        # Count casts (not hits): same spell at same timestamp = one cast
+        cast_key = (source_id, spell)
+        last_ts = _last_heal_cast.get(cast_key, -1)
+        if timestamp != last_ts:
+            heal_details[player][spell]["count"] += 1
+            _last_heal_cast[cast_key] = timestamp
+
         if ev.get("tick"):
             heal_details[player][spell]["is_hot"] = True
 
