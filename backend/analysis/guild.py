@@ -154,7 +154,6 @@ TEMP_ENCHANT_NAMES = {
     2632: "Frostbrand Weapon",
     2633: "Earthliving Weapon",
     # Physical DPS - stones/weightstones
-    2639: "Adamantite Sharpening Stone",
     2713: "Adamantite Sharpening Stone",
     2955: "Adamantite Weightstone",
     3225: "Adamantite Sharpening Stone",
@@ -166,6 +165,11 @@ TEMP_ENCHANT_NAMES = {
     # Other
     2630: "Righteous Weapon Coating",
     2684: "Blessed Wizard Oil",
+}
+
+# Temp enchant IDs that are passive raid buffs (not self-applied), should be ignored
+PASSIVE_TEMP_ENCHANTS = {
+    2639,  # Windfury Totem buff (applied by nearby Shaman totem)
 }
 
 
@@ -669,7 +673,7 @@ def _audit_consumables(auras: list[dict], gear_items: list[dict] | None = None, 
             if slot_idx < len(gear_items):
                 item = gear_items[slot_idx]
                 temp_enchant = item.get("temporaryEnchant", 0)
-                if temp_enchant:
+                if temp_enchant and temp_enchant not in PASSIVE_TEMP_ENCHANTS:
                     has_weapon_buff = True
                     name = TEMP_ENCHANT_NAMES.get(temp_enchant, f"Weapon Buff ({temp_enchant})")
                     # Resolve ambiguous IDs by class
