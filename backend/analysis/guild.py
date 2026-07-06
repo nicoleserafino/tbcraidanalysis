@@ -150,13 +150,13 @@ TEMP_ENCHANT_NAMES = {
     2677: "Superior Mana Oil",
     # Shaman imbues
     2636: "Windfury Weapon",
-    2639: "Rockbiter Weapon",
     2641: "Flametongue Weapon",
     2632: "Frostbrand Weapon",
     2633: "Earthliving Weapon",
     # Physical DPS - stones/weightstones
-    2713: "Adamantite Sharpening Stone",  # Warrior, Rogue, Hunter (sharp weapons)
-    2955: "Adamantite Weightstone",       # Hunter, others (blunt weapons)
+    2639: "Adamantite Sharpening Stone",
+    2713: "Adamantite Sharpening Stone",
+    2955: "Adamantite Weightstone",
     3225: "Adamantite Sharpening Stone",
     3226: "Adamantite Weightstone",
     2679: "Elemental Sharpening Stone",
