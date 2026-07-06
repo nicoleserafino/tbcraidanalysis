@@ -1533,6 +1533,7 @@
 
     function renderPrepSummary(players, report) {
       const fullyConsumed = players.filter(player => player.consumables?.fully_consumed);
+      const notConsumed = players.filter(player => !player.consumables?.fully_consumed);
       const missingEnchants = players.filter(player => (player.missing_enchants || []).length > 0);
       const gearIssues = players.filter(player => (player.gear_warnings || []).length > 0);
       const fullyPrepped = players.filter(player => prepStatus(player) === 'good');
@@ -1546,6 +1547,11 @@
           <div class="summary-card clickable-stat" data-filter="fullyConsumed">
             <div class="stat-label">Fully Consumed</div>
             <div class="stat-value">${fullyConsumed.length}/${players.length}</div>
+            <div class="mini-note click-hint">Click to see who</div>
+          </div>
+          <div class="summary-card clickable-stat" data-filter="notConsumed">
+            <div class="stat-label">Not Consumed</div>
+            <div class="stat-value">${notConsumed.length}</div>
             <div class="mini-note click-hint">Click to see who</div>
           </div>
           <div class="summary-card clickable-stat" data-filter="missingEnchants">
@@ -1570,6 +1576,7 @@
       // Store filter sets for click handling
       const filterSets = {
         fullyConsumed: new Set(fullyConsumed.map(p => p.name)),
+        notConsumed: new Set(notConsumed.map(p => p.name)),
         missingEnchants: new Set(missingEnchants.map(p => p.name)),
         gearIssues: new Set(gearIssues.map(p => p.name)),
         fullyPrepped: new Set(fullyPrepped.map(p => p.name))
