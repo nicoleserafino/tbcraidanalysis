@@ -4366,8 +4366,8 @@
           }
         };
 
-        // For twist analysis: WF buff lasts 10s on party after totem is replaced
-        const WF_BUFF_DURATION = 10;
+        // WF buff persists ~12s after totem is replaced (aura lingers after totem dies)
+        const WF_BUFF_DURATION = 12;
 
         if (isTwisting) {
           // Calculate WF buff uptime: each WF cast gives 10s of buff
