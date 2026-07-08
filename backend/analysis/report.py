@@ -206,9 +206,17 @@ async def fetch_full_report(report_code: str) -> dict:
         else:
             entry["wipes"] += 1
 
+    # Only include players who participated in at least one boss fight
+    active_names = set()
+    for boss_entry in bosses.values():
+        for pull in boss_entry["pulls"]:
+            active_names.update(pull.get("players", []))
+
     player_info = {}
     for p in sorted(players, key=lambda x: x["name"]):
         name = p["name"]
+        if name not in active_names:
+            continue
         player_class = p["subType"]
         role = infer_role(
             player_class,
@@ -585,10 +593,14 @@ def build_pull_data(
     biggest_heals.sort(key=lambda x: -x["amount"])
     biggest_crits.sort(key=lambda x: -x["amount"])
 
-    # Determine participants
-    participants = sorted(set(
-        players_by_id[pid]["name"] for pid in players_by_id
-    ))
+    # Determine participants — only players who had activity in this fight
+    active_players = set()
+    active_players.update(casts_by_player.keys())
+    active_players.update(heals_by_player.keys())
+    active_players.update(damage_done_out.keys())
+    active_players.update(player_damage_taken_total.keys())
+    active_players.update(d["player"] for d in deaths_out)
+    participants = sorted(active_players)
 
     return {
         "fight_id": fight["id"],
