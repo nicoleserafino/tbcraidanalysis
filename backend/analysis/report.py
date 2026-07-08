@@ -427,6 +427,19 @@ def build_pull_data(
     casts_by_player = {}
     cast_timeline = {}
     spell_casts = {}
+    spell_cast_times = {}  # player -> spell -> [relative_seconds] for totem/CD tracking
+    # Spells to track timestamps for (totems, CDs, key abilities)
+    TRACKED_SPELL_TIMES = {
+        "Windfury Totem", "Grace of Air Totem", "Wrath of Air Totem",
+        "Tranquil Air Totem", "Grounding Totem",
+        "Strength of Earth Totem", "Stoneskin Totem", "Tremor Totem",
+        "Earthbind Totem", "Earth Elemental Totem",
+        "Searing Totem", "Totem of Wrath", "Fire Nova Totem",
+        "Magma Totem", "Fire Elemental Totem",
+        "Mana Spring Totem", "Mana Tide Totem", "Healing Stream Totem",
+        "Bloodlust", "Heroism", "Drums of Battle", "Drums of War",
+        "Drums of Restoration",
+    }
     # Track NPC casts that completed (for missed interrupt detection)
     # Key spells that SHOULD be interrupted per boss
     INTERRUPTIBLE_SPELLS = {
@@ -460,6 +473,11 @@ def build_pull_data(
             cast_timeline.setdefault(player, []).append(rel_sec(ev["timestamp"]))
             spell_casts.setdefault(player, {})
             spell_casts[player][spell] = spell_casts[player].get(spell, 0) + 1
+            # Track per-spell timestamps for totems and key abilities
+            if spell in TRACKED_SPELL_TIMES:
+                spell_cast_times.setdefault(player, {}).setdefault(spell, []).append(
+                    rel_sec(ev["timestamp"])
+                )
         else:
             # NPC cast that completed — track if it's an interruptible spell
             if spell in INTERRUPTIBLE_SPELLS:
@@ -587,6 +605,7 @@ def build_pull_data(
         "casts_by_player": casts_by_player,
         "cast_timeline": cast_timeline,
         "spell_casts": spell_casts,
+        "spell_cast_times": spell_cast_times,
         "cancelled_casts": cancelled_casts,
         "damage_done": damage_done_out,
         "damage_sources": damage_sources,

@@ -4340,6 +4340,168 @@
         html += `</div></section>`;
       }
 
+      // 2b. Totem Uptime & Twisting (Shamans only)
+      if (playerClass === 'Shaman') {
+        const spellTimes = pull.spell_cast_times?.[player] || {};
+        
+        // Define totem categories by element
+        const TOTEM_ELEMENTS = {
+          Air: {
+            color: '#a8dadc',
+            totems: ['Windfury Totem', 'Grace of Air Totem', 'Wrath of Air Totem', 'Tranquil Air Totem', 'Grounding Totem'],
+            duration: 120
+          },
+          Earth: {
+            color: '#e9c46a',
+            totems: ['Strength of Earth Totem', 'Stoneskin Totem', 'Tremor Totem', 'Earthbind Totem', 'Earth Elemental Totem'],
+            duration: 120
+          },
+          Fire: {
+            color: '#e76f51',
+            totems: ['Searing Totem', 'Totem of Wrath', 'Fire Nova Totem', 'Magma Totem', 'Fire Elemental Totem'],
+            duration: 60  // Searing is 60s, others vary
+          },
+          Water: {
+            color: '#4cc9f0',
+            totems: ['Mana Spring Totem', 'Mana Tide Totem', 'Healing Stream Totem'],
+            duration: 120
+          }
+        };
+
+        // Build totem timeline: for each element, compute uptime windows
+        const totemRows = [];
+        const allTotemCasts = []; // for twist detection
+
+        for (const [element, info] of Object.entries(TOTEM_ELEMENTS)) {
+          const casts = [];
+          for (const totemName of info.totems) {
+            const times = spellTimes[totemName] || [];
+            for (const t of times) {
+              casts.push({ name: totemName, time: t });
+            }
+          }
+          if (casts.length === 0) continue;
+          casts.sort((a, b) => a.time - b.time);
+
+          // Calculate uptime windows: each cast starts a window, next cast of same element ends previous
+          const windows = [];
+          for (let i = 0; i < casts.length; i++) {
+            const start = casts[i].time;
+            const end = (i + 1 < casts.length)
+              ? Math.min(casts[i + 1].time, start + info.duration)
+              : Math.min(start + info.duration, duration);
+            windows.push({ start, end, name: casts[i].name });
+          }
+
+          const totalUptime = windows.reduce((s, w) => s + (w.end - w.start), 0);
+          const uptimePct = Math.round((totalUptime / duration) * 100);
+          totemRows.push({ element, color: info.color, windows, casts, uptimePct, totalUptime });
+          
+          if (element === 'Air') {
+            for (const c of casts) allTotemCasts.push(c);
+          }
+        }
+
+        // Detect totem twisting: WF→GoA within 2s means a successful twist
+        const wfTimes = spellTimes['Windfury Totem'] || [];
+        const goaTimes = spellTimes['Grace of Air Totem'] || [];
+        let twistCount = 0;
+        let twistGaps = [];
+        
+        for (const wfTime of wfTimes) {
+          // Find the next GoA cast after this WF
+          const nextGoA = goaTimes.find(t => t > wfTime && t - wfTime < 3);
+          if (nextGoA !== undefined) {
+            twistCount++;
+            twistGaps.push(nextGoA - wfTime);
+          }
+        }
+        const avgTwistGap = twistGaps.length > 0 ? (twistGaps.reduce((a, b) => a + b, 0) / twistGaps.length) : 0;
+        const isTwisting = twistCount >= 3 && wfTimes.length >= 3;
+
+        if (totemRows.length > 0) {
+          html += `
+            <section class="card">
+              <h3>🪨 Totem Uptime${isTwisting ? ' & Twisting' : ''}</h3>
+              <p class="mini-note" style="margin-bottom:12px;">Totem coverage during the fight. Each element slot can hold one totem at a time.</p>`;
+
+          // Twist stats (if applicable)
+          if (isTwisting) {
+            const possibleTwists = Math.max(wfTimes.length, 1);
+            const twistPct = Math.round((twistCount / possibleTwists) * 100);
+            const twistColor = twistPct >= 80 ? 'var(--kill)' : twistPct >= 60 ? 'var(--warning-color,#f0ad4e)' : 'var(--wipe)';
+            html += `
+              <div style="background:rgba(168,218,220,0.08);border:1px solid rgba(168,218,220,0.3);border-radius:10px;padding:12px 16px;margin-bottom:16px;">
+                <div style="display:flex;gap:20px;align-items:center;flex-wrap:wrap;">
+                  <div style="font-weight:600;color:#a8dadc;">⚡ Totem Twisting</div>
+                  <div class="mini-stat" style="margin:0;"><div class="mini-stat-value" style="color:${twistColor};font-size:1.1rem;">${twistCount}/${possibleTwists}</div><div class="mini-stat-label">Successful Twists</div></div>
+                  <div class="mini-stat" style="margin:0;"><div class="mini-stat-value" style="font-size:1.1rem;">${avgTwistGap.toFixed(2)}s</div><div class="mini-stat-label">Avg Twist Gap</div></div>
+                  <div class="mini-stat" style="margin:0;"><div class="mini-stat-value" style="font-size:1.1rem;">${twistPct}%</div><div class="mini-stat-label">Twist Rate</div></div>
+                </div>
+                <p class="mini-note" style="margin-top:8px;">Twist = WF Totem → Grace of Air within &lt;3s. Both buffs active during the overlap window (~10s WF buff persists).</p>
+              </div>`;
+          }
+
+          // Time axis
+          html += `<div style="position:relative;height:16px;margin-bottom:4px;font-size:0.65rem;color:var(--muted);">
+            <span style="position:absolute;left:0;">0:00</span>
+            <span style="position:absolute;left:25%;transform:translateX(-50%);">${formatTime(duration * 0.25)}</span>
+            <span style="position:absolute;left:50%;transform:translateX(-50%);">${formatTime(duration * 0.5)}</span>
+            <span style="position:absolute;left:75%;transform:translateX(-50%);">${formatTime(duration * 0.75)}</span>
+            <span style="position:absolute;right:0;">${formatTime(duration)}</span>
+          </div>`;
+
+          // Timeline rows per element
+          for (const row of totemRows) {
+            const uptimeColor = row.uptimePct >= 85 ? 'var(--kill)' : row.uptimePct >= 60 ? 'var(--warning-color,#f0ad4e)' : 'var(--wipe)';
+            html += `
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+                <div style="width:55px;font-size:0.75rem;font-weight:600;color:${row.color};">${row.element}</div>
+                <div style="flex:1;position:relative;height:22px;background:rgba(255,255,255,0.04);border-radius:4px;overflow:hidden;">
+                  ${row.windows.map(w => {
+                    const left = Math.max(0, (w.start / duration) * 100);
+                    const width = Math.max(0.5, ((w.end - w.start) / duration) * 100);
+                    return `<div style="position:absolute;left:${left}%;width:${width}%;height:100%;background:${row.color};opacity:0.6;border-radius:3px;" title="${w.name} (${formatTime(w.start)} — ${formatTime(w.end)})"></div>`;
+                  }).join('')}
+                  ${row.casts.map(c => {
+                    const left = (c.time / duration) * 100;
+                    return `<div style="position:absolute;left:${left}%;width:2px;height:100%;background:${row.color};opacity:1;" title="${c.name} at ${formatTime(c.time)}"></div>`;
+                  }).join('')}
+                </div>
+                <div style="width:50px;text-align:right;font-size:0.72rem;color:${uptimeColor};font-weight:600;">${row.uptimePct}%</div>
+              </div>`;
+          }
+
+          // Totem breakdown table
+          const allTotemSpells = {};
+          for (const [element, info] of Object.entries(TOTEM_ELEMENTS)) {
+            for (const t of info.totems) {
+              const times = spellTimes[t] || [];
+              if (times.length > 0) {
+                allTotemSpells[t] = { count: times.length, element, color: info.color };
+              }
+            }
+          }
+          if (Object.keys(allTotemSpells).length > 0) {
+            html += `
+              <table class="data-table compact" style="margin-top:12px;">
+                <thead><tr><th>Totem</th><th>Element</th><th>Drops</th></tr></thead>
+                <tbody>
+                  ${Object.entries(allTotemSpells).sort((a, b) => b[1].count - a[1].count).map(([name, info]) => `
+                    <tr>
+                      <td>${escapeHtml(name)}</td>
+                      <td style="color:${info.color}">${info.element}</td>
+                      <td class="num">${info.count}</td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>`;
+          }
+
+          html += `</section>`;
+        }
+      }
+
       // 3. Healer-specific: Overheal Analysis + HPM
       if (role === 'Healer') {
         const healSpellData = pull.heal_details?.[player] || {};
