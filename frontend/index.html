@@ -4150,20 +4150,55 @@
 
       let html = '';
 
+      // Death callout (like tbc-audit death banner)
+      const playerDeaths = (pull.deaths || []).filter(d => d.player === player);
+      if (playerDeaths.length > 0) {
+        const firstDeath = playerDeaths[0];
+        const deathPct = Math.round((firstDeath.relative_time / duration) * 100);
+        const deadFor = Math.round(duration - firstDeath.relative_time);
+        html += `
+          <div style="background:rgba(220,53,69,0.12);border:1px solid rgba(220,53,69,0.4);border-radius:12px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;gap:10px;">
+            <span style="font-size:1.3rem;">💀</span>
+            <div>
+              <div style="font-weight:600;color:var(--wipe);">${escapeHtml(player)} died at ${formatTime(firstDeath.relative_time)}</div>
+              <div class="mini-note">${deathPct}% into the fight${firstDeath.ability ? ` — killed by ${escapeHtml(firstDeath.ability)}` : ''}. Dead for ${deadFor}s of a ${formatTime(duration)} fight.</div>
+            </div>
+          </div>`;
+      }
+
+      // DPS/HPS stat header
+      const dpsData = pull.damage_done?.[player] || {};
+      const totalDmg = Object.values(dpsData).reduce((s, v) => s + Number(v || 0), 0);
+      const dps = Math.round(totalDmg / duration);
+      const healData = pull.heal_details?.[player] || {};
+      const totalHeal = Object.values(healData).reduce((s, d) => s + (d.total || 0), 0);
+      const hps = Math.round(totalHeal / duration);
+
+      if (role === 'Healer' && hps > 0) {
+        html += `<div style="display:flex;gap:16px;margin-bottom:16px;">
+          <div class="mini-stat"><div class="mini-stat-value">${hps.toLocaleString()}</div><div class="mini-stat-label">HPS</div></div>
+          <div class="mini-stat"><div class="mini-stat-value">${(totalHeal / 1000).toFixed(0)}k</div><div class="mini-stat-label">Total Healing</div></div>
+        </div>`;
+      } else if (dps > 0) {
+        html += `<div style="display:flex;gap:16px;margin-bottom:16px;">
+          <div class="mini-stat"><div class="mini-stat-value">${dps.toLocaleString()}</div><div class="mini-stat-label">DPS</div></div>
+          <div class="mini-stat"><div class="mini-stat-value">${(totalDmg / 1000).toFixed(0)}k</div><div class="mini-stat-label">Total Damage</div></div>
+        </div>`;
+      }
+
       // 1. Active Time / Downtime Analysis
       const timeline = pull.cast_timeline?.[player] || [];
       const totalCasts = pull.casts_by_player?.[player] || 0;
       const cancelled = pull.cancelled_casts?.[player] || 0;
       let activeTime = 0;
       if (timeline.length > 1) {
-        // Estimate active time: sum gaps between casts, cap each gap at GCD (1.5s)
         const sorted = [...timeline].sort((a, b) => a - b);
         const GCD = 1.5;
         for (let i = 1; i < sorted.length; i++) {
           const gap = sorted[i] - sorted[i - 1];
-          activeTime += Math.min(gap, GCD + 0.5); // 2s tolerance for latency
+          activeTime += Math.min(gap, GCD + 0.5);
         }
-        activeTime += GCD; // account for first cast
+        activeTime += GCD;
       }
       const activePct = Math.min(100, Math.round((activeTime / duration) * 100));
       const downtimePct = 100 - activePct;
@@ -4192,72 +4227,123 @@
           <p class="mini-note">${downtimePct > 20 ? `⚠️ ${downtimePct}% downtime — ${role === 'Healer' ? 'consider weaving DPS spells during low-damage periods' : 'Always Be Casting — every GCD should be used'}` : `✓ Good activity — only ${downtimePct}% idle time`}</p>
         </section>`;
 
-      // 2. Cooldown Efficiency (role-specific)
+      // 2. Cooldown Timeline Visualization
       const spells = pull.spell_casts?.[player] || {};
       const COOLDOWNS = {
-        // Tanks
-        'Shield Wall': { cd: 1800, role: 'Tank' },
-        'Last Stand': { cd: 600, role: 'Tank' },
-        'Shield Block': { cd: 6, role: 'Tank' },
-        // Healers
-        'Mana Tide Totem': { cd: 300, role: 'Healer' },
-        'Innervate': { cd: 360, role: 'Healer' },
-        'Divine Illumination': { cd: 180, role: 'Healer' },
-        "Nature's Swiftness": { cd: 180, role: 'Healer' },
-        'Swiftmend': { cd: 15, role: 'Healer' },
-        'Prayer of Mending': { cd: 10, role: 'Healer' },
-        // DPS
-        'Bloodlust': { cd: 600, role: 'DPS' },
-        'Heroism': { cd: 600, role: 'DPS' },
-        'Adrenaline Rush': { cd: 300, role: 'DPS' },
-        'Blade Flurry': { cd: 120, role: 'DPS' },
-        'Cold Blood': { cd: 180, role: 'DPS' },
-        'Death Wish': { cd: 180, role: 'DPS' },
-        'Recklessness': { cd: 1800, role: 'DPS' },
-        'Rapid Fire': { cd: 300, role: 'DPS' },
-        'Bestial Wrath': { cd: 120, role: 'DPS' },
-        'Arcane Power': { cd: 180, role: 'DPS' },
-        'Icy Veins': { cd: 180, role: 'DPS' },
-        'Combustion': { cd: 180, role: 'DPS' },
-        'Metamorphosis': { cd: 180, role: 'DPS' },
-        'Shadowfiend': { cd: 300, role: 'Healer' },
+        'Shield Wall': { cd: 1800, dur: 10, role: 'Tank', color: '#e63946' },
+        'Last Stand': { cd: 600, dur: 20, role: 'Tank', color: '#e63946' },
+        'Mana Tide Totem': { cd: 300, dur: 12, role: 'Healer', color: '#4cc9f0' },
+        'Innervate': { cd: 360, dur: 20, role: 'Healer', color: '#4cc9f0' },
+        'Divine Illumination': { cd: 180, dur: 15, role: 'Healer', color: '#f0e68c' },
+        "Nature's Swiftness": { cd: 180, dur: 0, role: 'Healer', color: '#7fcd91' },
+        'Bloodlust': { cd: 600, dur: 40, role: 'Any', color: '#e63946' },
+        'Heroism': { cd: 600, dur: 40, role: 'Any', color: '#e63946' },
+        'Adrenaline Rush': { cd: 300, dur: 15, role: 'DPS', color: '#f4a261' },
+        'Blade Flurry': { cd: 120, dur: 15, role: 'DPS', color: '#e9c46a' },
+        'Cold Blood': { cd: 180, dur: 0, role: 'DPS', color: '#90e0ef' },
+        'Death Wish': { cd: 180, dur: 30, role: 'DPS', color: '#e63946' },
+        'Recklessness': { cd: 1800, dur: 15, role: 'DPS', color: '#e63946' },
+        'Rapid Fire': { cd: 300, dur: 15, role: 'DPS', color: '#abd473' },
+        'Bestial Wrath': { cd: 120, dur: 18, role: 'DPS', color: '#e63946' },
+        'Arcane Power': { cd: 180, dur: 15, role: 'DPS', color: '#69d2e7' },
+        'Icy Veins': { cd: 180, dur: 20, role: 'DPS', color: '#69d2e7' },
+        'Combustion': { cd: 180, dur: 0, role: 'DPS', color: '#e76f51' },
+        'Shadowfiend': { cd: 300, dur: 15, role: 'Healer', color: '#9b5de5' },
+        'Drums of Battle': { cd: 120, dur: 30, role: 'Any', color: '#b5838d' },
+        'Drums of War': { cd: 120, dur: 30, role: 'Any', color: '#b5838d' },
+        'Drums of Restoration': { cd: 120, dur: 30, role: 'Any', color: '#b5838d' },
       };
 
-      const cdRows = Object.entries(COOLDOWNS)
-        .filter(([spell]) => spells[spell] > 0)
-        .map(([spell, info]) => {
-          const used = spells[spell] || 0;
-          const maxPossible = Math.max(1, Math.floor(duration / info.cd) + 1);
-          const efficiency = Math.min(100, Math.round((used / maxPossible) * 100));
-          return { spell, used, maxPossible, efficiency };
-        })
-        .sort((a, b) => a.efficiency - b.efficiency);
+      // Build CD timeline from buff events
+      const buffEvts = pull.buff_events?.[player] || [];
+      const cdTimeline = [];
+      const usedCDs = new Set();
 
-      if (cdRows.length > 0) {
+      for (const [cdName, cdInfo] of Object.entries(COOLDOWNS)) {
+        const castCount = spells[cdName] || 0;
+        if (castCount === 0) continue;
+        usedCDs.add(cdName);
+
+        // Find activation windows from buff events
+        const windows = [];
+        let activeStart = null;
+        for (const evt of buffEvts) {
+          if (evt.spell !== cdName) continue;
+          if (evt.type === 'applybuff' || evt.type === 'applydebuff') {
+            activeStart = evt.time;
+          } else if ((evt.type === 'removebuff' || evt.type === 'removedebuff') && activeStart !== null) {
+            windows.push({ start: activeStart, end: evt.time });
+            activeStart = null;
+          }
+        }
+        // If no buff events found, estimate from cast timeline
+        if (windows.length === 0 && cdInfo.dur > 0) {
+          const castTimes = timeline.filter(t => {
+            // Find casts that match — approximate via spell_casts timestamps
+            return true; // fallback: spread evenly
+          });
+          // Use evenly-spaced estimates based on cast count
+          const interval = duration / Math.max(castCount, 1);
+          for (let i = 0; i < castCount; i++) {
+            const start = i * interval;
+            windows.push({ start, end: Math.min(start + cdInfo.dur, duration) });
+          }
+        }
+        // Close any unclosed window
+        if (activeStart !== null) {
+          windows.push({ start: activeStart, end: Math.min(activeStart + cdInfo.dur, duration) });
+        }
+
+        if (windows.length > 0 || castCount > 0) {
+          const maxPossible = Math.max(1, Math.floor(duration / cdInfo.cd) + 1);
+          cdTimeline.push({ name: cdName, windows, castCount, maxPossible, color: cdInfo.color, dur: cdInfo.dur });
+        }
+      }
+
+      if (cdTimeline.length > 0) {
         html += `
           <section class="card">
-            <h3>Cooldown Usage</h3>
-            <p class="mini-note" style="margin-bottom:10px;">Did ${escapeHtml(player)} use their major abilities as often as possible?</p>
-            <table class="data-table compact">
-              <thead><tr><th>Ability</th><th>Used</th><th>Max Possible</th><th>Efficiency</th></tr></thead>
-              <tbody>
-                ${cdRows.map(row => `
-                  <tr>
-                    <td>${escapeHtml(row.spell)}</td>
-                    <td class="num">${row.used}</td>
-                    <td class="num">${row.maxPossible}</td>
-                    <td style="font-weight:bold;color:${row.efficiency >= 80 ? 'var(--kill)' : row.efficiency >= 50 ? 'var(--warning-color, #f0ad4e)' : 'var(--wipe)'}">${row.efficiency}%</td>
-                  </tr>
-                `).join('')}
-              </tbody>
-            </table>
-          </section>`;
+            <h3>Cooldown Timeline</h3>
+            <p class="mini-note" style="margin-bottom:12px;">Horizontal bars show when cooldowns were active during the fight.</p>
+            <div style="position:relative;">`;
+
+        // Time axis markers
+        html += `<div style="position:relative;height:16px;margin-bottom:4px;font-size:0.65rem;color:var(--muted);">
+          <span style="position:absolute;left:0;">0:00</span>
+          <span style="position:absolute;left:25%;transform:translateX(-50%);">${formatTime(duration * 0.25)}</span>
+          <span style="position:absolute;left:50%;transform:translateX(-50%);">${formatTime(duration * 0.5)}</span>
+          <span style="position:absolute;left:75%;transform:translateX(-50%);">${formatTime(duration * 0.75)}</span>
+          <span style="position:absolute;right:0;">${formatTime(duration)}</span>
+        </div>`;
+
+        for (const cd of cdTimeline) {
+          const effPct = Math.min(100, Math.round((cd.castCount / cd.maxPossible) * 100));
+          const effColor = effPct >= 80 ? 'var(--kill)' : effPct >= 50 ? 'var(--warning-color,#f0ad4e)' : 'var(--wipe)';
+          html += `
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+              <div style="width:130px;font-size:0.78rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${escapeHtml(cd.name)}">${escapeHtml(cd.name)}</div>
+              <div style="flex:1;position:relative;height:18px;background:rgba(255,255,255,0.04);border-radius:4px;overflow:hidden;">
+                ${cd.windows.map(w => {
+                  const left = Math.max(0, (w.start / duration) * 100);
+                  const width = Math.max(0.5, ((w.end - w.start) / duration) * 100);
+                  return `<div style="position:absolute;left:${left}%;width:${width}%;height:100%;background:${cd.color};opacity:0.75;border-radius:3px;" title="${formatTime(w.start)} — ${formatTime(w.end)}"></div>`;
+                }).join('')}
+                ${cd.dur === 0 ? cd.windows.map(w => {
+                  const left = (w.start / duration) * 100;
+                  return `<div style="position:absolute;left:${left}%;width:2px;height:100%;background:${cd.color};" title="Cast at ${formatTime(w.start)}"></div>`;
+                }).join('') : ''}
+              </div>
+              <div style="width:60px;text-align:right;font-size:0.72rem;color:${effColor};font-weight:600;">${cd.castCount}/${cd.maxPossible}</div>
+            </div>`;
+        }
+
+        html += `</div></section>`;
       }
 
       // 3. Healer-specific: Overheal Analysis + HPM
       if (role === 'Healer') {
-        const healData = pull.heal_details?.[player] || {};
-        const spellRows = Object.entries(healData)
+        const healSpellData = pull.heal_details?.[player] || {};
+        const spellRows = Object.entries(healSpellData)
           .filter(([, d]) => d.count > 0)
           .map(([spell, d]) => {
             const total = d.total + d.overheal;
@@ -4305,6 +4391,37 @@
               ${overallOhPct > 35 ? `<p class="mini-note" style="margin-top:8px;">⚠️ High overheal (${overallOhPct}%) — consider using more efficient spells or better heal targeting to avoid wasting mana.</p>` : ''}
             </section>`;
         }
+      }
+
+      // 4. Damage Taken Breakdown (useful for all roles)
+      const dmgTaken = pull.player_damage_taken?.[player] || {};
+      const dmgAmounts = pull.player_damage_taken_amounts?.[player] || {};
+      const dmgEntries = safeEntries(dmgTaken)
+        .map(([label, count]) => ({ label, count: Number(count || 0), amount: Number(dmgAmounts[label] || 0) }))
+        .filter(e => e.count > 0)
+        .sort((a, b) => b.amount - a.amount);
+
+      if (dmgEntries.length > 0 && role !== 'Tank') {
+        const totalDmgTaken = dmgEntries.reduce((s, e) => s + e.amount, 0);
+        html += `
+          <section class="card">
+            <h3>Damage Taken</h3>
+            <p class="mini-note" style="margin-bottom:10px;">Total: ${(totalDmgTaken / 1000).toFixed(0)}k damage received</p>
+            <div style="display:flex;flex-direction:column;gap:6px;">
+              ${dmgEntries.slice(0, 6).map(e => {
+                const pct = totalDmgTaken > 0 ? Math.round((e.amount / totalDmgTaken) * 100) : 0;
+                return `<div>
+                  <div style="display:flex;justify-content:space-between;font-size:0.78rem;margin-bottom:2px;">
+                    <span>${escapeHtml(e.label)}</span>
+                    <span style="color:var(--muted);">${(e.amount / 1000).toFixed(1)}k (${e.count} hits)</span>
+                  </div>
+                  <div style="height:5px;background:rgba(255,255,255,0.06);border-radius:3px;overflow:hidden;">
+                    <div style="height:100%;width:${pct}%;background:var(--wipe);opacity:0.6;border-radius:3px;"></div>
+                  </div>
+                </div>`;
+              }).join('')}
+            </div>
+          </section>`;
       }
 
       return html;
@@ -6603,6 +6720,12 @@
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
+    }
+
+    function formatTime(sec) {
+      const m = Math.floor(sec / 60);
+      const s = Math.floor(sec % 60);
+      return `${m}:${s.toString().padStart(2, '0')}`;
     }
 
     function render() {
