@@ -4343,14 +4343,12 @@
       // 2b. Totem Uptime & Twisting (Shamans only)
       if (playerClass === 'Shaman') {
         const spellTimes = pull.spell_cast_times?.[player] || {};
-        
-        // Define totem categories by element
+        const wfTimes = spellTimes['Windfury Totem'] || [];
+        const goaTimes = spellTimes['Grace of Air Totem'] || [];
+        const isTwisting = wfTimes.length >= 3 && goaTimes.length >= 3;
+
+        // Non-twist totem elements (Earth/Fire/Water)
         const TOTEM_ELEMENTS = {
-          Air: {
-            color: '#a8dadc',
-            totems: ['Windfury Totem', 'Grace of Air Totem', 'Wrath of Air Totem', 'Tranquil Air Totem', 'Grounding Totem'],
-            duration: 120
-          },
           Earth: {
             color: '#e9c46a',
             totems: ['Strength of Earth Totem', 'Stoneskin Totem', 'Tremor Totem', 'Earthbind Totem', 'Earth Elemental Totem'],
@@ -4359,7 +4357,7 @@
           Fire: {
             color: '#e76f51',
             totems: ['Searing Totem', 'Totem of Wrath', 'Fire Nova Totem', 'Magma Totem', 'Fire Elemental Totem'],
-            duration: 60  // Searing is 60s, others vary
+            duration: 60
           },
           Water: {
             color: '#4cc9f0',
@@ -4368,117 +4366,249 @@
           }
         };
 
-        // Build totem timeline: for each element, compute uptime windows
-        const totemRows = [];
-        const allTotemCasts = []; // for twist detection
+        // For twist analysis: WF buff lasts 10s on party after totem is replaced
+        const WF_BUFF_DURATION = 10;
 
+        if (isTwisting) {
+          // Calculate WF buff uptime: each WF cast gives 10s of buff
+          // WF "dropped" = a distinct period where the buff lapsed (gap between merged windows)
+          let wfBuffUptime = 0;
+          const wfWindows = [];
+          for (let i = 0; i < wfTimes.length; i++) {
+            const start = wfTimes[i];
+            const actualEnd = Math.min(start + WF_BUFF_DURATION, duration);
+            wfWindows.push({ start, end: actualEnd });
+          }
+          // Merge overlapping windows
+          const mergedWf = [];
+          for (const w of wfWindows) {
+            if (mergedWf.length > 0 && w.start <= mergedWf[mergedWf.length - 1].end) {
+              mergedWf[mergedWf.length - 1].end = Math.max(mergedWf[mergedWf.length - 1].end, w.end);
+            } else {
+              mergedWf.push({ ...w });
+            }
+          }
+          wfBuffUptime = mergedWf.reduce((s, w) => s + (w.end - w.start), 0);
+          const wfPct = Math.round((wfBuffUptime / duration) * 100);
+          // WF drops = number of gaps between merged windows (times the buff actually lapsed)
+          let wfDrops = 0;
+          for (let i = 1; i < mergedWf.length; i++) {
+            if (mergedWf[i].start > mergedWf[i - 1].end) {
+              wfDrops++;
+            }
+          }
+
+          // GoA uptime: from GoA cast until next WF cast (or totem duration)
+          let goaUptime = 0;
+          const goaWindows = [];
+          for (let i = 0; i < goaTimes.length; i++) {
+            const start = goaTimes[i];
+            // GoA ends when WF is dropped next (replacing it) or after 120s
+            const nextWfAfter = wfTimes.find(t => t > start);
+            const end = nextWfAfter !== undefined ? Math.min(nextWfAfter, start + 120) : Math.min(start + 120, duration);
+            goaWindows.push({ start, end: Math.min(end, duration) });
+          }
+          goaUptime = goaWindows.reduce((s, w) => s + (w.end - w.start), 0);
+          const goaPct = Math.round((goaUptime / duration) * 100);
+
+          // Dual-buff uptime: overlap of WF buff windows and GoA windows
+          let dualUptime = 0;
+          for (const wf of mergedWf) {
+            for (const goa of goaWindows) {
+              const overlapStart = Math.max(wf.start, goa.start);
+              const overlapEnd = Math.min(wf.end, goa.end);
+              if (overlapEnd > overlapStart) dualUptime += (overlapEnd - overlapStart);
+            }
+          }
+          const dualPct = Math.round((dualUptime / duration) * 100);
+
+          // Successful twist count
+          let twistCount = 0;
+          let twistGaps = [];
+          for (const wfTime of wfTimes) {
+            const nextGoA = goaTimes.find(t => t > wfTime && t - wfTime < 3);
+            if (nextGoA !== undefined) {
+              twistCount++;
+              twistGaps.push(nextGoA - wfTime);
+            }
+          }
+          const avgTwistGap = twistGaps.length > 0 ? (twistGaps.reduce((a, b) => a + b, 0) / twistGaps.length) : 0;
+          const noDowntime = twistCount;
+          const earlySwaps = wfTimes.length - twistCount - wfDrops;
+
+          // Twist score (like tbc-audit's /100)
+          const twistScore = Math.round(dualPct * (twistCount / Math.max(wfTimes.length, 1)) * 100 / 50);
+
+          const wfColor = wfPct >= 70 ? '#7ddf8a' : wfPct >= 50 ? '#f0ad4e' : '#ff6b6b';
+          const goaColor = goaPct >= 70 ? '#7ddf8a' : goaPct >= 50 ? '#f0ad4e' : '#ff6b6b';
+
+          html += `
+            <section class="card">
+              <h3 style="display:flex;justify-content:space-between;align-items:center;">
+                <span>⚡ Totem Twisting</span>
+                <span style="background:${twistScore >= 70 ? '#264d2f' : twistScore >= 40 ? '#4d3d1a' : '#4d1a1a'};color:${twistScore >= 70 ? '#7ddf8a' : twistScore >= 40 ? '#f0ad4e' : '#ff6b6b'};padding:4px 12px;border-radius:12px;font-size:0.85rem;font-weight:700;">${twistScore} <span style="opacity:0.6;font-weight:400;">/100</span></span>
+              </h3>
+
+              <div style="background:rgba(255,255,255,0.03);border-radius:10px;padding:16px;margin-bottom:16px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                  <span style="color:#6b8aff;font-weight:600;">Windfury</span>
+                  <span style="color:${wfColor};font-weight:600;">${wfPct}%</span>
+                </div>
+                <div style="position:relative;height:28px;background:rgba(107,138,255,0.1);border-radius:6px;overflow:hidden;margin-bottom:16px;">
+                  ${mergedWf.map(w => {
+                    const left = (w.start / duration) * 100;
+                    const width = Math.max(0.5, ((w.end - w.start) / duration) * 100);
+                    return `<div style="position:absolute;left:${left}%;width:${width}%;height:100%;background:rgba(107,138,255,0.5);border-radius:4px;" title="WF buff ${formatTime(w.start)} — ${formatTime(w.end)}"></div>`;
+                  }).join('')}
+                  ${wfTimes.map(t => {
+                    const left = (t / duration) * 100;
+                    return `<div style="position:absolute;left:${left}%;width:3px;height:100%;background:#6b8aff;" title="WF dropped at ${formatTime(t)}"></div>`;
+                  }).join('')}
+                </div>
+
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                  <span style="color:#7ddf8a;font-weight:600;">Grace of Air</span>
+                  <span style="color:${goaColor};font-weight:600;">${goaPct}%</span>
+                </div>
+                <div style="position:relative;height:28px;background:rgba(125,223,138,0.1);border-radius:6px;overflow:hidden;margin-bottom:12px;">
+                  ${goaWindows.map(w => {
+                    const left = (w.start / duration) * 100;
+                    const width = Math.max(0.5, ((w.end - w.start) / duration) * 100);
+                    return `<div style="position:absolute;left:${left}%;width:${width}%;height:100%;background:rgba(125,223,138,0.4);border-radius:4px;" title="GoA ${formatTime(w.start)} — ${formatTime(w.end)}"></div>`;
+                  }).join('')}
+                  ${goaTimes.map(t => {
+                    const left = (t / duration) * 100;
+                    return `<div style="position:absolute;left:${left}%;width:3px;height:100%;background:#7ddf8a;" title="GoA dropped at ${formatTime(t)}"></div>`;
+                  }).join('')}
+                </div>
+
+                <div style="display:flex;font-size:0.65rem;color:var(--muted);justify-content:space-between;margin-bottom:16px;">
+                  <span>0:00</span>
+                  <span>${formatTime(duration * 0.5)}</span>
+                  <span>${formatTime(duration)}</span>
+                </div>
+
+                <div style="height:14px;border-radius:7px;overflow:hidden;display:flex;margin-bottom:10px;">
+                  <div style="width:${Math.round((noDowntime / Math.max(wfTimes.length, 1)) * 100)}%;background:#7ddf8a;" title="No downtime"></div>
+                  <div style="width:${Math.round((Math.max(0, earlySwaps) / Math.max(wfTimes.length, 1)) * 100)}%;background:#f0ad4e;" title="Early swap"></div>
+                  <div style="width:${Math.round((wfDrops / Math.max(wfTimes.length, 1)) * 100)}%;background:#ff6b6b;" title="WF dropped"></div>
+                </div>
+                <div style="display:flex;gap:20px;font-size:0.78rem;">
+                  <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#7ddf8a;margin-right:4px;"></span>No downtime <strong>${noDowntime}</strong></span>
+                  <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#f0ad4e;margin-right:4px;"></span>Early swap <strong>${Math.max(0, earlySwaps)}</strong></span>
+                  <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#ff6b6b;margin-right:4px;"></span>WF dropped <strong>${wfDrops}</strong></span>
+                </div>
+              </div>
+
+              <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:8px;">
+                <div class="mini-stat"><div class="mini-stat-value">${dualPct}%</div><div class="mini-stat-label">Dual-buff Uptime</div></div>
+                <div class="mini-stat"><div class="mini-stat-value">${avgTwistGap.toFixed(2)}s</div><div class="mini-stat-label">Avg Twist Gap</div></div>
+                <div class="mini-stat"><div class="mini-stat-value">${twistCount}/${wfTimes.length}</div><div class="mini-stat-label">Clean Twists</div></div>
+              </div>
+              ${wfDrops > 0 ? `<p class="mini-note" style="color:#ff6b6b;">${wfDrops} WF drop${wfDrops > 1 ? 's' : ''} — your group lost significant Windfury uptime.</p>` : `<p class="mini-note" style="color:#7ddf8a;">✓ No WF drops — excellent twist maintenance.</p>`}
+            </section>`;
+
+        } else if (wfTimes.length > 0 || goaTimes.length > 0) {
+          // Non-twisting shaman: just show air totem uptime
+          const airTotems = [...wfTimes.map(t => ({ name: 'Windfury Totem', time: t })),
+                            ...goaTimes.map(t => ({ name: 'Grace of Air Totem', time: t })),
+                            ...(spellTimes['Wrath of Air Totem'] || []).map(t => ({ name: 'Wrath of Air Totem', time: t }))
+                           ].sort((a, b) => a.time - b.time);
+          if (airTotems.length > 0) {
+            const windows = airTotems.map((c, i) => ({
+              start: c.time,
+              end: Math.min((i + 1 < airTotems.length ? airTotems[i+1].time : c.time + 120), duration),
+              name: c.name
+            }));
+            const uptime = windows.reduce((s, w) => s + (w.end - w.start), 0);
+            const pct = Math.round((uptime / duration) * 100);
+            html += `
+              <section class="card">
+                <h3>🪨 Air Totem Uptime</h3>
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+                  <div style="width:60px;font-size:0.78rem;color:#a8dadc;font-weight:600;">Air</div>
+                  <div style="flex:1;height:22px;background:rgba(255,255,255,0.04);border-radius:4px;overflow:hidden;position:relative;">
+                    ${windows.map(w => {
+                      const left = (w.start / duration) * 100;
+                      const width = Math.max(0.5, ((w.end - w.start) / duration) * 100);
+                      return `<div style="position:absolute;left:${left}%;width:${width}%;height:100%;background:rgba(168,218,220,0.6);border-radius:3px;" title="${w.name} ${formatTime(w.start)}—${formatTime(w.end)}"></div>`;
+                    }).join('')}
+                  </div>
+                  <div style="width:40px;text-align:right;font-size:0.72rem;font-weight:600;color:${pct >= 80 ? 'var(--kill)' : 'var(--wipe)'};">${pct}%</div>
+                </div>
+              </section>`;
+          }
+        }
+
+        // Air/Earth/Fire/Water totem rows
+        const otherRows = [];
+        // Add Air element row (all air totems combined)
+        const airTotems = ['Windfury Totem', 'Grace of Air Totem', 'Wrath of Air Totem', 'Tranquil Air Totem', 'Grounding Totem'];
+        const airCasts = [];
+        for (const t of airTotems) {
+          for (const time of (spellTimes[t] || [])) airCasts.push({ name: t, time });
+        }
+        if (airCasts.length > 0) {
+          airCasts.sort((a, b) => a.time - b.time);
+          const airWindows = airCasts.map((c, i) => ({
+            start: c.time,
+            end: Math.min((i + 1 < airCasts.length ? airCasts[i+1].time : c.time + 120), duration),
+            name: c.name
+          }));
+          const airUptime = airWindows.reduce((s, w) => s + (w.end - w.start), 0);
+          const airPct = Math.round((airUptime / duration) * 100);
+          otherRows.push({ element: 'Air', color: '#a8dadc', windows: airWindows, casts: airCasts, pct: airPct });
+        }
         for (const [element, info] of Object.entries(TOTEM_ELEMENTS)) {
           const casts = [];
           for (const totemName of info.totems) {
             const times = spellTimes[totemName] || [];
-            for (const t of times) {
-              casts.push({ name: totemName, time: t });
-            }
+            for (const t of times) casts.push({ name: totemName, time: t });
           }
           if (casts.length === 0) continue;
           casts.sort((a, b) => a.time - b.time);
-
-          // Calculate uptime windows: each cast starts a window, next cast of same element ends previous
-          const windows = [];
-          for (let i = 0; i < casts.length; i++) {
-            const start = casts[i].time;
-            const end = (i + 1 < casts.length)
-              ? Math.min(casts[i + 1].time, start + info.duration)
-              : Math.min(start + info.duration, duration);
-            windows.push({ start, end, name: casts[i].name });
-          }
-
-          const totalUptime = windows.reduce((s, w) => s + (w.end - w.start), 0);
-          const uptimePct = Math.round((totalUptime / duration) * 100);
-          totemRows.push({ element, color: info.color, windows, casts, uptimePct, totalUptime });
-          
-          if (element === 'Air') {
-            for (const c of casts) allTotemCasts.push(c);
-          }
+          const windows = casts.map((c, i) => ({
+            start: c.time,
+            end: Math.min((i + 1 < casts.length ? casts[i+1].time : c.time + info.duration), duration),
+            name: c.name
+          }));
+          const uptime = windows.reduce((s, w) => s + (w.end - w.start), 0);
+          const pct = Math.round((uptime / duration) * 100);
+          otherRows.push({ element, color: info.color, windows, casts, pct });
         }
 
-        // Detect totem twisting: WF→GoA within 2s means a successful twist
-        const wfTimes = spellTimes['Windfury Totem'] || [];
-        const goaTimes = spellTimes['Grace of Air Totem'] || [];
-        let twistCount = 0;
-        let twistGaps = [];
-        
-        for (const wfTime of wfTimes) {
-          // Find the next GoA cast after this WF
-          const nextGoA = goaTimes.find(t => t > wfTime && t - wfTime < 3);
-          if (nextGoA !== undefined) {
-            twistCount++;
-            twistGaps.push(nextGoA - wfTime);
-          }
-        }
-        const avgTwistGap = twistGaps.length > 0 ? (twistGaps.reduce((a, b) => a + b, 0) / twistGaps.length) : 0;
-        const isTwisting = twistCount >= 3 && wfTimes.length >= 3;
-
-        if (totemRows.length > 0) {
+        if (otherRows.length > 0) {
           html += `
             <section class="card">
-              <h3>🪨 Totem Uptime${isTwisting ? ' & Twisting' : ''}</h3>
-              <p class="mini-note" style="margin-bottom:12px;">Totem coverage during the fight. Each element slot can hold one totem at a time.</p>`;
-
-          // Twist stats (if applicable)
-          if (isTwisting) {
-            const possibleTwists = Math.max(wfTimes.length, 1);
-            const twistPct = Math.round((twistCount / possibleTwists) * 100);
-            const twistColor = twistPct >= 80 ? 'var(--kill)' : twistPct >= 60 ? 'var(--warning-color,#f0ad4e)' : 'var(--wipe)';
-            html += `
-              <div style="background:rgba(168,218,220,0.08);border:1px solid rgba(168,218,220,0.3);border-radius:10px;padding:12px 16px;margin-bottom:16px;">
-                <div style="display:flex;gap:20px;align-items:center;flex-wrap:wrap;">
-                  <div style="font-weight:600;color:#a8dadc;">⚡ Totem Twisting</div>
-                  <div class="mini-stat" style="margin:0;"><div class="mini-stat-value" style="color:${twistColor};font-size:1.1rem;">${twistCount}/${possibleTwists}</div><div class="mini-stat-label">Successful Twists</div></div>
-                  <div class="mini-stat" style="margin:0;"><div class="mini-stat-value" style="font-size:1.1rem;">${avgTwistGap.toFixed(2)}s</div><div class="mini-stat-label">Avg Twist Gap</div></div>
-                  <div class="mini-stat" style="margin:0;"><div class="mini-stat-value" style="font-size:1.1rem;">${twistPct}%</div><div class="mini-stat-label">Twist Rate</div></div>
-                </div>
-                <p class="mini-note" style="margin-top:8px;">Twist = WF Totem → Grace of Air within &lt;3s. Both buffs active during the overlap window (~10s WF buff persists).</p>
+              <h3>🪨 Totem Uptime</h3>
+              <div style="position:relative;height:14px;margin-bottom:4px;font-size:0.6rem;color:var(--muted);display:flex;justify-content:space-between;">
+                <span>0:00</span><span>${formatTime(duration * 0.5)}</span><span>${formatTime(duration)}</span>
               </div>`;
-          }
-
-          // Time axis
-          html += `<div style="position:relative;height:16px;margin-bottom:4px;font-size:0.65rem;color:var(--muted);">
-            <span style="position:absolute;left:0;">0:00</span>
-            <span style="position:absolute;left:25%;transform:translateX(-50%);">${formatTime(duration * 0.25)}</span>
-            <span style="position:absolute;left:50%;transform:translateX(-50%);">${formatTime(duration * 0.5)}</span>
-            <span style="position:absolute;left:75%;transform:translateX(-50%);">${formatTime(duration * 0.75)}</span>
-            <span style="position:absolute;right:0;">${formatTime(duration)}</span>
-          </div>`;
-
-          // Timeline rows per element
-          for (const row of totemRows) {
-            const uptimeColor = row.uptimePct >= 85 ? 'var(--kill)' : row.uptimePct >= 60 ? 'var(--warning-color,#f0ad4e)' : 'var(--wipe)';
+          for (const row of otherRows) {
+            const uptimeColor = row.pct >= 85 ? 'var(--kill)' : row.pct >= 60 ? 'var(--warning-color,#f0ad4e)' : 'var(--wipe)';
             html += `
               <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
                 <div style="width:55px;font-size:0.75rem;font-weight:600;color:${row.color};">${row.element}</div>
                 <div style="flex:1;position:relative;height:22px;background:rgba(255,255,255,0.04);border-radius:4px;overflow:hidden;">
                   ${row.windows.map(w => {
-                    const left = Math.max(0, (w.start / duration) * 100);
+                    const left = (w.start / duration) * 100;
                     const width = Math.max(0.5, ((w.end - w.start) / duration) * 100);
-                    return `<div style="position:absolute;left:${left}%;width:${width}%;height:100%;background:${row.color};opacity:0.6;border-radius:3px;" title="${w.name} (${formatTime(w.start)} — ${formatTime(w.end)})"></div>`;
-                  }).join('')}
-                  ${row.casts.map(c => {
-                    const left = (c.time / duration) * 100;
-                    return `<div style="position:absolute;left:${left}%;width:2px;height:100%;background:${row.color};opacity:1;" title="${c.name} at ${formatTime(c.time)}"></div>`;
+                    return `<div style="position:absolute;left:${left}%;width:${width}%;height:100%;background:${row.color};opacity:0.5;border-radius:3px;" title="${w.name} (${formatTime(w.start)}—${formatTime(w.end)})"></div>`;
                   }).join('')}
                 </div>
-                <div style="width:50px;text-align:right;font-size:0.72rem;color:${uptimeColor};font-weight:600;">${row.uptimePct}%</div>
+                <div style="width:50px;text-align:right;font-size:0.72rem;color:${uptimeColor};font-weight:600;">${row.pct}%</div>
               </div>`;
           }
 
           // Totem breakdown table
           const allTotemSpells = {};
-          for (const [element, info] of Object.entries(TOTEM_ELEMENTS)) {
-            for (const t of info.totems) {
+          const ALL_TOTEMS = { Air: ['Windfury Totem','Grace of Air Totem','Wrath of Air Totem','Tranquil Air Totem','Grounding Totem'], ...Object.fromEntries(Object.entries(TOTEM_ELEMENTS).map(([k,v])=>[k,v.totems])) };
+          for (const [element, totems] of Object.entries(ALL_TOTEMS)) {
+            for (const t of totems) {
               const times = spellTimes[t] || [];
               if (times.length > 0) {
-                allTotemSpells[t] = { count: times.length, element, color: info.color };
+                const color = element === 'Air' ? '#a8dadc' : TOTEM_ELEMENTS[element]?.color || '#aaa';
+                allTotemSpells[t] = { count: times.length, element, color };
               }
             }
           }
@@ -4497,7 +4627,6 @@
                 </tbody>
               </table>`;
           }
-
           html += `</section>`;
         }
       }
