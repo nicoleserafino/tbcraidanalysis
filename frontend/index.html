@@ -4371,7 +4371,6 @@
 
         if (isTwisting) {
           // Calculate WF buff uptime: each WF cast gives 10s of buff
-          // WF "dropped" = a distinct period where the buff lapsed (gap between merged windows)
           let wfBuffUptime = 0;
           const wfWindows = [];
           for (let i = 0; i < wfTimes.length; i++) {
@@ -4379,7 +4378,7 @@
             const actualEnd = Math.min(start + WF_BUFF_DURATION, duration);
             wfWindows.push({ start, end: actualEnd });
           }
-          // Merge overlapping windows
+          // Merge overlapping windows for the timeline visualization
           const mergedWf = [];
           for (const w of wfWindows) {
             if (mergedWf.length > 0 && w.start <= mergedWf[mergedWf.length - 1].end) {
@@ -4390,10 +4389,15 @@
           }
           wfBuffUptime = mergedWf.reduce((s, w) => s + (w.end - w.start), 0);
           const wfPct = Math.round((wfBuffUptime / duration) * 100);
-          // WF drops = number of gaps between merged windows (times the buff actually lapsed)
+
+          // WF drops: per-cycle count. For each WF cast (except last),
+          // did the next WF arrive before the 10s buff expired?
           let wfDrops = 0;
-          for (let i = 1; i < mergedWf.length; i++) {
-            if (mergedWf[i].start > mergedWf[i - 1].end) {
+          let noDowntime = 0;
+          for (let i = 0; i < wfTimes.length - 1; i++) {
+            if (wfTimes[i + 1] - wfTimes[i] <= WF_BUFF_DURATION) {
+              noDowntime++;
+            } else {
               wfDrops++;
             }
           }
@@ -4433,11 +4437,10 @@
             }
           }
           const avgTwistGap = twistGaps.length > 0 ? (twistGaps.reduce((a, b) => a + b, 0) / twistGaps.length) : 0;
-          const noDowntime = twistCount;
-          const earlySwaps = wfTimes.length - twistCount - wfDrops;
 
           // Twist score (like tbc-audit's /100)
-          const twistScore = Math.round(dualPct * (twistCount / Math.max(wfTimes.length, 1)) * 100 / 50);
+          const totalCycles = wfTimes.length - 1;
+          const twistScore = totalCycles > 0 ? Math.round((noDowntime / totalCycles) * 100) : 0;
 
           const wfColor = wfPct >= 70 ? '#7ddf8a' : wfPct >= 50 ? '#f0ad4e' : '#ff6b6b';
           const goaColor = goaPct >= 70 ? '#7ddf8a' : goaPct >= 50 ? '#f0ad4e' : '#ff6b6b';
@@ -4489,13 +4492,11 @@
                 </div>
 
                 <div style="height:14px;border-radius:7px;overflow:hidden;display:flex;margin-bottom:10px;">
-                  <div style="width:${Math.round((noDowntime / Math.max(wfTimes.length, 1)) * 100)}%;background:#7ddf8a;" title="No downtime"></div>
-                  <div style="width:${Math.round((Math.max(0, earlySwaps) / Math.max(wfTimes.length, 1)) * 100)}%;background:#f0ad4e;" title="Early swap"></div>
-                  <div style="width:${Math.round((wfDrops / Math.max(wfTimes.length, 1)) * 100)}%;background:#ff6b6b;" title="WF dropped"></div>
+                  <div style="width:${totalCycles > 0 ? Math.round((noDowntime / totalCycles) * 100) : 100}%;background:#7ddf8a;" title="No downtime"></div>
+                  <div style="width:${totalCycles > 0 ? Math.round((wfDrops / totalCycles) * 100) : 0}%;background:#ff6b6b;" title="WF dropped"></div>
                 </div>
                 <div style="display:flex;gap:20px;font-size:0.78rem;">
                   <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#7ddf8a;margin-right:4px;"></span>No downtime <strong>${noDowntime}</strong></span>
-                  <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#f0ad4e;margin-right:4px;"></span>Early swap <strong>${Math.max(0, earlySwaps)}</strong></span>
                   <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#ff6b6b;margin-right:4px;"></span>WF dropped <strong>${wfDrops}</strong></span>
                 </div>
               </div>
