@@ -547,6 +547,101 @@ def build_pull_data(
                 "amount": amount,
             })
 
+    # ─── Leotheras Whirlwind Phase Analysis ───────────────────────────────
+    # Detects WW phases, identifies ranged targets hit (WW escaped melee),
+    # and tracks whether ranged players "jumped" (stopped taking hits quickly)
+    whirlwind_analysis = None
+    if "leotheras" in fight["name"].lower():
+        RANGED_CLASSES = {"Mage", "Warlock", "Hunter", "Priest"}
+        ww_events = []
+        for ev in damage_taken:
+            if ev.get("type") != "damage":
+                continue
+            ability = spell_name(ev, ability_names)
+            if "whirlwind" not in ability.lower():
+                continue
+            target_id = ev.get("targetID")
+            if target_id not in players_by_id:
+                continue
+            ww_events.append({
+                "timestamp": ev["timestamp"],
+                "target_id": target_id,
+                "target": players_by_id[target_id]["name"],
+                "class": players_by_id[target_id].get("subType", ""),
+                "amount": ev.get("amount", 0) + ev.get("absorbed", 0),
+                "time": rel_sec(ev["timestamp"]),
+            })
+
+        if ww_events:
+            # Split into phases (gap > 5s between damage = new phase)
+            phases = []
+            current_phase: list[dict] = [ww_events[0]]
+            for ev in ww_events[1:]:
+                if ev["timestamp"] - current_phase[-1]["timestamp"] > 5000:
+                    phases.append(current_phase)
+                    current_phase = [ev]
+                else:
+                    current_phase.append(ev)
+            phases.append(current_phase)
+
+            phase_results = []
+            for phase_events in phases:
+                phase_start = phase_events[0]["time"]
+                phase_end = phase_events[-1]["time"]
+                # Group by 1-second ticks per target
+                target_ticks: dict[str, list[float]] = {}
+                for ev in phase_events:
+                    target_ticks.setdefault(ev["target"], []).append(ev["time"])
+
+                # Classify targets
+                melee_targets = []
+                ranged_targets = []
+                for ev in phase_events:
+                    name = ev["target"]
+                    pclass = ev["class"]
+                    entry = {"name": name, "class": pclass}
+                    if pclass in RANGED_CLASSES:
+                        if not any(t["name"] == name for t in ranged_targets):
+                            ticks = target_ticks[name]
+                            # "jumped" = only hit 1-2 times in this phase
+                            jumped = len(ticks) <= 2
+                            ranged_targets.append({
+                                **entry,
+                                "hits": len(ticks),
+                                "jumped": jumped,
+                                "first_hit": min(ticks),
+                                "last_hit": max(ticks),
+                            })
+                    else:
+                        if not any(t["name"] == name for t in melee_targets):
+                            melee_targets.append({**entry, "hits": len(target_ticks[name])})
+
+                # Deaths during this phase
+                phase_deaths = [
+                    d for d in deaths_out
+                    if phase_start <= d["relative_time"] <= phase_end + 3
+                ]
+
+                escaped = len(ranged_targets) > 0
+                phase_results.append({
+                    "phase_num": len(phase_results) + 1,
+                    "start_time": phase_start,
+                    "end_time": phase_end,
+                    "duration": round(phase_end - phase_start, 1),
+                    "escaped": escaped,
+                    "melee_targets": melee_targets,
+                    "ranged_targets": ranged_targets,
+                    "deaths": phase_deaths,
+                    "total_targets": len(melee_targets) + len(ranged_targets),
+                })
+
+            whirlwind_analysis = {
+                "total_phases": len(phase_results),
+                "escaped_phases": sum(1 for p in phase_results if p["escaped"]),
+                "clean_phases": sum(1 for p in phase_results if not p["escaped"]),
+                "phases": phase_results,
+            }
+
     # Process damage done table
     damage_done_out = {}
     if dmg_table and "entries" in dmg_table:
@@ -628,6 +723,7 @@ def build_pull_data(
         "buff_events": buff_events,
         "threat_events": threat_events,
         "conflagrations": conflagrations,
+        "whirlwind_analysis": whirlwind_analysis,
         "clutch_heals": clutch_heals[:10],
         "biggest_heals": biggest_heals[:5],
         "biggest_crits": biggest_crits[:5],

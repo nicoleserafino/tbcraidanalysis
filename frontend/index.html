@@ -281,6 +281,27 @@
     .threat-key-item { display: flex; align-items: center; gap: 4px; }
     .threat-key-dot { width: 8px; height: 8px; border-radius: 50%; }
 
+    /* Whirlwind Phase Analysis */
+    .ww-analysis { margin-top: 8px; }
+    .ww-phase-card { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 14px 18px; margin-bottom: 12px; }
+    .ww-phase-card.escaped { border-left: 3px solid #ff6b6b; }
+    .ww-phase-card.clean { border-left: 3px solid #7ddf8a; }
+    .ww-phase-header { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+    .ww-phase-header h4 { margin: 0; font-size: 0.9rem; color: var(--text); }
+    .ww-badge { font-size: 0.72rem; padding: 2px 8px; border-radius: 10px; font-weight: 600; }
+    .ww-badge.clean { background: rgba(125,223,138,0.15); color: #7ddf8a; }
+    .ww-badge.escaped { background: rgba(255,107,107,0.15); color: #ff6b6b; }
+    .ww-targets { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+    .ww-target-chip { font-size: 0.75rem; padding: 3px 8px; border-radius: 4px; display: flex; align-items: center; gap: 4px; }
+    .ww-target-chip.melee { background: rgba(87,166,255,0.12); color: #7db8f7; }
+    .ww-target-chip.ranged-bad { background: rgba(255,107,107,0.15); color: #ff6b6b; }
+    .ww-target-chip.ranged-ok { background: rgba(255,183,77,0.15); color: #ffb74d; }
+    .ww-deaths-row { margin-top: 8px; font-size: 0.78rem; color: #ff6b6b; }
+    .ww-summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 16px; }
+    .ww-summary-stat { text-align: center; padding: 10px; background: rgba(255,255,255,0.03); border-radius: 6px; }
+    .ww-summary-stat .value { font-size: 1.3rem; font-weight: 700; }
+    .ww-summary-stat .label { font-size: 0.72rem; color: var(--muted); margin-top: 2px; }
+
     .issue-item {
       background: rgba(255, 255, 255, 0.04);
       border: 1px solid var(--border);
@@ -3367,6 +3388,8 @@
         ${renderPositionMapCard()}
 
         ${renderWipeCauseChain()}
+
+        ${renderWhirlwindAnalysis()}
       `;
     }
 
@@ -4990,6 +5013,71 @@
                 </div>
               `).join('')}
             </div>
+          </div>
+        </section>
+      `;
+    }
+
+    function renderWhirlwindAnalysis() {
+      const pull = getPull();
+      if (!pull) return '';
+      if (getBossKey() !== BOSS_KEYS.LEO) return '';
+      const ww = pull.whirlwind_analysis;
+      if (!ww || !ww.phases || ww.phases.length === 0) return '';
+
+      const totalDeaths = ww.phases.reduce((sum, p) => sum + (p.deaths || []).length, 0);
+      const allRanged = ww.phases.flatMap(p => p.ranged_targets || []);
+      const failedJumps = allRanged.filter(t => !t.jumped);
+
+      let phasesHtml = ww.phases.map(phase => {
+        const badge = phase.escaped
+          ? '<span class="ww-badge escaped">⚠️ WW Escaped</span>'
+          : '<span class="ww-badge clean">✅ Contained</span>';
+
+        const meleeChips = (phase.melee_targets || []).map(t =>
+          `<span class="ww-target-chip melee">${escapeHtml(t.name)} (${t.hits})</span>`
+        ).join('');
+
+        const rangedChips = (phase.ranged_targets || []).map(t => {
+          const cls = t.jumped ? 'ranged-ok' : 'ranged-bad';
+          const icon = t.jumped ? '🟡' : '🔴';
+          const label = t.jumped ? 'jumped' : `${t.hits} hits — did NOT jump`;
+          return `<span class="ww-target-chip ${cls}">${icon} ${escapeHtml(t.name)} (${label})</span>`;
+        }).join('');
+
+        const deathsHtml = (phase.deaths || []).length > 0
+          ? `<div class="ww-deaths-row">💀 Deaths: ${phase.deaths.map(d => `${escapeHtml(d.player)} (${d.relative_time.toFixed(0)}s)`).join(', ')}</div>`
+          : '';
+
+        return `
+          <div class="ww-phase-card ${phase.escaped ? 'escaped' : 'clean'}">
+            <div class="ww-phase-header">
+              <h4>Phase ${phase.phase_num} — ${phase.start_time.toFixed(0)}s to ${phase.end_time.toFixed(0)}s (${phase.duration.toFixed(0)}s)</h4>
+              ${badge}
+            </div>
+            ${phase.escaped ? `<div style="font-size:0.78rem; color:var(--muted); margin-bottom:6px;">Ranged players hit — WW bounced outside melee camp</div>` : ''}
+            <div class="ww-targets">
+              ${meleeChips}
+              ${rangedChips}
+            </div>
+            ${deathsHtml}
+          </div>
+        `;
+      }).join('');
+
+      return `
+        <section class="card">
+          <h2>🌀 Whirlwind Phase Analysis</h2>
+          <p class="mini-note" style="margin-bottom:12px;">During Leotheras Whirlwind, melee stay in while ranged run out. If ranged get aggro, they must jump to reset threat. If they don't jump in time, WW escapes to ranged/healers causing deaths.</p>
+          <div class="ww-summary-grid">
+            <div class="ww-summary-stat"><div class="value">${ww.total_phases}</div><div class="label">WW Phases</div></div>
+            <div class="ww-summary-stat"><div class="value" style="color:#7ddf8a">${ww.clean_phases}</div><div class="label">Contained</div></div>
+            <div class="ww-summary-stat"><div class="value" style="color:#ff6b6b">${ww.escaped_phases}</div><div class="label">Escaped</div></div>
+            <div class="ww-summary-stat"><div class="value" style="color:#ff6b6b">${totalDeaths}</div><div class="label">WW Deaths</div></div>
+            <div class="ww-summary-stat"><div class="value" style="color:#ff6b6b">${failedJumps.length}</div><div class="label">Failed Jumps</div></div>
+          </div>
+          <div class="ww-analysis">
+            ${phasesHtml}
           </div>
         </section>
       `;
