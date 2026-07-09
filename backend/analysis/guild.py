@@ -134,13 +134,15 @@ ELIXIR_BUFFS = BATTLE_ELIXIRS | GUARDIAN_ELIXIRS
 
 FOOD_BUFFS = {"Well Fed"}
 
-# Shaman imbue IDs — not counted as consumable weapon buffs
+# Shaman imbue temporary enchant IDs
 SHAMAN_IMBUE_IDS = {2636, 2639, 2641, 2632, 2633}
 
 WEAPON_BUFFS = {
     "Brilliant Wizard Oil", "Superior Wizard Oil", "Blessed Wizard Oil",
     "Adamantite Weightstone", "Adamantite Sharpening Stone",
     "Superior Mana Oil", "Brilliant Mana Oil",
+    # Shaman totem buffs count as weapon buffs for party members (and the shaman)
+    "Windfury Totem",
 }
 
 # Known TBC temporary weapon enchant IDs (verified via player class correlation)
