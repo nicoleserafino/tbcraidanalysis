@@ -2467,11 +2467,11 @@
             const ohPct = info.total + info.overheal > 0 ? (info.overheal / (info.total + info.overheal)) * 100 : 0;
             if (ohPct > 40) {
               const downrankAdvice = playerClass === 'Shaman' && /Chain Heal/i.test(spell)
-                ? `Consider using a lower rank of Chain Heal (Rank 3 or 4 instead of max). You'll save significant mana and still cover incoming damage. The mana saved means more heals in P3/P4 when it matters most.`
+                ? `Consider using a lower rank of Chain Heal (Rank 3 or 4 instead of max). You'll save significant mana and still cover incoming damage. The mana saved means more heals in later phases when it matters most.`
                 : playerClass === 'Shaman' && /Healing Wave/i.test(spell)
                   ? `Healing Wave is overhealing heavily — consider Lesser Healing Wave for faster, smaller heals on non-tanks, or downrank Healing Wave for tank healing to conserve mana.`
                   : playerClass === 'Priest' && /Greater Heal/i.test(spell)
-                    ? `Greater Heal is too large for current damage intake. Use Flash Heal or downrank Greater Heal. The mana wasted on overhealing could sustain you through P3.`
+                    ? `Greater Heal is too large for current damage intake. Use Flash Heal or downrank Greater Heal. The mana wasted on overhealing could sustain you through intensive phases.`
                     : playerClass === 'Priest' && /Flash Heal/i.test(spell)
                       ? `Flash Heal overhealing this much suggests targets are being sniped or you're healing people already at full. Consider pre-shielding instead or switching to a lower rank.`
                       : playerClass === 'Paladin' && /Flash of Light/i.test(spell)
@@ -2817,7 +2817,7 @@
           if (isArcane && evocation === 0 && activeTime > 60) {
             findings.push({
               title: 'Arcane Mage with zero Evocation casts',
-              body: 'Arcane Blast burns mana extremely fast. Evocation should be used during low-damage windows (P2 weapons phase is ideal). Without Evocation, you will OOM and be forced into wand/frostbolt filler, losing massive DPS.',
+              body: 'Arcane Blast burns mana extremely fast. Evocation should be used during low-damage windows. Without Evocation, you will OOM and be forced into wand/frostbolt filler, losing massive DPS.',
               severity: 'warning'
             });
           }
@@ -2829,7 +2829,7 @@
             if (arcaneExplosion > arcaneBlast * 0.5) {
               findings.push({
                 title: `Heavy Arcane Explosion usage (${arcaneExplosion} vs ${arcaneBlast} AB)`,
-                body: 'Arcane Explosion is an AoE spell — if you are using it on single targets, you are losing huge DPS. It should only be used during P2 weapons (AoE phase). On single targets (advisors, Kael), Arcane Blast is always superior.',
+                body: 'Arcane Explosion is an AoE spell — if you are using it on single targets, you are losing huge DPS. It should only be used during AoE phases. On single target bosses, Arcane Blast is always superior.',
                 severity: 'warning'
               });
             }
@@ -2839,7 +2839,7 @@
           if (activeTime > 120 && icyVeins.length === 0 && arcanePower.length === 0 && pom.length === 0) {
             findings.push({
               title: 'No DPS cooldowns used in a 2+ minute fight',
-              body: 'Icy Veins (3 min CD), Arcane Power (3 min CD), or Presence of Mind (3 min CD) should all be used. On a long Kael fight, you should get 2-3 uses. Save one for P3 Capernian burn and one for P4/P5.',
+              body: 'Icy Veins (3 min CD), Arcane Power (3 min CD), or Presence of Mind (3 min CD) should all be used on cooldown. On a fight this long, you should get at least 1-2 uses.',
               severity: 'warning'
             });
           }
