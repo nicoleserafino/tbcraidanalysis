@@ -3804,8 +3804,7 @@
       // Compute DPS/HPS for the metric grid
       const duration = pull.duration_sec || 1;
       const role = getPlayerRole(player);
-      const dpsData = pull.damage_done?.[player] || {};
-      const totalDmg = Object.values(dpsData).reduce((s, v) => s + Number(v || 0), 0);
+      const totalDmg = pull.damage_totals?.[player] || Object.values(pull.damage_done?.[player] || {}).reduce((s, v) => s + Number(v || 0), 0);
       const dps = Math.round(totalDmg / duration);
       const healData = pull.heal_details?.[player] || {};
       const totalHeal = Object.values(healData).reduce((s, d) => s + (d.total || 0), 0);
@@ -4216,8 +4215,7 @@
       }
 
       // DPS/HPS stat header — now in the metric grid above, skip here
-      const dpsData2 = pull.damage_done?.[player] || {};
-      const totalDmg2 = Object.values(dpsData2).reduce((s, v) => s + Number(v || 0), 0);
+      const totalDmg2 = pull.damage_totals?.[player] || Object.values(pull.damage_done?.[player] || {}).reduce((s, v) => s + Number(v || 0), 0);
       const dps2 = Math.round(totalDmg2 / duration);
       const healData2 = pull.heal_details?.[player] || {};
       const totalHeal2 = Object.values(healData2).reduce((s, d) => s + (d.total || 0), 0);

@@ -782,18 +782,20 @@ def build_pull_data(
 
     # Process damage done table
     damage_done_out = {}
+    damage_totals = {}  # Canonical per-player totals from WCL table
     if dmg_table and "entries" in dmg_table:
         for entry in dmg_table["entries"]:
             pid = entry.get("id")
             if pid not in players_by_id:
                 continue
             player = players_by_id[pid]["name"]
+            damage_totals[player] = entry.get("total", 0)
             damage_done_out[player] = {}
             for ab in entry.get("abilities", []):
                 name = ab.get("name", "Unknown")
                 if name == "Melee":
                     name = "Melee (Auto Attack)"
-                damage_done_out[player][name] = ab.get("total", 0)
+                damage_done_out[player][name] = damage_done_out[player].get(name, 0) + ab.get("total", 0)
 
     # Process buff events
     buff_events = {}
@@ -853,6 +855,7 @@ def build_pull_data(
         "spell_cast_times": spell_cast_times,
         "cancelled_casts": cancelled_casts,
         "damage_done": damage_done_out,
+        "damage_totals": damage_totals,
         "damage_sources": damage_sources,
         "player_damage_taken": player_damage_taken,
         "player_damage_taken_amounts": player_damage_taken_amounts,
