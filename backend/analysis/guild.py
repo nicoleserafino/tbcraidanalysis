@@ -673,8 +673,10 @@ def _audit_consumables(auras: list[dict], gear_items: list[dict] | None = None, 
                 item = gear_items[slot_idx]
                 temp_enchant = item.get("temporaryEnchant", 0)
                 if temp_enchant:
-                    # Skip shaman self-imbues — they're class abilities, not consumables
+                    # Shaman self-imbues don't count as consumable weapon buffs
+                    # but note them so the UI can still show what's applied
                     if player_class == "Shaman" and temp_enchant in SHAMAN_IMBUE_IDS:
+                        weapon_buff_name = TEMP_ENCHANT_NAMES.get(temp_enchant, "Shaman Imbue")
                         continue
                     has_weapon_buff = True
                     name = TEMP_ENCHANT_NAMES.get(temp_enchant, f"Weapon Buff ({temp_enchant})")
