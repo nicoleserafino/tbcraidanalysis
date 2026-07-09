@@ -1175,6 +1175,8 @@
           <div class="detail-view-tabs" aria-label="Dashboard views">
             <button type="button" class="detail-tab view-active" data-view-target="attendance">Attendance</button>
             <button type="button" class="detail-tab" data-view-target="progress">Progress</button>
+            <button type="button" class="detail-tab" data-view-target="wipes">Wipe Analysis</button>
+            <button type="button" class="detail-tab" data-view-target="trends">Player Trends</button>
             <button type="button" class="detail-tab" data-view-target="playerPrep">Player Prep</button>
           </div>
         </div>
@@ -1207,6 +1209,29 @@
             </div>
             <div id="progressContainer">
               <div class="status-box loading">Loading progress data...</div>
+            </div>
+          </section>
+
+          <section class="detail-view" data-view="wipes">
+            <div class="detail-note-card">
+              Wipe patterns across recent raids. Identifies what's killing the raid and who dies first.
+            </div>
+            <div id="wipeContainer">
+              <div class="status-box loading">Loading wipe analysis...</div>
+            </div>
+          </section>
+
+          <section class="detail-view" data-view="trends">
+            <div class="detail-note-card">
+              Week-over-week performance trends per player. Track DPS/HPS improvements and death rates.
+            </div>
+            <div id="trendsControls" style="margin-bottom:12px;display:flex;gap:8px;align-items:center;">
+              <input id="trendsSearch" type="text" placeholder="Search player..." style="min-width:180px;padding:6px 10px;font-size:0.85rem;">
+              <button class="progress-phase-btn active" data-trend-role="dps" type="button">DPS</button>
+              <button class="progress-phase-btn" data-trend-role="healer" type="button">Healers</button>
+            </div>
+            <div id="trendsContainer">
+              <div class="status-box loading">Loading player trends...</div>
             </div>
           </section>
 
@@ -1298,6 +1323,8 @@
       views: {
         attendance: document.querySelector('[data-view="attendance"]'),
         progress: document.querySelector('[data-view="progress"]'),
+        wipes: document.querySelector('[data-view="wipes"]'),
+        trends: document.querySelector('[data-view="trends"]'),
         prep: document.querySelector('[data-view="prep"]'),
         playerPrep: document.querySelector('[data-view="playerPrep"]')
       }
@@ -1311,6 +1338,14 @@
       progress: {
         title: 'Boss Progress',
         subtitle: 'Kill time metrics per boss across all guild raids.'
+      },
+      wipes: {
+        title: 'Wipe Analysis',
+        subtitle: 'What\'s killing us? Boss HP%, first deaths, and common death causes across recent raids.'
+      },
+      trends: {
+        title: 'Player Trends',
+        subtitle: 'Week-over-week DPS, HPS, and death rate trends per player.'
       },
       prep: {
         title: 'Raid Prep',
@@ -2092,12 +2127,197 @@
       render();
     }
 
+    // --- Wipe Analysis ---
+    let wipesLoaded = false;
+    async function loadWipes() {
+      if (wipesLoaded) return;
+      const container = document.getElementById('wipeContainer');
+      try {
+        const data = await fetchJson('/api/guild/wipe-analysis');
+        wipesLoaded = true;
+        renderWipes(data, container);
+      } catch (error) {
+        container.innerHTML = `<div class="status-box error">${escapeHtml(error.message)}</div>`;
+      }
+    }
+
+    function renderWipes(data, container) {
+      if (!data.wipes || !data.wipes.length) {
+        container.innerHTML = '<div class="empty">No wipe data available. Keep raiding!</div>';
+        return;
+      }
+
+      const cards = data.wipes.map(boss => {
+        const hpBar = boss.hp_brackets;
+        const total = boss.wipe_count;
+        const barSegments = [
+          { pct: hpBar.sub_10, color: 'var(--kill)', label: '<10%' },
+          { pct: hpBar.sub_25, color: '#f0c040', label: '10-25%' },
+          { pct: hpBar.sub_50, color: '#e07040', label: '25-50%' },
+          { pct: hpBar.above_50, color: '#c04040', label: '>50%' },
+        ].filter(s => s.pct > 0);
+
+        const hpBarHtml = barSegments.map(s =>
+          `<div style="flex:${s.pct};background:${s.color};height:8px;border-radius:4px;" title="${s.pct} wipes at ${s.label} boss HP"></div>`
+        ).join('');
+
+        const firstDeaths = boss.first_deaths.map(d =>
+          `<span class="pill" style="font-size:0.75rem;">${escapeHtml(d.player)} (${d.count})</span>`
+        ).join(' ');
+
+        const deathCauses = boss.death_causes.slice(0, 5).map(d =>
+          `<div style="display:flex;justify-content:space-between;font-size:0.82rem;padding:2px 0;">
+            <span style="color:var(--text-secondary);">${escapeHtml(d.ability)}</span>
+            <span style="font-weight:600;">${d.count}</span>
+          </div>`
+        ).join('');
+
+        return `
+          <div class="card" style="padding:16px;margin-bottom:12px;">
+            <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;">
+              <h4 style="margin:0;font-size:1rem;">${escapeHtml(boss.boss)}</h4>
+              <span style="font-size:0.82rem;color:var(--muted);">${total} wipe${total !== 1 ? 's' : ''} · avg ${formatTime(boss.avg_duration)}</span>
+            </div>
+            <div style="margin-bottom:8px;">
+              <div style="font-size:0.75rem;color:var(--muted);margin-bottom:3px;">Boss HP at wipe (best: ${boss.best_attempt_pct ?? '?'}%)</div>
+              <div style="display:flex;gap:2px;border-radius:4px;overflow:hidden;">${hpBarHtml}</div>
+            </div>
+            <div style="display:flex;gap:24px;margin-bottom:8px;font-size:0.82rem;">
+              <div><span style="color:var(--muted);">Avg deaths/wipe:</span> <strong>${boss.avg_deaths_per_wipe}</strong></div>
+              <div><span style="color:var(--muted);">Median HP%:</span> <strong>${boss.median_pct ?? '?'}%</strong></div>
+            </div>
+            ${boss.first_deaths.length ? `<div style="margin-bottom:6px;"><span style="font-size:0.78rem;color:var(--muted);">First to die:</span> ${firstDeaths}</div>` : ''}
+            ${deathCauses ? `<div style="margin-top:6px;border-top:1px solid var(--border);padding-top:6px;"><div style="font-size:0.78rem;color:var(--muted);margin-bottom:4px;">Top death causes</div>${deathCauses}</div>` : ''}
+          </div>`;
+      }).join('');
+
+      container.innerHTML = `
+        <div style="font-size:0.82rem;color:var(--muted);margin-bottom:10px;">${data.raids_analyzed} raids analyzed</div>
+        ${cards}`;
+    }
+
+    // --- Player Trends ---
+    let trendsLoaded = false;
+    let trendsData = null;
+    let trendsRole = 'dps';
+    let trendsFilter = '';
+
+    async function loadTrends() {
+      if (trendsLoaded) return;
+      const container = document.getElementById('trendsContainer');
+      try {
+        trendsData = await fetchJson('/api/guild/player-trends');
+        trendsLoaded = true;
+        renderTrends();
+      } catch (error) {
+        container.innerHTML = `<div class="status-box error">${escapeHtml(error.message)}</div>`;
+      }
+    }
+
+    function renderTrends() {
+      const container = document.getElementById('trendsContainer');
+      if (!trendsData || !trendsData.players || !trendsData.players.length) {
+        container.innerHTML = '<div class="empty">No trend data available yet.</div>';
+        return;
+      }
+
+      let players = trendsData.players.filter(p => p.role === trendsRole);
+      if (trendsFilter) {
+        const q = trendsFilter.toLowerCase();
+        players = players.filter(p => p.player.toLowerCase().includes(q));
+      }
+
+      // Sort by latest week avg DPS/HPS descending
+      players.sort((a, b) => {
+        const aLast = a.weeks[a.weeks.length - 1] || {};
+        const bLast = b.weeks[b.weeks.length - 1] || {};
+        const aVal = trendsRole === 'healer' ? (aLast.avg_hps || 0) : (aLast.avg_dps || 0);
+        const bVal = trendsRole === 'healer' ? (bLast.avg_hps || 0) : (bLast.avg_dps || 0);
+        return bVal - aVal;
+      });
+
+      // Collect all weeks for header
+      const allWeeks = new Set();
+      players.forEach(p => p.weeks.forEach(w => allWeeks.add(w.week)));
+      const weeks = [...allWeeks].sort();
+
+      if (!weeks.length || !players.length) {
+        container.innerHTML = '<div class="empty">No players match the current filter.</div>';
+        return;
+      }
+
+      const metric = trendsRole === 'healer' ? 'avg_hps' : 'avg_dps';
+      const metricLabel = trendsRole === 'healer' ? 'HPS' : 'DPS';
+
+      function weekLabel(w) {
+        const d = new Date(w + 'T15:00:00Z');
+        return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      }
+
+      function trendArrow(weeks, metric) {
+        if (weeks.length < 2) return '';
+        const prev = weeks[weeks.length - 2][metric] || 0;
+        const curr = weeks[weeks.length - 1][metric] || 0;
+        if (prev === 0) return '';
+        const pct = Math.round(((curr - prev) / prev) * 100);
+        if (pct > 3) return `<span style="color:var(--kill);font-size:0.75rem;">+${pct}%</span>`;
+        if (pct < -3) return `<span style="color:#ff6b6b;font-size:0.75rem;">${pct}%</span>`;
+        return `<span style="color:var(--muted);font-size:0.75rem;">~</span>`;
+      }
+
+      const rows = players.map(p => {
+        const weekMap = {};
+        p.weeks.forEach(w => { weekMap[w.week] = w; });
+        const cells = weeks.map(w => {
+          const wk = weekMap[w];
+          if (!wk) return '<td style="text-align:center;color:var(--muted);opacity:0.3;">-</td>';
+          const val = wk[metric] || 0;
+          const deaths = wk.total_deaths;
+          const deathBadge = deaths > 0 ? ` <span style="color:#ff6b6b;font-size:0.72rem;" title="${deaths} death${deaths>1?'s':''}">D${deaths}</span>` : '';
+          return `<td style="text-align:center;" title="${metricLabel}: ${Math.round(val)} · ${wk.fights} fights · ${deaths} deaths">${Math.round(val)}${deathBadge}</td>`;
+        }).join('');
+        const trend = trendArrow(p.weeks, metric);
+        return `<tr>
+          <td style="font-weight:600;white-space:nowrap;">${escapeHtml(p.player)} ${trend}</td>
+          ${cells}
+        </tr>`;
+      }).join('');
+
+      container.innerHTML = `
+        <div style="font-size:0.82rem;color:var(--muted);margin-bottom:8px;">${trendsData.raids_analyzed} raids analyzed · Showing avg ${metricLabel} per lockout week</div>
+        <div style="overflow-x:auto; border-radius:12px; border:1px solid var(--border);">
+        <table style="min-width:${300 + weeks.length * 80}px;">
+          <thead><tr>
+            <th style="text-align:left;">Player</th>
+            ${weeks.map(w => `<th style="text-align:center;font-size:0.78rem;">${weekLabel(w)}</th>`).join('')}
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+        </div>`;
+    }
+
+    // Trend controls
+    document.querySelectorAll('[data-trend-role]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        trendsRole = btn.dataset.trendRole;
+        document.querySelectorAll('[data-trend-role]').forEach(b => b.classList.toggle('active', b === btn));
+        renderTrends();
+      });
+    });
+
+    document.getElementById('trendsSearch').addEventListener('input', e => {
+      trendsFilter = e.target.value;
+      renderTrends();
+    });
+
     setActiveDetailView('attendance');
     syncPrepOpenLink();
 
     loadReports();
     loadAttendance();
     loadProgress();
+    loadWipes();
+    loadTrends();
 
     // Auto-hide nav on scroll, show on hover at top
     (function() {

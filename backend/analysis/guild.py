@@ -7,8 +7,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from backend.wcl.client import graphql_query
-from backend.wcl.queries import GUILD_ATTENDANCE, REPORT_EVENTS, REPORT_FIGHTS
-from backend.analysis.report import fetch_report_metadata
+from backend.wcl.queries import GUILD_ATTENDANCE, REPORT_EVENTS, REPORT_FIGHTS, REPORT_TABLE
+from backend.analysis.report import fetch_report_metadata, fetch_events_paginated, fetch_table
 from backend.analysis.utils import spell_name
 
 # TBC encounter IDs by instance
@@ -797,3 +797,299 @@ async def fetch_guild_progress(guild_id: int, num_raids: int = 50) -> dict[str, 
         })
 
     return {"progress": progress, "raids_analyzed": len(all_codes)}
+
+
+async def _fetch_guild_report_codes(guild_id: int, num_raids: int = 25) -> list[tuple[str, int]]:
+    """Fetch (code, startTime) pairs for recent guild raids."""
+    all_codes: list[tuple[str, int]] = []
+    for page in range(1, (num_raids // 25) + 2):
+        data = await graphql_query(GUILD_ATTENDANCE, {
+            "guildID": guild_id, "limit": 25, "page": page,
+        })
+        guild = data.get("guildData", {}).get("guild")
+        if not guild:
+            break
+        entries = guild.get("attendance", {}).get("data", [])
+        for entry in entries:
+            all_codes.append((entry["code"], entry["startTime"]))
+        if not guild.get("attendance", {}).get("has_more_pages"):
+            break
+        if len(all_codes) >= num_raids:
+            break
+    return all_codes[:num_raids]
+
+
+async def fetch_wipe_analysis(guild_id: int, num_raids: int = 15) -> dict[str, Any]:
+    """Aggregate wipe data across recent raids per boss.
+
+    For each boss: wipe count, boss HP% distribution, first deaths, common death causes.
+    """
+    codes = await _fetch_guild_report_codes(guild_id, num_raids)
+
+    sem = asyncio.Semaphore(4)
+
+    async def process_raid(code: str, raid_date: int):
+        async with sem:
+            try:
+                meta = await fetch_report_metadata(code)
+            except Exception:
+                return []
+            fights = meta.get("fights", []) or []
+            actors = meta.get("masterData", {}).get("actors", [])
+            abilities = meta.get("masterData", {}).get("abilities", [])
+            players_by_id = {a["id"]: a for a in actors if a.get("type") == "Player"}
+            ability_names = {a["gameID"]: a["name"] for a in abilities}
+
+            wipe_fights = [f for f in fights if not f.get("kill") and f.get("encounterID")]
+            results = []
+
+            # Fetch deaths for wipe fights (bounded concurrency within raid)
+            inner_sem = asyncio.Semaphore(6)
+
+            async def get_wipe_data(fight):
+                async with inner_sem:
+                    start, end = fight["startTime"], fight["endTime"]
+                    duration = round((end - start) / 1000, 1)
+                    try:
+                        death_events = await fetch_events_paginated(
+                            code, [fight["id"]], "Deaths", start, end
+                        )
+                    except Exception:
+                        death_events = []
+
+                    deaths = []
+                    for ev in death_events:
+                        if ev.get("type") != "death":
+                            continue
+                        tid = ev.get("targetID")
+                        if tid not in players_by_id:
+                            continue
+                        killing = ""
+                        if ev.get("killingAbility"):
+                            killing = ev["killingAbility"].get("name", "") or ability_names.get(
+                                ev["killingAbility"].get("guid", 0), "")
+                        elif ev.get("ability"):
+                            killing = ev["ability"].get("name", "") or ability_names.get(
+                                ev["ability"].get("guid", 0), "")
+                        deaths.append({
+                            "player": players_by_id[tid]["name"],
+                            "time": round((ev["timestamp"] - start) / 1000, 1),
+                            "ability": killing,
+                        })
+
+                    return {
+                        "boss": fight["name"],
+                        "fight_pct": fight.get("fightPercentage", 0),
+                        "duration": duration,
+                        "deaths": deaths,
+                        "raid_date": raid_date,
+                    }
+
+            wipe_data = await asyncio.gather(*(get_wipe_data(f) for f in wipe_fights))
+            return list(wipe_data)
+
+    all_results = await asyncio.gather(*(process_raid(c, d) for c, d in codes))
+
+    # Aggregate by boss
+    boss_wipes: dict[str, list] = {}
+    for raid_wipes in all_results:
+        for wipe in raid_wipes:
+            boss_wipes.setdefault(wipe["boss"], []).append(wipe)
+
+    BOSS_ORDER = [
+        "Hydross the Unstable", "The Lurker Below", "Leotheras the Blind",
+        "Fathom-Lord Karathress", "Morogrim Tidewalker", "Lady Vashj",
+        "Al'ar", "Void Reaver", "High Astromancer Solarian", "Kael'thas Sunstrider",
+    ]
+
+    summary = []
+    seen = set()
+    for boss_name in BOSS_ORDER + list(boss_wipes.keys()):
+        if boss_name in seen or boss_name not in boss_wipes:
+            continue
+        seen.add(boss_name)
+        wipes = boss_wipes[boss_name]
+        pcts = sorted([w["fight_pct"] for w in wipes])
+
+        # First death stats across all wipes
+        first_death_counts: dict[str, int] = {}
+        death_cause_counts: dict[str, int] = {}
+        total_deaths = 0
+        for w in wipes:
+            if w["deaths"]:
+                first = w["deaths"][0]
+                first_death_counts[first["player"]] = first_death_counts.get(first["player"], 0) + 1
+            for d in w["deaths"]:
+                total_deaths += 1
+                if d["ability"]:
+                    death_cause_counts[d["ability"]] = death_cause_counts.get(d["ability"], 0) + 1
+
+        # Boss HP% brackets
+        sub_10 = sum(1 for p in pcts if p <= 10)
+        sub_25 = sum(1 for p in pcts if 10 < p <= 25)
+        sub_50 = sum(1 for p in pcts if 25 < p <= 50)
+        above_50 = sum(1 for p in pcts if p > 50)
+
+        top_first_deaths = sorted(first_death_counts.items(), key=lambda x: -x[1])[:5]
+        top_death_causes = sorted(death_cause_counts.items(), key=lambda x: -x[1])[:8]
+
+        summary.append({
+            "boss": boss_name,
+            "wipe_count": len(wipes),
+            "hp_brackets": {"sub_10": sub_10, "sub_25": sub_25, "sub_50": sub_50, "above_50": above_50},
+            "best_attempt_pct": pcts[0] if pcts else None,
+            "median_pct": pcts[len(pcts)//2] if pcts else None,
+            "avg_duration": round(sum(w["duration"] for w in wipes) / len(wipes), 1),
+            "total_deaths": total_deaths,
+            "avg_deaths_per_wipe": round(total_deaths / len(wipes), 1),
+            "first_deaths": [{"player": p, "count": c} for p, c in top_first_deaths],
+            "death_causes": [{"ability": a, "count": c} for a, c in top_death_causes],
+        })
+
+    return {"wipes": summary, "raids_analyzed": len(codes)}
+
+
+async def fetch_player_trends(guild_id: int, num_raids: int = 15) -> dict[str, Any]:
+    """Track per-player DPS/HPS and death trends across recent raids.
+
+    Groups data by lockout week for week-over-week comparison.
+    """
+    codes = await _fetch_guild_report_codes(guild_id, num_raids)
+
+    sem = asyncio.Semaphore(4)
+
+    async def process_raid(code: str, raid_date: int):
+        async with sem:
+            try:
+                meta = await fetch_report_metadata(code)
+            except Exception:
+                return []
+            fights = meta.get("fights", []) or []
+            actors = meta.get("masterData", {}).get("actors", [])
+            players_by_id = {a["id"]: a for a in actors if a.get("type") == "Player"}
+
+            boss_fights = [f for f in fights if f.get("encounterID") and f.get("kill")]
+            if not boss_fights:
+                return []
+
+            inner_sem = asyncio.Semaphore(6)
+
+            async def get_fight_stats(fight):
+                async with inner_sem:
+                    fid = fight["id"]
+                    start, end = fight["startTime"], fight["endTime"]
+                    duration = (end - start) / 1000
+
+                    try:
+                        dmg_table, heal_table, death_events = await asyncio.gather(
+                            fetch_table(code, [fid], "DamageDone", start, end),
+                            fetch_table(code, [fid], "Healing", start, end),
+                            fetch_events_paginated(code, [fid], "Deaths", start, end),
+                        )
+                    except Exception:
+                        return []
+
+                    results = []
+                    # DPS from damage table — entries use class name as type, filter out pets/NPCs
+                    player_names = {a["name"] for a in actors if a.get("type") == "Player"}
+                    for entry in (dmg_table or {}).get("entries", []):
+                        name = entry.get("name", "")
+                        if not name or name not in player_names:
+                            continue
+                        total_dmg = entry.get("total", 0)
+                        results.append({
+                            "player": name,
+                            "boss": fight["name"],
+                            "dps": round(total_dmg / duration, 1) if duration > 0 else 0,
+                            "total_damage": total_dmg,
+                            "duration": round(duration, 1),
+                        })
+
+                    # HPS from healing table
+                    for entry in (heal_table or {}).get("entries", []):
+                        name = entry.get("name", "")
+                        if not name or name not in player_names:
+                            continue
+                        total_heal = entry.get("total", 0)
+                        # Attach HPS to existing entry or create new
+                        existing = next((r for r in results if r["player"] == name), None)
+                        if existing:
+                            existing["hps"] = round(total_heal / duration, 1) if duration > 0 else 0
+                            existing["total_healing"] = total_heal
+                        else:
+                            results.append({
+                                "player": name,
+                                "boss": fight["name"],
+                                "dps": 0,
+                                "total_damage": 0,
+                                "hps": round(total_heal / duration, 1) if duration > 0 else 0,
+                                "total_healing": total_heal,
+                                "duration": round(duration, 1),
+                            })
+
+                    # Count deaths per player
+                    death_counts: dict[str, int] = {}
+                    for ev in death_events:
+                        if ev.get("type") != "death":
+                            continue
+                        tid = ev.get("targetID")
+                        if tid in players_by_id:
+                            pname = players_by_id[tid]["name"]
+                            death_counts[pname] = death_counts.get(pname, 0) + 1
+
+                    for r in results:
+                        r["deaths"] = death_counts.get(r["player"], 0)
+
+                    return results
+
+            fight_data = await asyncio.gather(*(get_fight_stats(f) for f in boss_fights))
+
+            week = _lockout_week(raid_date)
+            raid_results = []
+            for fight_stats in fight_data:
+                for stat in fight_stats:
+                    stat["week"] = week
+                    stat["raid_date"] = raid_date
+                    stat["report_code"] = code
+                    raid_results.append(stat)
+            return raid_results
+
+    all_results = await asyncio.gather(*(process_raid(c, d) for c, d in codes))
+
+    # Aggregate by player → week
+    player_weeks: dict[str, dict[str, list]] = {}
+    for raid_stats in all_results:
+        for stat in raid_stats:
+            player = stat["player"]
+            week = stat["week"]
+            player_weeks.setdefault(player, {}).setdefault(week, []).append(stat)
+
+    # Build per-player trend summaries
+    players = []
+    for player, weeks in sorted(player_weeks.items()):
+        week_summaries = []
+        for week in sorted(weeks.keys()):
+            entries = weeks[week]
+            avg_dps = round(sum(e["dps"] for e in entries) / len(entries), 1)
+            avg_hps = round(sum(e.get("hps", 0) for e in entries) / len(entries), 1)
+            total_deaths = sum(e.get("deaths", 0) for e in entries)
+            fights_count = len(entries)
+            week_summaries.append({
+                "week": week,
+                "avg_dps": avg_dps,
+                "avg_hps": avg_hps,
+                "total_deaths": total_deaths,
+                "fights": fights_count,
+            })
+        # Determine primary role from avg numbers
+        total_dps = sum(w["avg_dps"] for w in week_summaries)
+        total_hps = sum(w["avg_hps"] for w in week_summaries)
+        role = "healer" if total_hps > total_dps else "dps"
+
+        players.append({
+            "player": player,
+            "role": role,
+            "weeks": week_summaries,
+        })
+
+    return {"players": players, "raids_analyzed": len(codes)}

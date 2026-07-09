@@ -17,7 +17,7 @@ from fastapi.responses import FileResponse
 logger = logging.getLogger(__name__)
 
 from backend.analysis.compare import fetch_compare_report, fetch_player_details
-from backend.analysis.guild import fetch_guild_reports, compute_attendance, fetch_gear_audit, fetch_guild_progress
+from backend.analysis.guild import fetch_guild_reports, compute_attendance, fetch_gear_audit, fetch_guild_progress, fetch_wipe_analysis, fetch_player_trends
 from backend.analysis.report import fetch_full_report
 from backend.config import get_settings
 
@@ -258,6 +258,48 @@ async def get_guild_progress():
     except Exception as e:
         logger.error("Guild progress error: %s\n%s", e, traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Failed to fetch guild progress: {e}")
+
+
+_wipe_analysis_cache: dict[Any, tuple[float, Any]] = {}
+
+
+@app.get("/api/guild/wipe-analysis")
+async def get_wipe_analysis():
+    """Aggregate wipe data across recent guild raids."""
+    settings = get_settings()
+    guild_id = settings.guild_id
+
+    try:
+        return await _cache_get(
+            _wipe_analysis_cache,
+            guild_id,
+            lambda: fetch_wipe_analysis(guild_id),
+            ttl=600,
+        )
+    except Exception as e:
+        logger.error("Wipe analysis error: %s\n%s", e, traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Failed to fetch wipe analysis: {e}")
+
+
+_player_trends_cache: dict[Any, tuple[float, Any]] = {}
+
+
+@app.get("/api/guild/player-trends")
+async def get_player_trends():
+    """Track per-player performance trends across recent raids."""
+    settings = get_settings()
+    guild_id = settings.guild_id
+
+    try:
+        return await _cache_get(
+            _player_trends_cache,
+            guild_id,
+            lambda: fetch_player_trends(guild_id),
+            ttl=600,
+        )
+    except Exception as e:
+        logger.error("Player trends error: %s\n%s", e, traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Failed to fetch player trends: {e}")
 
 
 @app.get("/api/report/{report_code}/gear")
