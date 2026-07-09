@@ -5027,7 +5027,7 @@
 
       const totalDeaths = ww.phases.reduce((sum, p) => sum + (p.deaths || []).length, 0);
       const allRanged = ww.phases.flatMap(p => p.ranged_targets || []);
-      const failedJumps = allRanged.filter(t => !t.jumped);
+      const highExposure = allRanged.filter(t => t.hits >= 4);
 
       let phasesHtml = ww.phases.map(phase => {
         const badge = phase.escaped
@@ -5039,10 +5039,10 @@
         ).join('');
 
         const rangedChips = (phase.ranged_targets || []).map(t => {
-          const cls = t.jumped ? 'ranged-ok' : 'ranged-bad';
-          const icon = t.jumped ? '🟡' : '🔴';
-          const label = t.jumped ? 'jumped' : `${t.hits} hits — did NOT jump`;
-          return `<span class="ww-target-chip ${cls}">${icon} ${escapeHtml(t.name)} (${label})</span>`;
+          const cls = t.hits <= 2 ? 'ranged-ok' : 'ranged-bad';
+          const icon = t.hits <= 2 ? '🟡' : '🔴';
+          const label = t.hits <= 2 ? `${t.hits} hit${t.hits > 1 ? 's' : ''} (glancing)` : `${t.hits} hits over ${t.exposure}s`;
+          return `<span class="ww-target-chip ${cls}">${icon} ${escapeHtml(t.name)} — ${label}</span>`;
         }).join('');
 
         const deathsHtml = (phase.deaths || []).length > 0
@@ -5068,13 +5068,13 @@
       return `
         <section class="card">
           <h2>🌀 Whirlwind Phase Analysis</h2>
-          <p class="mini-note" style="margin-bottom:12px;">During Leotheras Whirlwind, melee stay in while ranged run out. If ranged get aggro, they must jump to reset threat. If they don't jump in time, WW escapes to ranged/healers causing deaths.</p>
+          <p class="mini-note" style="margin-bottom:12px;">During Leotheras Whirlwind, melee stay in while ranged stay out. WW bounces between nearby targets — if it reaches ranged, it can chain through anyone in the area. Ranged hit counts show exposure, not necessarily who caused the escape.</p>
           <div class="ww-summary-grid">
             <div class="ww-summary-stat"><div class="value">${ww.total_phases}</div><div class="label">WW Phases</div></div>
             <div class="ww-summary-stat"><div class="value" style="color:#7ddf8a">${ww.clean_phases}</div><div class="label">Contained</div></div>
             <div class="ww-summary-stat"><div class="value" style="color:#ff6b6b">${ww.escaped_phases}</div><div class="label">Escaped</div></div>
             <div class="ww-summary-stat"><div class="value" style="color:#ff6b6b">${totalDeaths}</div><div class="label">WW Deaths</div></div>
-            <div class="ww-summary-stat"><div class="value" style="color:#ff6b6b">${failedJumps.length}</div><div class="label">Failed Jumps</div></div>
+            <div class="ww-summary-stat"><div class="value" style="color:#ff6b6b">${highExposure.length}</div><div class="label">High Exposure</div></div>
           </div>
           <div class="ww-analysis">
             ${phasesHtml}

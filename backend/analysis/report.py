@@ -603,14 +603,12 @@ def build_pull_data(
                     if pclass in RANGED_CLASSES:
                         if not any(t["name"] == name for t in ranged_targets):
                             ticks = target_ticks[name]
-                            # "jumped" = only hit 1-2 times in this phase
-                            jumped = len(ticks) <= 2
                             ranged_targets.append({
                                 **entry,
                                 "hits": len(ticks),
-                                "jumped": jumped,
                                 "first_hit": min(ticks),
                                 "last_hit": max(ticks),
+                                "exposure": round(max(ticks) - min(ticks), 1) if len(ticks) > 1 else 0,
                             })
                     else:
                         if not any(t["name"] == name for t in melee_targets):
