@@ -2926,6 +2926,15 @@
               severity: 'warning'
             });
           }
+
+          // Soulshatter usage for threat management
+          if (soulshatter.length === 0 && activeTime > 120) {
+            findings.push({
+              title: 'No Soulshatter used in a 2+ minute fight',
+              body: 'Soulshatter (5 min CD) reduces threat by 50%. Warlocks generate massive threat — use it proactively before you catch the tank, especially after burst openers.',
+              severity: 'info'
+            });
+          }
         }
 
         if (playerClass === 'Warrior' && role === 'DPS') {
@@ -3017,8 +3026,84 @@
           }
         }
 
+        // Ret Paladin DPS advice
+        if (playerClass === 'Paladin' && role === 'DPS') {
+          const crusaderStrike = spellCasts['Crusader Strike'] || 0;
+          const judgement = (spellCasts['Judgement of Blood'] || 0) + (spellCasts['Judgement of Command'] || 0) + (spellCasts['Judgement of Righteousness'] || 0) + (spellCasts['Judgement of the Crusader'] || 0);
+          const avengingWrath = buffEvts.filter(b => b.spell === 'Avenging Wrath');
+
+          if (crusaderStrike === 0 && activeTime > 20) {
+            findings.push({
+              title: 'Zero Crusader Strike casts',
+              body: 'Crusader Strike (6s CD) is your core DPS ability as Ret. It should be used on every cooldown. Without it, you lose a huge portion of your damage.',
+              severity: 'critical'
+            });
+          }
+          if (judgement === 0 && activeTime > 30) {
+            findings.push({
+              title: 'Zero Judgement casts',
+              body: 'Judgement should be used on cooldown (10s CD). It deals instant damage and refreshes your seal. Keep your seal active and judge consistently.',
+              severity: 'warning'
+            });
+          }
+          if (activeTime > 120 && avengingWrath.length === 0) {
+            findings.push({
+              title: 'No Avenging Wrath used',
+              body: 'Avenging Wrath (3 min CD) increases all damage and healing by 30% for 20s. Use on cooldown, ideally during Bloodlust/Heroism for stacking effects.',
+              severity: 'warning'
+            });
+          }
+        }
+
+        // Balance Druid DPS advice
+        if (playerClass === 'Druid' && role === 'DPS') {
+          const wrath = spellCasts['Wrath'] || 0;
+          const starfire = spellCasts['Starfire'] || 0;
+          const moonfire = spellCasts['Moonfire'] || 0;
+          const insectSwarm = spellCasts['Insect Swarm'] || 0;
+          const isBalance = starfire > 0 || wrath > 5 || moonfire > 0;
+          const isCat = (spellCasts['Shred'] || 0) > 0 || (spellCasts['Mangle (Cat)'] || 0) > 0 || (spellCasts['Rip'] || 0) > 0;
+
+          if (isBalance && !isCat) {
+            if (starfire === 0 && wrath === 0 && activeTime > 20) {
+              findings.push({
+                title: 'Zero Starfire/Wrath casts',
+                body: 'As Balance, Starfire is your primary nuke (use during Lunar eclipse procs). Wrath is used for movement and Nature\'s Grace procs. You should be casting constantly.',
+                severity: 'critical'
+              });
+            }
+            if (insectSwarm === 0 && activeTime > 30) {
+              findings.push({
+                title: 'Zero Insect Swarm casts',
+                body: 'Insect Swarm should be maintained on the boss. It does consistent damage and reduces hit chance by 2%, benefiting the tank.',
+                severity: 'info'
+              });
+            }
+          }
+          if (isCat) {
+            const shred = spellCasts['Shred'] || 0;
+            const rip = spellCasts['Rip'] || 0;
+            const savageRoar = spellCasts['Savage Roar'] || 0;
+            const mangleCat = spellCasts['Mangle (Cat)'] || 0;
+            if (mangleCat === 0 && activeTime > 20) {
+              findings.push({
+                title: 'Zero Mangle (Cat) casts',
+                body: 'Mangle increases bleed damage by 30% and should be maintained on the target. Apply before Rip for maximum bleed damage.',
+                severity: 'warning'
+              });
+            }
+            if (rip === 0 && activeTime > 30) {
+              findings.push({
+                title: 'Zero Rip casts',
+                body: 'Rip is your strongest finisher for sustained fights. It should be maintained at 5 combo points. Only use Ferocious Bite if the boss will die before Rip runs out.',
+                severity: 'warning'
+              });
+            }
+          }
+        }
+
         // Generic cooldown check for all DPS
-        if (activeTime > 180 && buffEvts.length === 0 && !['Warrior', 'Shaman', 'Mage'].includes(playerClass)) {
+        if (activeTime > 180 && buffEvts.length === 0 && !['Warrior', 'Shaman', 'Mage', 'Hunter', 'Rogue', 'Paladin', 'Druid'].includes(playerClass)) {
           findings.push({
             title: 'No cooldowns detected in a 3+ minute fight',
             body: 'Every DPS class has offensive or defensive cooldowns that should be used during a fight of this length. Not using them means leaving damage (or survivability) on the table. Use them during Bloodlust/Heroism windows for maximum impact.',
