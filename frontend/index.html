@@ -3388,8 +3388,6 @@
         ${renderPositionMapCard()}
 
         ${renderWipeCauseChain()}
-
-        ${renderWhirlwindAnalysis()}
       `;
     }
 
@@ -6741,19 +6739,23 @@
       if (!pull) {
         return '<div class="card empty">Select a specific pull to view positioning data.</div>';
       }
+
+      // Whirlwind analysis goes at the top of positioning for Leo
+      const wwSection = renderWhirlwindAnalysis();
+
       const fightId = pull.fight_id;
       if (!fightId) {
-        return '<div class="card empty">No fight ID available for this pull.</div>';
+        return wwSection + '<div class="card empty">No fight ID available for this pull.</div>';
       }
 
       const cacheKey = `pos_${state.reportCode}_${fightId}`;
       if (!state._posCache) state._posCache = {};
       if (state._posCache[cacheKey]) {
-        return renderPositioningSnapshots(state._posCache[cacheKey]);
+        return wwSection + renderPositioningSnapshots(state._posCache[cacheKey]);
       }
 
       fetchPositioningData(fightId, cacheKey);
-      return '<div class="card"><div class="loading-spinner"></div> Loading positioning data...</div>';
+      return wwSection + '<div class="card"><div class="loading-spinner"></div> Loading positioning data...</div>';
     }
 
     async function fetchPositioningData(fightId, cacheKey) {
