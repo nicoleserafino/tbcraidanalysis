@@ -691,3 +691,105 @@ def _audit_consumables(auras: list[dict], gear_items: list[dict] | None = None, 
         "weapon_buff": weapon_buff_name if has_weapon_buff else None,
         "fully_consumed": (has_flask or has_both_elixirs) and has_food,
     }
+
+
+async def fetch_guild_progress(guild_id: int, num_raids: int = 50) -> dict[str, Any]:
+    """Compute per-boss kill time stats across recent guild raids.
+
+    Returns fastest kill, first kill date, and avg/median kill times per boss.
+    """
+    # Fetch guild report codes
+    all_codes = []
+    for page in range(1, (num_raids // 25) + 2):
+        data = await graphql_query(GUILD_ATTENDANCE, {
+            "guildID": guild_id,
+            "limit": 25,
+            "page": page,
+        })
+        guild = data.get("guildData", {}).get("guild")
+        if not guild:
+            break
+        entries = guild.get("attendance", {}).get("data", [])
+        for entry in entries:
+            all_codes.append((entry["code"], entry["startTime"]))
+        if not guild.get("attendance", {}).get("has_more_pages"):
+            break
+        if len(all_codes) >= num_raids:
+            break
+
+    all_codes = all_codes[:num_raids]
+
+    # Fetch fight metadata for each report (lightweight — no events)
+    async def get_fights(code: str, raid_date: int):
+        try:
+            meta = await fetch_report_metadata(code)
+            fights = meta.get("fights", []) or []
+            return [(f, raid_date) for f in fights if f.get("kill")]
+        except Exception:
+            return []
+
+    sem = asyncio.Semaphore(6)
+
+    async def bounded_get(code, date):
+        async with sem:
+            return await get_fights(code, date)
+
+    results = await asyncio.gather(*(bounded_get(c, d) for c, d in all_codes))
+
+    # Aggregate kill times per boss
+    boss_kills: dict[str, list[dict]] = {}
+    for fight_list in results:
+        for fight, raid_date in fight_list:
+            name = fight.get("name", "Unknown")
+            duration_sec = round((fight["endTime"] - fight["startTime"]) / 1000, 1)
+            boss_kills.setdefault(name, []).append({
+                "duration": duration_sec,
+                "date": raid_date,
+            })
+
+    # Compute stats per boss
+    # Sort bosses in canonical SSC/TK order
+    BOSS_ORDER = [
+        "Hydross the Unstable", "The Lurker Below", "Leotheras the Blind",
+        "Fathom-Lord Karathress", "Morogrim Tidewalker", "Lady Vashj",
+        "Al'ar", "Void Reaver", "High Astromancer Solarian", "Kael'thas Sunstrider",
+    ]
+
+    progress = []
+    for boss_name in BOSS_ORDER:
+        kills = boss_kills.get(boss_name, [])
+        if not kills:
+            continue
+        durations = sorted(k["duration"] for k in kills)
+        dates = sorted(k["date"] for k in kills)
+        n = len(durations)
+        median = durations[n // 2] if n % 2 == 1 else round((durations[n // 2 - 1] + durations[n // 2]) / 2, 1)
+        progress.append({
+            "boss": boss_name,
+            "kills": n,
+            "fastest": durations[0],
+            "slowest": durations[-1],
+            "average": round(sum(durations) / n, 1),
+            "median": median,
+            "first_kill_date": dates[0],
+        })
+
+    # Also include any bosses not in canonical order
+    for boss_name, kills in boss_kills.items():
+        if boss_name in [p["boss"] for p in progress]:
+            continue
+        durations = sorted(k["duration"] for k in kills)
+        dates = sorted(k["date"] for k in kills)
+        n = len(durations)
+        median = durations[n // 2] if n % 2 == 1 else round((durations[n // 2 - 1] + durations[n // 2]) / 2, 1)
+        progress.append({
+            "boss": boss_name,
+            "kills": n,
+            "fastest": durations[0],
+            "slowest": durations[-1],
+            "average": round(sum(durations) / n, 1),
+            "median": median,
+            "first_kill_date": dates[0],
+        })
+
+    return {"progress": progress, "raids_analyzed": len(all_codes)}

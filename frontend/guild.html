@@ -1152,6 +1152,7 @@
           </div>
           <div class="detail-view-tabs" aria-label="Dashboard views">
             <button type="button" class="detail-tab view-active" data-view-target="attendance">Attendance</button>
+            <button type="button" class="detail-tab" data-view-target="progress">Progress</button>
             <button type="button" class="detail-tab" data-view-target="playerPrep">Player Prep</button>
             <button type="button" class="detail-tab" data-view-target="manual">Analyze Report</button>
           </div>
@@ -1176,6 +1177,15 @@
             </div>
             <div id="attendanceContainer" class="table-wrap">
               <div class="status-box loading">Loading attendance</div>
+            </div>
+          </section>
+
+          <section class="detail-view" data-view="progress">
+            <div class="detail-note-card">
+              Kill time trends across all guild raids. Fastest, first, and median kill per boss.
+            </div>
+            <div id="progressContainer">
+              <div class="status-box loading">Loading progress data...</div>
             </div>
           </section>
 
@@ -1299,6 +1309,7 @@
       navButtons: Array.from(document.querySelectorAll('[data-view-target]')),
       views: {
         attendance: document.querySelector('[data-view="attendance"]'),
+        progress: document.querySelector('[data-view="progress"]'),
         prep: document.querySelector('[data-view="prep"]'),
         playerPrep: document.querySelector('[data-view="playerPrep"]'),
         manual: document.querySelector('[data-view="manual"]')
@@ -1309,6 +1320,10 @@
       attendance: {
         title: 'Attendance',
         subtitle: 'Per-lockout attendance across SSC and TK each week.'
+      },
+      progress: {
+        title: 'Boss Progress',
+        subtitle: 'Kill time metrics per boss across all guild raids.'
       },
       prep: {
         title: 'Raid Prep',
@@ -2023,11 +2038,66 @@
       }
     };
 
+    // --- Progress ---
+    let progressLoaded = false;
+    async function loadProgress() {
+      if (progressLoaded) return;
+      const container = document.getElementById('progressContainer');
+      try {
+        const data = await fetchJson('/api/guild/progress');
+        progressLoaded = true;
+        renderProgress(data, container);
+      } catch (error) {
+        container.innerHTML = `<div class="status-box error">${escapeHtml(error.message)}</div>`;
+      }
+    }
+
+    function formatTime(sec) {
+      const m = Math.floor(sec / 60);
+      const s = Math.round(sec % 60);
+      return `${m}:${s.toString().padStart(2, '0')}`;
+    }
+
+    function renderProgress(data, container) {
+      if (!data.progress || !data.progress.length) {
+        container.innerHTML = '<div class="empty">No boss kill data available yet.</div>';
+        return;
+      }
+      const rows = data.progress.map(b => {
+        const firstDate = new Date(b.first_kill_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        return `<tr>
+          <td style="font-weight:600;white-space:nowrap;">${escapeHtml(b.boss)}</td>
+          <td style="text-align:center;">${b.kills}</td>
+          <td style="text-align:center;color:var(--kill);font-weight:600;">${formatTime(b.fastest)}</td>
+          <td style="text-align:center;">${formatTime(b.median)}</td>
+          <td style="text-align:center;color:var(--muted);">${formatTime(b.average)}</td>
+          <td style="text-align:center;color:var(--muted);font-size:0.82rem;">${firstDate}</td>
+        </tr>`;
+      }).join('');
+
+      container.innerHTML = `
+        <div style="margin-bottom:8px;font-size:0.82rem;color:var(--muted);">${data.raids_analyzed} raids analyzed</div>
+        <div style="overflow-x:auto; border-radius:12px; border:1px solid var(--border);">
+        <table style="min-width:580px;">
+          <thead><tr>
+            <th style="text-align:left;">Boss</th>
+            <th style="text-align:center;">Kills</th>
+            <th style="text-align:center;">Fastest</th>
+            <th style="text-align:center;">Median</th>
+            <th style="text-align:center;">Average</th>
+            <th style="text-align:center;">First Kill</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+        </div>`;
+    }
+
     setActiveDetailView('attendance');
     syncPrepOpenLink();
 
     loadReports();
     loadAttendance();
+    loadProgress();
 
     // Auto-hide nav on scroll, show on hover at top
     (function() {
