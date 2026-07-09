@@ -463,13 +463,15 @@ def build_pull_data(
                         "amount": amount, "hp_pct": hp_pct,
                         "time": rel_sec(ev["timestamp"]),
                         "self_heal": source_id == target_id,
+                        "is_hot": bool(ev.get("tick")),
                     })
 
         if amount > 0:
             biggest_heals.append({
-                "player": player, "target": target_name or "Unknown",
-                "spell": spell, "amount": amount,
-                "crit": ev.get("hitType") == 2, "time": rel_sec(ev["timestamp"]),
+            "player": player, "target": target_name or "Unknown",
+            "spell": spell, "amount": amount,
+            "crit": ev.get("hitType") == 2, "time": rel_sec(ev["timestamp"]),
+            "is_hot": bool(ev.get("tick")),
             })
         if ev.get("hitType") == 2 and amount > 0:
             biggest_crits.append({
