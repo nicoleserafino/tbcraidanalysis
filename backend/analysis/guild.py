@@ -598,7 +598,7 @@ def _audit_gear(gear_items: list[dict]) -> dict[str, Any]:
                 # Check if it's a cheap/suboptimal enchant
                 cheap_ids = CHEAP_ENCHANTS.get(slot_idx, set())
                 if enchant_id in cheap_ids:
-                    name = CHEAP_ENCHANT_NAMES.get(enchant_id, f"Enchant {enchant_id}")
+                    name = CHEAP_ENCHANT_NAMES.get(enchant_id) or item.get("permanentEnchantName") or f"Enchant {enchant_id}"
                     gear_warnings.append(f"{slot_name} [cheap enchant: {name}]")
                 # Check shoulder honored-tier enchants
                 if slot_idx == 2 and enchant_id in CHEAP_SHOULDER_ENCHANTS:
