@@ -453,9 +453,11 @@
         <a href="/compare" class="nav-link active">Compare Logs</a>
       </nav>
     </header>
-    <a href="/" class="nav-link">← Back to Guild Dashboard</a>
+    <div style="max-width:600px;margin:0 auto 1rem;">
+      <a href="/" class="nav-link">← Back to Guild Dashboard</a>
+    </div>
     <div class="hero">
-      <h1>⚔️ Raid Log Comparison</h1>
+      <h1>Raid Log Comparison</h1>
       <div class="subtitle">Compare two WarcraftLogs reports side-by-side to find time savings and optimization opportunities.</div>
     </div>
     <div class="panel" style="max-width:650px;margin:0 auto;padding:1.5rem;">
@@ -473,7 +475,7 @@
         </select>
         <input id="theirUrlInput" type="text" placeholder="Or paste a custom URL…" style="width:100%;font-size:0.85rem;display:none;">
       </div>
-      <button id="compareBtn" style="padding:0.75rem 1.5rem;font-weight:600;cursor:pointer;font-size:0.95rem;">⚔️ Compare Reports</button>
+      <button id="compareBtn" style="padding:0.75rem 1.5rem;font-weight:600;cursor:pointer;font-size:0.95rem;">Compare Reports</button>
       <div id="fetchStatus" style="margin-top:1rem;font-size:0.9rem;color:#aaa;"></div>
       <div id="fetchProgress" style="margin-top:0.5rem;font-size:0.82rem;color:var(--muted);"></div>
     </div>
@@ -495,13 +497,15 @@
         <a href="/compare" class="nav-link active">Compare Logs</a>
       </nav>
     </header>
-    <a href="index.html" class="nav-link">← Back to Raid Analysis</a>
+    <div style="max-width:600px;margin:0 auto 1rem;">
+      <a href="/" class="nav-link">← Back to Guild Dashboard</a>
+    </div>
     <div style="margin-bottom:16px;">
       <button id="backBtn" style="padding:0.65rem 1rem;cursor:pointer;font-size:0.85rem;">← New Comparison</button>
     </div>
 
     <div class="hero">
-      <h1>⚔️ Raid Log Comparison</h1>
+      <h1>Raid Log Comparison</h1>
       <div class="subtitle">Side-by-side breakdown — <span style="color:#8df0b2">green</span> = newer raid improved, <span style="color:#ffb2b2">red</span> = older raid was better.</div>
       <div id="reportInfo"></div>
     </div>
@@ -517,7 +521,7 @@
 
     <!-- Boss Comparison -->
     <div class="panel">
-      <h2>⚔️ Boss-by-Boss Comparison</h2>
+      <h2>Boss-by-Boss Comparison</h2>
       <table id="bossTable">
         <thead>
           <tr>
@@ -1565,7 +1569,7 @@
       html += '</div>';
 
       // === Cooldown Timeline ===
-      html += '<h3 style="color:var(--text);margin-top:20px;margin-bottom:12px;">⚡ Cooldown Timeline</h3>';
+      html += '<h3 style="color:var(--text);margin-top:20px;margin-bottom:12px;">Cooldown Timeline</h3>';
       const KNOWN_CDS = new Set([
         'Bloodlust', 'Heroism', 'Innervate', 'Rebirth', 'Soulstone Resurrection',
         'Divine Shield', 'Lay on Hands', 'Shield Wall', 'Last Stand', 'Recklessness',

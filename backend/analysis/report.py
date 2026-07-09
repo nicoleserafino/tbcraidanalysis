@@ -30,8 +30,11 @@ async def fetch_events_paginated(
     """Fetch all pages of events for a fight."""
     all_events = []
     current_start = start_time
+    max_pages = 50  # safety guard against infinite pagination
 
-    while current_start is not None:
+    for _ in range(max_pages):
+        if current_start is None:
+            break
         variables = {
             "code": report_code,
             "fightIDs": fight_ids,
@@ -49,7 +52,10 @@ async def fetch_events_paginated(
         data = await graphql_query(REPORT_EVENTS, variables)
         events_data = data["reportData"]["report"]["events"]
         all_events.extend(events_data.get("data", []))
-        current_start = events_data.get("nextPageTimestamp")
+        next_start = events_data.get("nextPageTimestamp")
+        if next_start == current_start:
+            break  # prevent infinite loop on stuck pagination
+        current_start = next_start
 
     return all_events
 
@@ -63,7 +69,9 @@ async def fetch_enemy_deaths(
     """Fetch enemy/NPC death events for a fight."""
     all_events = []
     current_start = start_time
-    while current_start is not None:
+    for _ in range(50):
+        if current_start is None:
+            break
         variables = {
             "code": report_code,
             "fightIDs": fight_ids,
@@ -73,7 +81,10 @@ async def fetch_enemy_deaths(
         data = await graphql_query(REPORT_EVENTS_ENEMY_DEATHS, variables)
         events_data = data["reportData"]["report"]["events"]
         all_events.extend(events_data.get("data", []))
-        current_start = events_data.get("nextPageTimestamp")
+        next_start = events_data.get("nextPageTimestamp")
+        if next_start == current_start:
+            break
+        current_start = next_start
     return all_events
 
 
@@ -118,7 +129,9 @@ async def fetch_events_with_resources(
     """Fetch events with position/resource data (x, y, facing)."""
     all_events = []
     current_start = start_time
-    while current_start is not None:
+    for _ in range(50):
+        if current_start is None:
+            break
         variables = {
             "code": report_code,
             "fightIDs": fight_ids,
@@ -131,7 +144,10 @@ async def fetch_events_with_resources(
         data = await graphql_query(REPORT_EVENTS_WITH_RESOURCES, variables)
         events_data = data["reportData"]["report"]["events"]
         all_events.extend(events_data.get("data", []))
-        current_start = events_data.get("nextPageTimestamp")
+        next_start = events_data.get("nextPageTimestamp")
+        if next_start == current_start:
+            break
+        current_start = next_start
     return all_events
 
 
