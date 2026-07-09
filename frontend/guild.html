@@ -1176,7 +1176,6 @@
             <button type="button" class="detail-tab view-active" data-view-target="attendance">Attendance</button>
             <button type="button" class="detail-tab" data-view-target="progress">Progress</button>
             <button type="button" class="detail-tab" data-view-target="playerPrep">Player Prep</button>
-            <button type="button" class="detail-tab" data-view-target="manual">Analyze Report</button>
           </div>
         </div>
 
@@ -1248,34 +1247,6 @@
             <div id="playerPrepContainer"></div>
           </section>
 
-          <section class="detail-view" data-view="manual">
-            <div class="detail-note-card">
-              Paste any WarcraftLogs URL or jump straight into a recent guild report from the dropdown.
-            </div>
-            <div class="detail-view-header">
-              <div>
-                <h3>Analyze Any Report</h3>
-                <div class="mini-note">Manual report entry for ad-hoc analysis outside the recent guild list.</div>
-              </div>
-            </div>
-            <form id="manualForm" class="manual-form">
-              <div>
-                <label for="manualUrlInput">WarcraftLogs Report URL</label>
-                <input id="manualUrlInput" type="text" placeholder="https://fresh.warcraftlogs.com/reports/ABC123..." />
-              </div>
-              <button type="submit" class="button primary">Analyze Report</button>
-            </form>
-            <div id="manualError" class="mini-note" style="margin-top:10px;"></div>
-            <div class="manual-helper">
-              <label for="manualRaidSelect">Recent guild raids</label>
-              <div class="manual-helper-grid">
-                <select id="manualRaidSelect" class="manual-select">
-                  <option value="">Loading recent raids…</option>
-                </select>
-                <button id="manualRaidOpenBtn" type="button" class="button">Open Selected Raid</button>
-              </div>
-            </div>
-          </section>
         </div>
       </section>
     </div>
@@ -1310,9 +1281,6 @@
       recentRaidsContainer: document.getElementById('recentRaidsContainer'),
       loadMoreWrap: document.getElementById('loadMoreWrap'),
       loadMoreBtn: document.getElementById('loadMoreBtn'),
-      manualForm: document.getElementById('manualForm'),
-      manualUrlInput: document.getElementById('manualUrlInput'),
-      manualError: document.getElementById('manualError'),
       attendanceMeta: document.getElementById('attendanceMeta'),
       attendanceContainer: document.getElementById('attendanceContainer'),
       minRaidsInput: document.getElementById('minRaidsInput'),
@@ -1326,15 +1294,12 @@
       title: document.getElementById('detailTitle'),
       subtitle: document.getElementById('detailSubtitle'),
       prepOpenReportLink: document.getElementById('prepOpenReportLink'),
-      manualRaidSelect: document.getElementById('manualRaidSelect'),
-      manualRaidOpenBtn: document.getElementById('manualRaidOpenBtn'),
       navButtons: Array.from(document.querySelectorAll('[data-view-target]')),
       views: {
         attendance: document.querySelector('[data-view="attendance"]'),
         progress: document.querySelector('[data-view="progress"]'),
         prep: document.querySelector('[data-view="prep"]'),
-        playerPrep: document.querySelector('[data-view="playerPrep"]'),
-        manual: document.querySelector('[data-view="manual"]')
+        playerPrep: document.querySelector('[data-view="playerPrep"]')
       }
     };
 
@@ -1354,10 +1319,6 @@
       playerPrep: {
         title: 'Player Prep History',
         subtitle: 'Track a player\'s consumable and gear readiness across recent raids.'
-      },
-      manual: {
-        title: 'Report Analysis',
-        subtitle: 'Open a WarcraftLogs report or select a recent guild log.'
       }
     };
 
@@ -1947,20 +1908,6 @@
       detailEls.prepOpenReportLink.style.pointerEvents = safeCode ? '' : 'none';
     }
 
-    function syncManualRaidOptions() {
-      if (!detailEls.manualRaidSelect) return;
-      if (!state.reports.length) {
-        detailEls.manualRaidSelect.innerHTML = '<option value="">No recent raids available</option>';
-        return;
-      }
-      detailEls.manualRaidSelect.innerHTML = `
-        <option value="">Choose a recent guild raid</option>
-        ${state.reports.map(report => `
-          <option value="${escapeHtml(report.code)}">${escapeHtml(formatDate(report.date))} · ${escapeHtml(report.zone || 'Unknown')} · ${Number(report.player_count || 0)} players</option>
-        `).join('')}
-      `;
-    }
-
     function enhanceSidebarRaids() {
       const rows = els.recentRaidsContainer.querySelectorAll('.raid-row');
       rows.forEach(row => {
@@ -1971,16 +1918,6 @@
     }
 
     els.loadMoreBtn.addEventListener('click', () => loadReports(state.reportsPage + 1));
-
-    els.manualForm.addEventListener('submit', event => {
-      event.preventDefault();
-      els.manualError.textContent = '';
-      try {
-        goToReport(extractReportCode(els.manualUrlInput.value));
-      } catch (error) {
-        els.manualError.textContent = error.message;
-      }
-    });
 
     els.minRaidsInput.addEventListener('input', event => {
       state.minRaids = Math.max(1, Number(event.target.value || 1));
@@ -2037,16 +1974,9 @@
       button.addEventListener('click', () => setActiveDetailView(button.dataset.viewTarget));
     });
 
-    detailEls.manualRaidOpenBtn.addEventListener('click', () => {
-      if (detailEls.manualRaidSelect.value) {
-        goToReport(detailEls.manualRaidSelect.value);
-      }
-    });
-
     const originalRenderReports = renderReports;
     renderReports = function(...args) {
       originalRenderReports.apply(this, args);
-      syncManualRaidOptions();
       enhanceSidebarRaids();
     };
 
