@@ -6585,16 +6585,16 @@
           });
         }
 
-        // Guardian Angel — healer with most clutch saves (< 15% HP)
+        // Guardian Angel — healer with most clutch saves (target under 25% HP)
         const guardianCounts = {};
-        allClutchHeals.filter(h => h.hp_pct < 15 && !h.self_heal).forEach(h => {
+        allClutchHeals.filter(h => !h.self_heal).forEach(h => {
           guardianCounts[h.healer] = (guardianCounts[h.healer] || 0) + 1;
         });
         const topGuardians = topN(guardianCounts);
         if (topGuardians.length && topGuardians[0][1] >= 2 && hasClearWinner(topGuardians)) {
           awards.clutch.push({
             title: 'Guardian Angel', winner: topGuardians[0][0],
-            value: `${topGuardians[0][1]} clutch saves (<15% HP)`,
+            value: `${topGuardians[0][1]} clutch saves (<25% HP)`,
             detail: topGuardians.slice(1, 3).map(([p, c]) => `${p}: ${c}`).join(', ') || null,
           });
         }
