@@ -134,6 +134,9 @@ ELIXIR_BUFFS = BATTLE_ELIXIRS | GUARDIAN_ELIXIRS
 
 FOOD_BUFFS = {"Well Fed"}
 
+# Shaman imbue IDs — not counted as consumable weapon buffs
+SHAMAN_IMBUE_IDS = {2636, 2639, 2641, 2632, 2633}
+
 WEAPON_BUFFS = {
     "Brilliant Wizard Oil", "Superior Wizard Oil", "Blessed Wizard Oil",
     "Adamantite Weightstone", "Adamantite Sharpening Stone",
@@ -148,7 +151,7 @@ TEMP_ENCHANT_NAMES = {
     # Healer oils
     2629: "Brilliant Mana Oil",        # Druid, Priest, Paladin healers
     2677: "Superior Mana Oil",
-    # Shaman imbues
+    # Shaman imbues (not consumables — class abilities)
     2636: "Windfury Weapon",
     2639: "Windfury Totem",
     2641: "Flametongue Weapon",
@@ -670,6 +673,9 @@ def _audit_consumables(auras: list[dict], gear_items: list[dict] | None = None, 
                 item = gear_items[slot_idx]
                 temp_enchant = item.get("temporaryEnchant", 0)
                 if temp_enchant:
+                    # Skip shaman self-imbues — they're class abilities, not consumables
+                    if player_class == "Shaman" and temp_enchant in SHAMAN_IMBUE_IDS:
+                        continue
                     has_weapon_buff = True
                     name = TEMP_ENCHANT_NAMES.get(temp_enchant, f"Weapon Buff ({temp_enchant})")
                     # Resolve ambiguous IDs by class
