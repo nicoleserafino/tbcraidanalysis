@@ -760,7 +760,8 @@ async def fetch_guild_progress(guild_id: int, num_raids: int = 50) -> dict[str, 
         kills = boss_kills.get(boss_name, [])
         if not kills:
             continue
-        durations = sorted(k["duration"] for k in kills)
+        sorted_kills = sorted(kills, key=lambda k: k["duration"])
+        durations = [k["duration"] for k in sorted_kills]
         dates = sorted(k["date"] for k in kills)
         n = len(durations)
         median = durations[n // 2] if n % 2 == 1 else round((durations[n // 2 - 1] + durations[n // 2]) / 2, 1)
@@ -768,6 +769,7 @@ async def fetch_guild_progress(guild_id: int, num_raids: int = 50) -> dict[str, 
             "boss": boss_name,
             "kills": n,
             "fastest": durations[0],
+            "fastest_date": sorted_kills[0]["date"],
             "slowest": durations[-1],
             "average": round(sum(durations) / n, 1),
             "median": median,
@@ -778,7 +780,8 @@ async def fetch_guild_progress(guild_id: int, num_raids: int = 50) -> dict[str, 
     for boss_name, kills in boss_kills.items():
         if boss_name in [p["boss"] for p in progress]:
             continue
-        durations = sorted(k["duration"] for k in kills)
+        sorted_kills = sorted(kills, key=lambda k: k["duration"])
+        durations = [k["duration"] for k in sorted_kills]
         dates = sorted(k["date"] for k in kills)
         n = len(durations)
         median = durations[n // 2] if n % 2 == 1 else round((durations[n // 2 - 1] + durations[n // 2]) / 2, 1)
@@ -786,6 +789,7 @@ async def fetch_guild_progress(guild_id: int, num_raids: int = 50) -> dict[str, 
             "boss": boss_name,
             "kills": n,
             "fastest": durations[0],
+            "fastest_date": sorted_kills[0]["date"],
             "slowest": durations[-1],
             "average": round(sum(durations) / n, 1),
             "median": median,

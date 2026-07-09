@@ -2065,12 +2065,13 @@
       }
       const rows = data.progress.map(b => {
         const firstDate = new Date(b.first_kill_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        const fastestDate = new Date(b.fastest_date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
         return `<tr>
           <td style="font-weight:600;white-space:nowrap;">${escapeHtml(b.boss)}</td>
           <td style="text-align:center;">${b.kills}</td>
-          <td style="text-align:center;color:var(--kill);font-weight:600;">${formatTime(b.fastest)}</td>
-          <td style="text-align:center;">${formatTime(b.median)}</td>
-          <td style="text-align:center;color:var(--muted);">${formatTime(b.average)}</td>
+          <td style="text-align:center;color:var(--kill);font-weight:600;cursor:default;" title="${fastestDate}">${formatTime(b.fastest)}</td>
+          <td style="text-align:center;cursor:default;" title="Median of ${b.kills} kills">${formatTime(b.median)}</td>
+          <td style="text-align:center;color:var(--muted);cursor:default;" title="Average of ${b.kills} kills">${formatTime(b.average)}</td>
           <td style="text-align:center;color:var(--muted);font-size:0.82rem;">${firstDate}</td>
         </tr>`;
       }).join('');
