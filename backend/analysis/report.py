@@ -195,17 +195,23 @@ async def fetch_full_report(report_code: str) -> dict:
 
             # Fetch WW position data for Leotheras fights
             ww_position_events = []
+            all_player_positions = []
             if "leotheras" in fight.get("name", "").lower():
-                ww_position_events = await fetch_events_with_resources(
-                    report_code, [fight_id], "DamageTaken", start, end,
-                    filter_expression="ability.name = 'Whirlwind'"
+                ww_position_events, all_player_positions = await asyncio.gather(
+                    fetch_events_with_resources(
+                        report_code, [fight_id], "DamageTaken", start, end,
+                        filter_expression="ability.name = 'Whirlwind'"
+                    ),
+                    fetch_events_with_resources(
+                        report_code, [fight_id], "Casts", start, end,
+                    ),
                 )
 
             pull = build_pull_data(
                 fight, actors_by_id, players_by_id, ability_names,
                 deaths, enemy_deaths, interrupts, dispels, healing, casts,
                 damage_taken, damage_done, buffs, threat,
-                dmg_table, heal_table, ww_position_events,
+                dmg_table, heal_table, ww_position_events, all_player_positions,
             )
             return fight, pull
 
@@ -302,6 +308,7 @@ def build_pull_data(
     dmg_table: dict | None = None,
     heal_table: dict | None = None,
     ww_position_events: list | None = None,
+    all_player_positions: list | None = None,
 ) -> dict:
     """Build a normalized pull data structure from raw events."""
     start = fight["startTime"]
@@ -618,6 +625,15 @@ def build_pull_data(
             if ev.get("x") is not None and ev.get("targetID") in players_by_id:
                 pos_lookup[(ev["timestamp"], ev["targetID"])] = (ev["x"], ev["y"])
 
+        # Build a timeline of all player positions from cast events
+        # Key: sourceID -> list of (timestamp, x, y)
+        cast_pos_timeline: dict[int, list[tuple[int, int, int]]] = defaultdict(list)
+        for ev in (all_player_positions or []):
+            if ev.get("x") is not None and ev.get("sourceID") in players_by_id:
+                cast_pos_timeline[ev["sourceID"]].append(
+                    (ev["timestamp"], ev["x"], ev["y"])
+                )
+
         if ww_events:
             # Split into phases (gap > 5s between damage = new phase)
             phases = []
@@ -669,8 +685,9 @@ def build_pull_data(
                 # Build per-second path data (centroid of hit positions per tick)
                 # and player positions for the map visualization
                 path_points = []
-                player_positions: dict[str, dict] = {}  # name -> {x, y, class, hit}
+                player_positions: dict[str, dict] = {}  # name -> {x, y, class, is_ranged, was_hit}
                 phase_start_ts = phase_events[0]["timestamp"]
+                phase_end_ts = phase_events[-1]["timestamp"]
 
                 # Group position events by second
                 sec_positions: dict[int, list[tuple[int, int]]] = defaultdict(list)
@@ -682,13 +699,38 @@ def build_pull_data(
                     if pos:
                         sec = int((ts - phase_start_ts) / 1000)
                         sec_positions[sec].append(pos)
-                        # Track player position (use first seen position)
+                        # Track hit player position (use first seen position)
                         if ev["target"] not in player_positions:
                             player_positions[ev["target"]] = {
                                 "x": pos[0], "y": pos[1],
                                 "class": ev["class"],
                                 "is_ranged": ev["class"] in RANGED_CLASSES,
+                                "was_hit": True,
                             }
+
+                # Add positions for ALL players from cast events during this phase
+                for pid, timeline in cast_pos_timeline.items():
+                    pname = players_by_id[pid]["name"]
+                    if pname in player_positions:
+                        continue  # already have from WW hits
+                    pclass = players_by_id[pid].get("subType", "")
+                    # Find closest cast position to phase start
+                    best_pos = None
+                    best_dist = float("inf")
+                    for ts, x, y in timeline:
+                        # Prefer positions during the phase, or just before
+                        if phase_start_ts - 5000 <= ts <= phase_end_ts + 2000:
+                            dist = abs(ts - phase_start_ts)
+                            if dist < best_dist:
+                                best_dist = dist
+                                best_pos = (x, y)
+                    if best_pos:
+                        player_positions[pname] = {
+                            "x": best_pos[0], "y": best_pos[1],
+                            "class": pclass,
+                            "is_ranged": pclass in RANGED_CLASSES,
+                            "was_hit": False,
+                        }
 
                 for sec in sorted(sec_positions.keys()):
                     positions = sec_positions[sec]

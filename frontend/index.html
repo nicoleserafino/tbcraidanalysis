@@ -5029,76 +5029,69 @@
       const allRanged = ww.phases.flatMap(p => p.ranged_targets || []);
       const highExposure = allRanged.filter(t => t.hits >= 4);
 
-      function renderPhaseMap(phase) {
+      // Precompute SVG for each phase, render as hidden divs (carousel)
+      function renderPhaseMap(phase, idx) {
         const positions = phase.positions || {};
         const path = phase.path || [];
         if (!path.length && !Object.keys(positions).length) return '';
 
-        // Compute bounds from all positions + path points
         const allX = [...path.map(p => p.x), ...Object.values(positions).map(p => p.x)];
         const allY = [...path.map(p => p.y), ...Object.values(positions).map(p => p.y)];
         if (!allX.length) return '';
 
-        const minX = Math.min(...allX) - 200;
-        const maxX = Math.max(...allX) + 200;
-        const minY = Math.min(...allY) - 200;
-        const maxY = Math.max(...allY) + 200;
+        const padding = 400;
+        const minX = Math.min(...allX) - padding;
+        const maxX = Math.max(...allX) + padding;
+        const minY = Math.min(...allY) - padding;
+        const maxY = Math.max(...allY) + padding;
         const rangeX = maxX - minX || 1;
         const rangeY = maxY - minY || 1;
 
-        const W = 400, H = 320;
-        const toSvgX = x => ((x - minX) / rangeX * (W - 40)) + 20;
-        const toSvgY = y => H - (((y - minY) / rangeY * (H - 40)) + 20); // flip Y
+        // Use square aspect ratio, fit to 500x500
+        const SIZE = 500;
+        const scale = SIZE / Math.max(rangeX, rangeY);
+        const offsetX = (SIZE - rangeX * scale) / 2;
+        const offsetY = (SIZE - rangeY * scale) / 2;
+        const toSvgX = x => ((x - minX) * scale) + offsetX;
+        const toSvgY = y => SIZE - (((y - minY) * scale) + offsetY);
 
-        // Draw path as polyline
+        // Path polyline
         let pathD = '';
         if (path.length > 1) {
           pathD = path.map((p, i) => `${i === 0 ? 'M' : 'L'}${toSvgX(p.x).toFixed(1)},${toSvgY(p.y).toFixed(1)}`).join(' ');
         }
 
-        // Draw player dots
+        // Player dots — hit players are solid, unhit players are dimmed
         const dots = Object.entries(positions).map(([name, p]) => {
           const sx = toSvgX(p.x).toFixed(1);
           const sy = toSvgY(p.y).toFixed(1);
           const isRanged = p.is_ranged;
-          const wasHit = isRanged; // ranged in positions = they were hit
-          const color = isRanged ? '#ff6b6b' : '#57a6ff';
-          const r = isRanged ? 6 : 5;
-          return `<circle cx="${sx}" cy="${sy}" r="${r}" fill="${color}" opacity="0.85" stroke="${isRanged ? '#ff4444' : '#3388cc'}" stroke-width="1.5"/>
-            <text x="${sx}" y="${Number(sy) - 9}" text-anchor="middle" font-size="9" fill="${color}" font-weight="${isRanged ? '700' : '400'}">${escapeHtml(name)}</text>`;
+          const wasHit = p.was_hit;
+          let color, r, opacity, stroke, fontWeight;
+          if (wasHit) {
+            color = isRanged ? '#ff6b6b' : '#57a6ff';
+            r = isRanged ? 7 : 5;
+            opacity = 0.9;
+            stroke = isRanged ? '#ff4444' : '#3388cc';
+            fontWeight = isRanged ? '700' : '600';
+          } else {
+            color = isRanged ? '#997777' : '#667799';
+            r = 4;
+            opacity = 0.5;
+            stroke = 'rgba(255,255,255,0.15)';
+            fontWeight = '400';
+          }
+          return `<circle cx="${sx}" cy="${sy}" r="${r}" fill="${color}" opacity="${opacity}" stroke="${stroke}" stroke-width="1.5"/>
+            <text x="${sx}" y="${Number(sy) - 9}" text-anchor="middle" font-size="${wasHit ? 10 : 8}" fill="${color}" font-weight="${fontWeight}" opacity="${wasHit ? 1 : 0.6}">${escapeHtml(name)}</text>`;
         }).join('\n');
 
-        // Path start/end markers
-        const startMarker = path.length ? `<circle cx="${toSvgX(path[0].x).toFixed(1)}" cy="${toSvgY(path[0].y).toFixed(1)}" r="4" fill="#7ddf8a" stroke="#fff" stroke-width="1"/>` : '';
-        const endMarker = path.length ? `<circle cx="${toSvgX(path[path.length-1].x).toFixed(1)}" cy="${toSvgY(path[path.length-1].y).toFixed(1)}" r="4" fill="#ff6b6b" stroke="#fff" stroke-width="1"/>` : '';
+        const startMarker = path.length ? `<circle cx="${toSvgX(path[0].x).toFixed(1)}" cy="${toSvgY(path[0].y).toFixed(1)}" r="5" fill="#7ddf8a" stroke="#fff" stroke-width="1.5"/>` : '';
+        const endMarker = path.length > 1 ? `<circle cx="${toSvgX(path[path.length-1].x).toFixed(1)}" cy="${toSvgY(path[path.length-1].y).toFixed(1)}" r="5" fill="#ff6b6b" stroke="#fff" stroke-width="1.5"/>` : '';
 
-        return `
-          <div style="margin-top:10px;">
-            <svg width="${W}" height="${H}" style="background:rgba(0,0,0,0.3); border-radius:8px; border:1px solid rgba(255,255,255,0.08);">
-              ${pathD ? `<path d="${pathD}" fill="none" stroke="rgba(255,200,50,0.6)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="6,3"/>` : ''}
-              ${startMarker}
-              ${endMarker}
-              ${dots}
-            </svg>
-            <div style="display:flex; gap:14px; margin-top:6px; font-size:0.72rem; color:var(--muted);">
-              <span style="display:flex;align-items:center;gap:4px;"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#57a6ff;"></span> Melee</span>
-              <span style="display:flex;align-items:center;gap:4px;"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#ff6b6b;"></span> Ranged (hit)</span>
-              <span style="display:flex;align-items:center;gap:4px;"><span style="display:inline-block;width:12px;height:3px;background:rgba(255,200,50,0.6);border-radius:2px;"></span> Leo's path</span>
-              <span style="display:flex;align-items:center;gap:4px;"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#7ddf8a;"></span> Start</span>
-              <span style="display:flex;align-items:center;gap:4px;"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#ff6b6b;border:1px solid #fff;"></span> End</span>
-            </div>
-          </div>
-        `;
-      }
-
-      let phasesHtml = ww.phases.map(phase => {
+        // Phase info overlay
         const badge = phase.escaped
           ? '<span class="ww-badge escaped">⚠️ WW Escaped</span>'
           : '<span class="ww-badge clean">✅ Contained</span>';
-
-        const meleeChips = (phase.melee_targets || []).map(t =>
-          `<span class="ww-target-chip melee">${escapeHtml(t.name)} (${t.hits})</span>`
-        ).join('');
 
         const rangedChips = (phase.ranged_targets || []).map(t => {
           const cls = t.hits <= 2 ? 'ranged-ok' : 'ranged-bad';
@@ -5111,29 +5104,30 @@
           ? `<div class="ww-deaths-row">💀 Deaths: ${phase.deaths.map(d => `${escapeHtml(d.player)} (${d.relative_time.toFixed(0)}s)`).join(', ')}</div>`
           : '';
 
-        const mapHtml = renderPhaseMap(phase);
-
         return `
-          <div class="ww-phase-card ${phase.escaped ? 'escaped' : 'clean'}">
-            <div class="ww-phase-header">
+          <div class="ww-carousel-slide" data-phase="${idx}" style="display:${idx === 0 ? 'block' : 'none'};">
+            <div class="ww-phase-header" style="margin-bottom:8px;">
               <h4>Phase ${phase.phase_num} — ${phase.start_time.toFixed(0)}s to ${phase.end_time.toFixed(0)}s (${phase.duration.toFixed(0)}s)</h4>
               ${badge}
             </div>
-            ${phase.escaped ? `<div style="font-size:0.78rem; color:var(--muted); margin-bottom:6px;">Ranged players hit — WW bounced outside melee camp</div>` : ''}
-            <div class="ww-targets">
-              ${meleeChips}
-              ${rangedChips}
-            </div>
+            ${phase.escaped && rangedChips ? `<div class="ww-targets" style="margin-bottom:8px;">${rangedChips}</div>` : ''}
             ${deathsHtml}
-            ${mapHtml}
+            <svg width="100%" viewBox="0 0 ${SIZE} ${SIZE}" style="background:rgba(0,0,0,0.3); border-radius:8px; border:1px solid rgba(255,255,255,0.08); max-height:420px;">
+              ${pathD ? `<path d="${pathD}" fill="none" stroke="rgba(255,200,50,0.6)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="6,3"/>` : ''}
+              ${startMarker}
+              ${endMarker}
+              ${dots}
+            </svg>
           </div>
         `;
-      }).join('');
+      }
+
+      const slides = ww.phases.map((phase, i) => renderPhaseMap(phase, i)).join('');
 
       return `
         <section class="card">
           <h2>🌀 Whirlwind Phase Analysis</h2>
-          <p class="mini-note" style="margin-bottom:12px;">During Leotheras Whirlwind, melee stay in while ranged stay out. WW bounces between nearby targets — if it reaches ranged, it can chain through anyone in the area. The dashed line shows Leo's approximate path (centroid of hit positions per second).</p>
+          <p class="mini-note" style="margin-bottom:12px;">The dashed yellow line shows Leo's path (centroid of hit positions per second). Blue = melee, Red = ranged hit by WW.</p>
           <div class="ww-summary-grid">
             <div class="ww-summary-stat"><div class="value">${ww.total_phases}</div><div class="label">WW Phases</div></div>
             <div class="ww-summary-stat"><div class="value" style="color:#7ddf8a">${ww.clean_phases}</div><div class="label">Contained</div></div>
@@ -5141,8 +5135,20 @@
             <div class="ww-summary-stat"><div class="value" style="color:#ff6b6b">${totalDeaths}</div><div class="label">WW Deaths</div></div>
             <div class="ww-summary-stat"><div class="value" style="color:#ff6b6b">${highExposure.length}</div><div class="label">High Exposure</div></div>
           </div>
-          <div class="ww-analysis">
-            ${phasesHtml}
+          <div class="ww-carousel" style="position:relative;">
+            <div class="ww-carousel-nav" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+              <button class="ww-prev" style="background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.15); color:var(--text); border-radius:6px; padding:6px 14px; cursor:pointer; font-size:0.85rem;">◀ Prev</button>
+              <span class="ww-phase-indicator" style="font-size:0.82rem; color:var(--muted);">Phase 1 / ${ww.total_phases}</span>
+              <button class="ww-next" style="background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.15); color:var(--text); border-radius:6px; padding:6px 14px; cursor:pointer; font-size:0.85rem;">Next ▶</button>
+            </div>
+            ${slides}
+            <div style="display:flex; gap:14px; flex-wrap:wrap; margin-top:8px; font-size:0.72rem; color:var(--muted);">
+              <span style="display:flex;align-items:center;gap:4px;"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#57a6ff;"></span> Melee (hit)</span>
+              <span style="display:flex;align-items:center;gap:4px;"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#ff6b6b;"></span> Ranged (hit)</span>
+              <span style="display:flex;align-items:center;gap:4px;"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#667799;opacity:0.5;"></span> Not hit (dimmed)</span>
+              <span style="display:flex;align-items:center;gap:4px;"><span style="display:inline-block;width:12px;height:3px;background:rgba(255,200,50,0.6);border-radius:2px;"></span> Leo's path</span>
+              <span style="display:flex;align-items:center;gap:4px;"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#7ddf8a;"></span> Start</span>
+            </div>
           </div>
         </section>
       `;
@@ -7156,6 +7162,23 @@
           }
         });
       });
+
+      // Whirlwind phase carousel
+      const wwPrev = document.querySelector('.ww-prev');
+      const wwNext = document.querySelector('.ww-next');
+      if (wwPrev || wwNext) {
+        if (!state._wwPhaseIdx) state._wwPhaseIdx = 0;
+        const slides = document.querySelectorAll('.ww-carousel-slide');
+        const indicator = document.querySelector('.ww-phase-indicator');
+        const totalSlides = slides.length;
+        const showSlide = (idx) => {
+          state._wwPhaseIdx = idx;
+          slides.forEach((s, i) => s.style.display = i === idx ? 'block' : 'none');
+          if (indicator) indicator.textContent = `Phase ${idx + 1} / ${totalSlides}`;
+        };
+        if (wwPrev) wwPrev.addEventListener('click', () => showSlide((state._wwPhaseIdx - 1 + totalSlides) % totalSlides));
+        if (wwNext) wwNext.addEventListener('click', () => showSlide((state._wwPhaseIdx + 1) % totalSlides));
+      }
     }
 
     function escapeHtml(value) {

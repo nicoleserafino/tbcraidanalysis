@@ -7,3 +7,4 @@ __pycache__/
 venv/
 scripts/output/
 data/audits/
+.cache/
