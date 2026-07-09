@@ -2806,13 +2806,16 @@
           const icyVeins = buffEvts.filter(b => b.spell === 'Icy Veins');
           const arcanePower = buffEvts.filter(b => b.spell === 'Arcane Power');
           const pom = buffEvts.filter(b => b.spell === 'Presence of Mind');
+          const combustion = buffEvts.filter(b => b.spell === 'Combustion');
 
           // Detect spec from spell usage
           const arcaneBlast = spellCasts['Arcane Blast'] || 0;
           const frostbolt = spellCasts['Frostbolt'] || 0;
           const fireball = spellCasts['Fireball'] || 0;
+          const scorch = spellCasts['Scorch'] || 0;
           const isArcane = arcaneBlast > frostbolt && arcaneBlast > fireball;
           const isFrost = frostbolt > arcaneBlast && frostbolt > fireball;
+          const isFire = (fireball > arcaneBlast && fireball > frostbolt) || (scorch > arcaneBlast && scorch > frostbolt);
 
           if (isArcane && evocation === 0 && activeTime > 60) {
             findings.push({
@@ -2824,7 +2827,6 @@
 
           if (isArcane && arcaneBlast > 0) {
             // Check for Arcane Blast stacking discipline
-            const scorch = spellCasts['Scorch'] || 0;
             const arcaneExplosion = spellCasts['Arcane Explosion'] || 0;
             if (arcaneExplosion > arcaneBlast * 0.5) {
               findings.push({
@@ -2835,13 +2837,24 @@
             }
           }
 
-          // Cooldown usage
-          if (activeTime > 120 && icyVeins.length === 0 && arcanePower.length === 0 && pom.length === 0) {
-            findings.push({
-              title: 'No DPS cooldowns used in a 2+ minute fight',
-              body: 'Icy Veins (3 min CD), Arcane Power (3 min CD), or Presence of Mind (3 min CD) should all be used on cooldown. On a fight this long, you should get at least 1-2 uses.',
-              severity: 'warning'
-            });
+          // Cooldown usage — spec-aware
+          if (activeTime > 120) {
+            const hasAnyCooldown = icyVeins.length > 0 || arcanePower.length > 0 || pom.length > 0 || combustion.length > 0;
+            if (!hasAnyCooldown) {
+              let cdAdvice;
+              if (isFire) {
+                cdAdvice = 'Combustion (3 min CD) should be used on cooldown. Icy Veins (if talented) is also a strong option. On a fight this long, you should get at least 1-2 uses.';
+              } else if (isArcane) {
+                cdAdvice = 'Arcane Power (3 min CD) and Presence of Mind (3 min CD) should be used on cooldown. Icy Veins (if talented) adds even more burst. On a fight this long, you should get at least 1-2 uses.';
+              } else {
+                cdAdvice = 'Icy Veins (3 min CD) should be used on cooldown. Cold Snap can reset it for a second use. On a fight this long, you should get at least 1-2 uses.';
+              }
+              findings.push({
+                title: 'No DPS cooldowns used in a 2+ minute fight',
+                body: cdAdvice,
+                severity: 'warning'
+              });
+            }
           }
         }
 
