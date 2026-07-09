@@ -5029,6 +5029,68 @@
       const allRanged = ww.phases.flatMap(p => p.ranged_targets || []);
       const highExposure = allRanged.filter(t => t.hits >= 4);
 
+      function renderPhaseMap(phase) {
+        const positions = phase.positions || {};
+        const path = phase.path || [];
+        if (!path.length && !Object.keys(positions).length) return '';
+
+        // Compute bounds from all positions + path points
+        const allX = [...path.map(p => p.x), ...Object.values(positions).map(p => p.x)];
+        const allY = [...path.map(p => p.y), ...Object.values(positions).map(p => p.y)];
+        if (!allX.length) return '';
+
+        const minX = Math.min(...allX) - 200;
+        const maxX = Math.max(...allX) + 200;
+        const minY = Math.min(...allY) - 200;
+        const maxY = Math.max(...allY) + 200;
+        const rangeX = maxX - minX || 1;
+        const rangeY = maxY - minY || 1;
+
+        const W = 400, H = 320;
+        const toSvgX = x => ((x - minX) / rangeX * (W - 40)) + 20;
+        const toSvgY = y => H - (((y - minY) / rangeY * (H - 40)) + 20); // flip Y
+
+        // Draw path as polyline
+        let pathD = '';
+        if (path.length > 1) {
+          pathD = path.map((p, i) => `${i === 0 ? 'M' : 'L'}${toSvgX(p.x).toFixed(1)},${toSvgY(p.y).toFixed(1)}`).join(' ');
+        }
+
+        // Draw player dots
+        const dots = Object.entries(positions).map(([name, p]) => {
+          const sx = toSvgX(p.x).toFixed(1);
+          const sy = toSvgY(p.y).toFixed(1);
+          const isRanged = p.is_ranged;
+          const wasHit = isRanged; // ranged in positions = they were hit
+          const color = isRanged ? '#ff6b6b' : '#57a6ff';
+          const r = isRanged ? 6 : 5;
+          return `<circle cx="${sx}" cy="${sy}" r="${r}" fill="${color}" opacity="0.85" stroke="${isRanged ? '#ff4444' : '#3388cc'}" stroke-width="1.5"/>
+            <text x="${sx}" y="${Number(sy) - 9}" text-anchor="middle" font-size="9" fill="${color}" font-weight="${isRanged ? '700' : '400'}">${escapeHtml(name)}</text>`;
+        }).join('\n');
+
+        // Path start/end markers
+        const startMarker = path.length ? `<circle cx="${toSvgX(path[0].x).toFixed(1)}" cy="${toSvgY(path[0].y).toFixed(1)}" r="4" fill="#7ddf8a" stroke="#fff" stroke-width="1"/>` : '';
+        const endMarker = path.length ? `<circle cx="${toSvgX(path[path.length-1].x).toFixed(1)}" cy="${toSvgY(path[path.length-1].y).toFixed(1)}" r="4" fill="#ff6b6b" stroke="#fff" stroke-width="1"/>` : '';
+
+        return `
+          <div style="margin-top:10px;">
+            <svg width="${W}" height="${H}" style="background:rgba(0,0,0,0.3); border-radius:8px; border:1px solid rgba(255,255,255,0.08);">
+              ${pathD ? `<path d="${pathD}" fill="none" stroke="rgba(255,200,50,0.6)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="6,3"/>` : ''}
+              ${startMarker}
+              ${endMarker}
+              ${dots}
+            </svg>
+            <div style="display:flex; gap:14px; margin-top:6px; font-size:0.72rem; color:var(--muted);">
+              <span style="display:flex;align-items:center;gap:4px;"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#57a6ff;"></span> Melee</span>
+              <span style="display:flex;align-items:center;gap:4px;"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#ff6b6b;"></span> Ranged (hit)</span>
+              <span style="display:flex;align-items:center;gap:4px;"><span style="display:inline-block;width:12px;height:3px;background:rgba(255,200,50,0.6);border-radius:2px;"></span> Leo's path</span>
+              <span style="display:flex;align-items:center;gap:4px;"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#7ddf8a;"></span> Start</span>
+              <span style="display:flex;align-items:center;gap:4px;"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#ff6b6b;border:1px solid #fff;"></span> End</span>
+            </div>
+          </div>
+        `;
+      }
+
       let phasesHtml = ww.phases.map(phase => {
         const badge = phase.escaped
           ? '<span class="ww-badge escaped">⚠️ WW Escaped</span>'
@@ -5049,6 +5111,8 @@
           ? `<div class="ww-deaths-row">💀 Deaths: ${phase.deaths.map(d => `${escapeHtml(d.player)} (${d.relative_time.toFixed(0)}s)`).join(', ')}</div>`
           : '';
 
+        const mapHtml = renderPhaseMap(phase);
+
         return `
           <div class="ww-phase-card ${phase.escaped ? 'escaped' : 'clean'}">
             <div class="ww-phase-header">
@@ -5061,6 +5125,7 @@
               ${rangedChips}
             </div>
             ${deathsHtml}
+            ${mapHtml}
           </div>
         `;
       }).join('');
@@ -5068,7 +5133,7 @@
       return `
         <section class="card">
           <h2>🌀 Whirlwind Phase Analysis</h2>
-          <p class="mini-note" style="margin-bottom:12px;">During Leotheras Whirlwind, melee stay in while ranged stay out. WW bounces between nearby targets — if it reaches ranged, it can chain through anyone in the area. Ranged hit counts show exposure, not necessarily who caused the escape.</p>
+          <p class="mini-note" style="margin-bottom:12px;">During Leotheras Whirlwind, melee stay in while ranged stay out. WW bounces between nearby targets — if it reaches ranged, it can chain through anyone in the area. The dashed line shows Leo's approximate path (centroid of hit positions per second).</p>
           <div class="ww-summary-grid">
             <div class="ww-summary-stat"><div class="value">${ww.total_phases}</div><div class="label">WW Phases</div></div>
             <div class="ww-summary-stat"><div class="value" style="color:#7ddf8a">${ww.clean_phases}</div><div class="label">Contained</div></div>

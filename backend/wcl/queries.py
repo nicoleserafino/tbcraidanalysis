@@ -96,6 +96,26 @@ query ReportTable($code: String!, $fightIDs: [Int]!, $dataType: TableDataType!, 
 }
 """
 
+REPORT_EVENTS_WITH_RESOURCES = """
+query ReportEventsWithResources($code: String!, $fightIDs: [Int]!, $dataType: EventDataType!, $startTime: Float!, $endTime: Float!, $filterExpression: String) {
+  reportData {
+    report(code: $code) {
+      events(
+        fightIDs: $fightIDs
+        dataType: $dataType
+        startTime: $startTime
+        endTime: $endTime
+        filterExpression: $filterExpression
+        includeResources: true
+      ) {
+        data
+        nextPageTimestamp
+      }
+    }
+  }
+}
+"""
+
 # v2 dataTypes for events:
 # DamageDone, DamageTaken, Healing, Casts, Buffs, Debuffs,
 # Deaths, Threat, Resources, Interrupts, Dispels, CombatantInfo

@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+from collections import defaultdict
 
 from backend.analysis.utils import actor_name, infer_role, spell_name
 from backend.wcl.client import graphql_query
-from backend.wcl.queries import REPORT_FIGHTS, REPORT_EVENTS, REPORT_EVENTS_ENEMY_DEATHS, REPORT_TABLE
+from backend.wcl.queries import REPORT_FIGHTS, REPORT_EVENTS, REPORT_EVENTS_ENEMY_DEATHS, REPORT_TABLE, REPORT_EVENTS_WITH_RESOURCES
 
 
 async def fetch_report_metadata(report_code: str) -> dict:
@@ -106,6 +107,34 @@ async def fetch_table(
     return table
 
 
+async def fetch_events_with_resources(
+    report_code: str,
+    fight_ids: list[int],
+    data_type: str,
+    start_time: float,
+    end_time: float,
+    filter_expression: str | None = None,
+) -> list[dict]:
+    """Fetch events with position/resource data (x, y, facing)."""
+    all_events = []
+    current_start = start_time
+    while current_start is not None:
+        variables = {
+            "code": report_code,
+            "fightIDs": fight_ids,
+            "dataType": data_type,
+            "startTime": current_start,
+            "endTime": end_time,
+        }
+        if filter_expression:
+            variables["filterExpression"] = filter_expression
+        data = await graphql_query(REPORT_EVENTS_WITH_RESOURCES, variables)
+        events_data = data["reportData"]["report"]["events"]
+        all_events.extend(events_data.get("data", []))
+        current_start = events_data.get("nextPageTimestamp")
+    return all_events
+
+
 async def fetch_full_report(report_code: str) -> dict:
     """Fetch a complete report: metadata + per-fight event data.
 
@@ -164,11 +193,19 @@ async def fetch_full_report(report_code: str) -> dict:
                 fetch_table(report_code, [fight_id], "Healing", start, end),
             )
 
+            # Fetch WW position data for Leotheras fights
+            ww_position_events = []
+            if "leotheras" in fight.get("name", "").lower():
+                ww_position_events = await fetch_events_with_resources(
+                    report_code, [fight_id], "DamageTaken", start, end,
+                    filter_expression="ability.name = 'Whirlwind'"
+                )
+
             pull = build_pull_data(
                 fight, actors_by_id, players_by_id, ability_names,
                 deaths, enemy_deaths, interrupts, dispels, healing, casts,
                 damage_taken, damage_done, buffs, threat,
-                dmg_table, heal_table,
+                dmg_table, heal_table, ww_position_events,
             )
             return fight, pull
 
@@ -264,6 +301,7 @@ def build_pull_data(
     threat: list,
     dmg_table: dict | None = None,
     heal_table: dict | None = None,
+    ww_position_events: list | None = None,
 ) -> dict:
     """Build a normalized pull data structure from raw events."""
     start = fight["startTime"]
@@ -549,7 +587,7 @@ def build_pull_data(
 
     # ─── Leotheras Whirlwind Phase Analysis ───────────────────────────────
     # Detects WW phases, identifies ranged targets hit (WW escaped melee),
-    # and tracks whether ranged players "jumped" (stopped taking hits quickly)
+    # and includes per-second position data for path visualization.
     whirlwind_analysis = None
     if "leotheras" in fight["name"].lower():
         RANGED_CLASSES = {"Mage", "Warlock", "Hunter", "Priest"}
@@ -571,6 +609,14 @@ def build_pull_data(
                 "amount": ev.get("amount", 0) + ev.get("absorbed", 0),
                 "time": rel_sec(ev["timestamp"]),
             })
+
+        # Build position lookup from ww_position_events (has x/y per hit)
+        pos_events = ww_position_events or []
+        # Index: (timestamp, target_id) -> (x, y)
+        pos_lookup: dict[tuple[int, int], tuple[int, int]] = {}
+        for ev in pos_events:
+            if ev.get("x") is not None and ev.get("targetID") in players_by_id:
+                pos_lookup[(ev["timestamp"], ev["targetID"])] = (ev["x"], ev["y"])
 
         if ww_events:
             # Split into phases (gap > 5s between damage = new phase)
@@ -620,6 +666,40 @@ def build_pull_data(
                     if phase_start <= d["relative_time"] <= phase_end + 3
                 ]
 
+                # Build per-second path data (centroid of hit positions per tick)
+                # and player positions for the map visualization
+                path_points = []
+                player_positions: dict[str, dict] = {}  # name -> {x, y, class, hit}
+                phase_start_ts = phase_events[0]["timestamp"]
+
+                # Group position events by second
+                sec_positions: dict[int, list[tuple[int, int]]] = defaultdict(list)
+
+                for ev in phase_events:
+                    tid = ev["target_id"]
+                    ts = ev["timestamp"]
+                    pos = pos_lookup.get((ts, tid))
+                    if pos:
+                        sec = int((ts - phase_start_ts) / 1000)
+                        sec_positions[sec].append(pos)
+                        # Track player position (use first seen position)
+                        if ev["target"] not in player_positions:
+                            player_positions[ev["target"]] = {
+                                "x": pos[0], "y": pos[1],
+                                "class": ev["class"],
+                                "is_ranged": ev["class"] in RANGED_CLASSES,
+                            }
+
+                for sec in sorted(sec_positions.keys()):
+                    positions = sec_positions[sec]
+                    cx = sum(p[0] for p in positions) / len(positions)
+                    cy = sum(p[1] for p in positions) / len(positions)
+                    path_points.append({
+                        "sec": sec,
+                        "x": round(cx),
+                        "y": round(cy),
+                    })
+
                 escaped = len(ranged_targets) > 0
                 phase_results.append({
                     "phase_num": len(phase_results) + 1,
@@ -631,6 +711,8 @@ def build_pull_data(
                     "ranged_targets": ranged_targets,
                     "deaths": phase_deaths,
                     "total_targets": len(melee_targets) + len(ranged_targets),
+                    "path": path_points,
+                    "positions": player_positions,
                 })
 
             whirlwind_analysis = {
