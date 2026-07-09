@@ -2720,23 +2720,36 @@
         if (playerClass === 'Rogue') {
           const bladeFlurry = buffEvts.filter(b => b.spell === 'Blade Flurry');
           const adrenaline = buffEvts.filter(b => b.spell === 'Adrenaline Rush');
-          if (activeTime > 60 && bladeFlurry.length === 0) {
+          const coldBlood = buffEvts.filter(b => b.spell === 'Cold Blood');
+          const mutilate = spellCasts['Mutilate'] || 0;
+          const sinisterStrike = spellCasts['Sinister Strike'] || 0;
+          const backstab = spellCasts['Backstab'] || 0;
+          const isCombat = sinisterStrike > mutilate || bladeFlurry.length > 0 || adrenaline.length > 0;
+          const isAssassination = mutilate > sinisterStrike || coldBlood.length > 0;
+
+          if (isCombat && activeTime > 60 && bladeFlurry.length === 0) {
             findings.push({
               title: 'Blade Flurry never used',
-              body: 'Blade Flurry (2 min CD) cleaves to a nearby target for 15 seconds. On multi-target phases, this should be used on cooldown for significant DPS gains.',
+              body: 'Blade Flurry (2 min CD) cleaves to a nearby target for 15 seconds. As Combat, this should be used on cooldown — it\'s a flat DPS increase even on single target.',
               severity: 'warning'
             });
           }
-          // Slice and Dice uptime
+          if (isCombat && activeTime > 120 && adrenaline.length === 0) {
+            findings.push({
+              title: 'No Adrenaline Rush used',
+              body: 'Adrenaline Rush (5 min CD) doubles energy regeneration for 15s. Use during Bloodlust/Heroism for maximum output. On fights over 5 min you should get 2 uses.',
+              severity: 'warning'
+            });
+          }
+          // Slice and Dice uptime (all specs)
           const snd = spellCasts['Slice and Dice'] || 0;
           if (snd === 0 && activeTime > 20) {
             findings.push({
               title: 'Zero Slice and Dice casts',
-              body: 'Slice and Dice is your #1 DPS ability — it increases attack speed by 30%. It should be maintained at all times, even at 1 combo point to get it rolling. Without SnD, your DPS drops by ~30%.',
+              body: 'Slice and Dice increases attack speed by 30% and should be maintained at all times. Even at 1 combo point to get it rolling early. Without SnD, your DPS drops by ~30%.',
               severity: 'critical'
             });
           } else if (snd > 0) {
-            // Rough uptime: SnD at 5CP lasts 21s. Average ~15s per application
             const roughUptime = (snd * 15 / activeTime) * 100;
             if (roughUptime < 60 && activeTime > 40) {
               findings.push({
@@ -2751,7 +2764,7 @@
           if (feint === 0 && activeTime > 60) {
             findings.push({
               title: 'Zero Feint casts',
-              body: 'Feint reduces your threat significantly. Use it during sustained DPS phases to stay below tank threat. Vanish is your emergency threat drop (5min CD) — Feint should be used proactively to prevent needing Vanish.',
+              body: 'Feint reduces your threat significantly. Use it proactively during sustained DPS phases to stay below tank threat. Vanish is your emergency threat drop — Feint prevents needing it.',
               severity: 'warning'
             });
           }
@@ -2763,39 +2776,59 @@
           const multiShot = spellCasts['Multi-Shot'] || 0;
           const arcaneShot = spellCasts['Arcane Shot'] || 0;
           const killCommand = spellCasts['Kill Command'] || 0;
+          const bestialWrath = buffEvts.filter(b => b.spell === 'Bestial Wrath');
+          const rapidFire = buffEvts.filter(b => b.spell === 'Rapid Fire');
+          const isBM = bestialWrath.length > 0 || killCommand > 0;
 
           // Steady Shot should be primary filler
           if (steadyShot === 0 && activeTime > 20) {
             findings.push({
               title: 'Zero Steady Shot casts',
-              body: 'Steady Shot is your primary damage ability and should be weaved between Auto Shots. Without it, you lose 40-50% of your potential DPS. Macro: /cast !Auto Shot followed by /cast Steady Shot.',
+              body: 'Steady Shot is your primary damage ability and should be weaved between Auto Shots. Without it, you lose 40-50% of your potential DPS.',
               severity: 'critical'
             });
           } else if (autoShot > 0 && steadyShot < autoShot * 0.7) {
             findings.push({
               title: `Low Steady Shot weaving: ${steadyShot} Steady vs ${autoShot} Auto`,
-              body: 'Ideal ratio is roughly 1:1 Steady Shot to Auto Shot. You should be firing a Steady Shot between every Auto Shot (1:1 rotation). Missing Steady Shots is leaving significant damage on the table.',
+              body: 'Ideal ratio is roughly 1:1 Steady Shot to Auto Shot. Missing Steady Shots is leaving significant damage on the table.',
               severity: 'warning'
             });
           }
 
-          // Kill Command usage
+          // BM-specific: Bestial Wrath usage
+          if (isBM && activeTime > 120 && bestialWrath.length === 0) {
+            findings.push({
+              title: 'No Bestial Wrath used (BM Hunter)',
+              body: 'Bestial Wrath (2 min CD) makes your pet deal 50% more damage and become immune to CC for 18s. This is your biggest DPS cooldown — use on cooldown, ideally during Bloodlust.',
+              severity: 'warning'
+            });
+          }
+
+          // Kill Command usage (BM key ability)
           if (killCommand === 0 && activeTime > 30) {
             findings.push({
               title: 'Zero Kill Command casts',
-              body: 'Kill Command (no CD, costs 0 mana, off-GCD on some versions) commands your pet to attack for bonus damage. Should be used on cooldown — it\'s free damage.',
+              body: 'Kill Command commands your pet to attack for bonus damage on a 5s CD. It should be used frequently — it\'s a significant portion of BM DPS.',
               severity: 'info'
             });
           }
 
-          // Feign Death / Misdirection usage
-          const feign = buffEvts.filter(b => b.spell === 'Feign Death');
+          // Rapid Fire (all specs)
+          if (activeTime > 180 && rapidFire.length === 0) {
+            findings.push({
+              title: 'No Rapid Fire used in a 3+ minute fight',
+              body: 'Rapid Fire (5 min CD) increases ranged attack speed by 40% for 15s. Use during Bloodlust/Heroism for stacking haste. You should get at least 1 use per fight.',
+              severity: 'info'
+            });
+          }
+
+          // Misdirection usage
           const misdirect = spellCasts['Misdirection'] || 0;
-          if (misdirect === 0 && activeTime > 30 && isKael) {
+          if (misdirect === 0 && activeTime > 60) {
             findings.push({
               title: 'Zero Misdirection casts',
-              body: 'Misdirection transfers your next 3 attacks\' threat to the tank. Use it at every phase transition (P3 advisor revive, P4 Kael engage). It costs nothing and prevents tank aggro issues.',
-              severity: 'warning'
+              body: 'Misdirection transfers your next 3 attacks\' threat to the tank. Use it on pull and at phase transitions. It costs nothing and prevents tank aggro issues.',
+              severity: 'info'
             });
           }
         }
@@ -2889,7 +2922,7 @@
           if (seedOfCorruption > shadowBolt && seedOfCorruption > incinerate && seedOfCorruption > 5) {
             findings.push({
               title: `Heavy Seed of Corruption usage (${seedOfCorruption} casts)`,
-              body: 'Seed of Corruption is only efficient on 3+ targets. During single-target phases (individual advisors in P1, Kael in P4), Shadow Bolt or Incinerate deals more damage. Seed also generates massive threat — risk of pulling aggro.',
+              body: 'Seed of Corruption is only efficient on 3+ targets. On single-target phases, Shadow Bolt or Incinerate deals more damage. Seed also generates massive threat — risk of pulling aggro.',
               severity: 'warning'
             });
           }
@@ -2902,12 +2935,25 @@
           const mortalStrike = spellCasts['Mortal Strike'] || 0;
           const recklessness = buffEvts.filter(b => b.spell === 'Recklessness');
           const deathWish = buffEvts.filter(b => b.spell === 'Death Wish');
+          const isFury = bloodthirst > mortalStrike;
+          const isArms = mortalStrike > bloodthirst;
 
-          const mainAbility = bloodthirst || mortalStrike;
-          if (mainAbility === 0 && activeTime > 20) {
+          if (isFury && bloodthirst === 0 && activeTime > 20) {
+            findings.push({
+              title: 'Zero Bloodthirst casts',
+              body: 'Bloodthirst (6s CD) is your primary rage dump as Fury. It should be used on every cooldown. Without it, rage is wasted on Heroic Strikes and white hits alone.',
+              severity: 'critical'
+            });
+          } else if (isArms && mortalStrike === 0 && activeTime > 20) {
+            findings.push({
+              title: 'Zero Mortal Strike casts',
+              body: 'Mortal Strike (6s CD) is your primary rage dump as Arms. It should be used on every cooldown, followed by Whirlwind and Slam procs.',
+              severity: 'critical'
+            });
+          } else if (bloodthirst === 0 && mortalStrike === 0 && activeTime > 20) {
             findings.push({
               title: 'Zero Bloodthirst/Mortal Strike casts',
-              body: 'Your primary rage dump (BT for Fury, MS for Arms) should be used on every cooldown. Without it, rage is wasted on white hits and Heroic Strikes alone. This is the foundation of warrior DPS.',
+              body: 'Your primary rage dump (BT for Fury, MS for Arms) should be used on every cooldown. Without it, rage is wasted on white hits and Heroic Strikes alone.',
               severity: 'critical'
             });
           }
@@ -2915,7 +2961,7 @@
           if (activeTime > 120 && recklessness.length === 0 && deathWish.length === 0) {
             findings.push({
               title: 'No offensive cooldowns used',
-              body: 'Recklessness (guaranteed crits, 30min CD) and Death Wish (+20% damage, 3min CD) should be used. Death Wish especially should be used 2-3 times on a Kael fight. Use Recklessness + Death Wish during P3 Bloodlust window for maximum impact.',
+              body: 'Death Wish (+20% damage, 3 min CD) should be used on cooldown — you should get 1-2 uses per fight. Recklessness (guaranteed crits, 30 min CD) should be saved for Bloodlust/Heroism windows.',
               severity: 'warning'
             });
           }
@@ -2926,6 +2972,8 @@
           const earthShock = spellCasts['Earth Shock'] || 0;
           const lightningBolt = spellCasts['Lightning Bolt'] || 0;
           const chainLightning = spellCasts['Chain Lightning'] || 0;
+          const elemMastery = buffEvts.filter(b => b.spell === 'Elemental Mastery');
+          const shamRage = buffEvts.filter(b => b.spell === 'Shamanistic Rage');
           const isEnhance = stormstrike > 0 || (earthShock > lightningBolt);
 
           if (isEnhance) {
@@ -2936,12 +2984,18 @@
                 severity: 'critical'
               });
             }
-            // Enhance should weave shocks
             if (earthShock === 0 && activeTime > 30 && interrupts === 0) {
               findings.push({
                 title: 'Zero Earth Shock casts (Enhancement)',
-                body: 'Earth Shock is both a damage ability and your interrupt. Between Stormstrike CDs, weave Earth Shock for damage. On Kael Phase 4, use it to interrupt Fireball/Pyroblast.',
+                body: 'Earth Shock is both a damage ability and your interrupt. Between Stormstrike CDs, weave Earth Shock for damage. It also serves as your interrupt on dangerous boss casts.',
                 severity: 'warning'
+              });
+            }
+            if (activeTime > 120 && shamRage.length === 0) {
+              findings.push({
+                title: 'No Shamanistic Rage used',
+                body: 'Shamanistic Rage (2 min CD) restores mana based on AP and reduces damage taken by 30%. Use on cooldown for mana sustain and as a defensive in heavy damage phases.',
+                severity: 'info'
               });
             }
           } else {
@@ -2953,14 +3007,21 @@
                 severity: 'critical'
               });
             }
+            if (activeTime > 120 && elemMastery.length === 0) {
+              findings.push({
+                title: 'No Elemental Mastery used',
+                body: 'Elemental Mastery (3 min CD) makes your next spell an instant guaranteed crit. Use on cooldown with Chain Lightning or Lightning Bolt for burst. On longer fights you should get 2+ uses.',
+                severity: 'warning'
+              });
+            }
           }
         }
 
         // Generic cooldown check for all DPS
-        if (activeTime > 180 && buffEvts.length === 0 && !['Warrior', 'Shaman'].includes(playerClass)) {
+        if (activeTime > 180 && buffEvts.length === 0 && !['Warrior', 'Shaman', 'Mage'].includes(playerClass)) {
           findings.push({
             title: 'No cooldowns detected in a 3+ minute fight',
-            body: 'Every DPS class has offensive or defensive cooldowns that should be used during a fight of this length. Not using them means leaving damage (or survivability) on the table. Review your class cooldowns and plan when to use them (P3 with Heroism/Bloodlust is the best window for long CDs).',
+            body: 'Every DPS class has offensive or defensive cooldowns that should be used during a fight of this length. Not using them means leaving damage (or survivability) on the table. Use them during Bloodlust/Heroism windows for maximum impact.',
             severity: 'warning'
           });
         }
@@ -4298,6 +4359,9 @@
         'Death Wish': { cd: 180, dur: 30, role: 'DPS', color: '#e63946' },
         'Recklessness': { cd: 1800, dur: 15, role: 'DPS', color: '#e63946' },
         'Rapid Fire': { cd: 300, dur: 15, role: 'DPS', color: '#abd473' },
+        'Elemental Mastery': { cd: 180, dur: 0, role: 'DPS', color: '#4cc9f0' },
+        'Avenging Wrath': { cd: 180, dur: 20, role: 'DPS', color: '#f0e68c' },
+        'Shamanistic Rage': { cd: 120, dur: 15, role: 'DPS', color: '#4cc9f0' },
         'Bestial Wrath': { cd: 120, dur: 18, role: 'DPS', color: '#e63946' },
         'Arcane Power': { cd: 180, dur: 15, role: 'DPS', color: '#69d2e7' },
         'Icy Veins': { cd: 180, dur: 20, role: 'DPS', color: '#69d2e7' },

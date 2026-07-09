@@ -112,7 +112,6 @@ BATTLE_ELIXIRS = {
     "Elixir of Major Agility", "Elixir of Major Firepower", "Major Firepower",
     "Elixir of Major Shadow Power", "Major Shadow Power",
     "Elixir of Healing Power", "Healing Power",
-    "Elixir of Major Mageblood",
     "Elixir of Major Strength",
     "Elixir of Mastery",
     "Elixir of Demonslaying",
@@ -128,6 +127,8 @@ GUARDIAN_ELIXIRS = {
     "Elixir of Major Fortitude", "Elixir of Major Defense",
     "Elixir of Ironshield", "Earthen Elixir",
     "Elixir of Draenic Wisdom",
+    "Elixir of Major Mageblood",
+    "Gift of Arthas",
 }
 
 ELIXIR_BUFFS = BATTLE_ELIXIRS | GUARDIAN_ELIXIRS
@@ -135,7 +136,7 @@ ELIXIR_BUFFS = BATTLE_ELIXIRS | GUARDIAN_ELIXIRS
 FOOD_BUFFS = {"Well Fed"}
 
 # Shaman imbue temporary enchant IDs
-SHAMAN_IMBUE_IDS = {2636, 2639, 2641, 2632, 2633}
+SHAMAN_IMBUE_IDS = {2636, 2639, 2641, 2632}
 
 WEAPON_BUFFS = {
     "Brilliant Wizard Oil", "Superior Wizard Oil", "Blessed Wizard Oil",
@@ -158,7 +159,6 @@ TEMP_ENCHANT_NAMES = {
     2639: "Windfury Totem",
     2641: "Flametongue Weapon",
     2632: "Frostbrand Weapon",
-    2633: "Earthliving Weapon",
     # Physical DPS - stones/weightstones
     2713: "Adamantite Sharpening Stone",
     2955: "Adamantite Weightstone",
