@@ -242,17 +242,19 @@
 
     .ai-advice-btn {
       font-size: 0.82rem;
-      padding: 6px 14px;
-      border-radius: 999px;
-      border: 1px solid rgba(143, 124, 255, 0.3);
-      background: rgba(143, 124, 255, 0.1);
-      color: rgba(143, 124, 255, 0.9);
+      padding: 8px 16px;
+      border-radius: 6px;
+      border: 1px solid rgba(143, 124, 255, 0.5);
+      background: rgba(143, 124, 255, 0.15);
+      color: #b8a9ff;
       cursor: pointer;
-      transition: background 0.2s, border-color 0.2s;
+      font-weight: 600;
+      transition: background 0.2s, border-color 0.2s, transform 0.1s;
     }
     .ai-advice-btn:hover {
-      background: rgba(143, 124, 255, 0.2);
-      border-color: rgba(143, 124, 255, 0.5);
+      background: rgba(143, 124, 255, 0.3);
+      border-color: rgba(143, 124, 255, 0.7);
+      transform: translateY(-1px);
     }
     .ai-advice-btn:disabled {
       opacity: 0.6;
@@ -1231,7 +1233,7 @@
       <section class="controls" style="flex-wrap:wrap;gap:0.5rem;">
         <div>
           <button id="backBtn" title="Load a different report" style="font-size:0.85rem;">← New Report</button>
-          <a href="/compare" class="secondary-link" style="margin-left:8px;font-size:0.85rem;" title="Compare two raid logs">⚔️ Compare Logs</a>
+          <a href="/compare" class="secondary-link" style="margin-left:8px;font-size:0.85rem;" title="Compare two raid logs">Compare Logs</a>
         </div>
         <div>
           <label for="bossSelect">Boss</label>
@@ -3832,8 +3834,8 @@
           <div class="card">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
               <h2 style="margin:0;">What Went Wrong</h2>
-              <button class="button ai-advice-btn" onclick="fetchAIAdvice('${escapeHtml(player)}')" title="Get personalized AI advice for this player">
-                AI Advice
+              <button class="button ai-advice-btn" onclick="fetchAIAdvice('${escapeHtml(player)}')" title="Generate personalized AI coaching for this player's performance">
+                Generate AI Coaching
               </button>
             </div>
             <div id="aiAdviceContainer" style="display:none; margin-bottom:16px; padding:14px; border-radius:12px; border:1px solid rgba(143,124,255,0.2); background:rgba(143,124,255,0.05);">
@@ -4178,7 +4180,7 @@
         const deadFor = Math.round(duration - firstDeath.relative_time);
         html += `
           <div style="background:rgba(220,53,69,0.12);border:1px solid rgba(220,53,69,0.4);border-radius:12px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;gap:10px;">
-            <span style="font-size:1.3rem;">💀</span>
+            <span style="font-size:1.1rem; font-weight:700; color:#dc3545;">DEAD</span>
             <div>
               <div style="font-weight:600;color:var(--wipe);">${escapeHtml(player)} died at ${formatTime(firstDeath.relative_time)}</div>
               <div class="mini-note">${deathPct}% into the fight${firstDeath.ability ? ` — killed by ${escapeHtml(firstDeath.ability)}` : ''}. Dead for ${deadFor}s of a ${formatTime(duration)} fight.</div>
@@ -4244,7 +4246,7 @@
           <div style="height:6px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden;margin-bottom:8px;">
             <div style="height:100%;width:${activePct}%;background:${activeColor};border-radius:3px;"></div>
           </div>
-          <p class="mini-note">${downtimePct > 20 ? `⚠️ ${downtimePct}% downtime — ${role === 'Healer' ? 'consider weaving DPS spells during low-damage periods' : 'Always Be Casting — every GCD should be used'}` : `✓ Good activity — only ${downtimePct}% idle time`}</p>
+          <p class="mini-note">${downtimePct > 20 ? `${downtimePct}% downtime — ${role === 'Healer' ? 'consider weaving DPS spells during low-damage periods' : 'Always Be Casting — every GCD should be used'}` : `Good activity — only ${downtimePct}% idle time`}</p>
         </section>`;
 
       // 2. Cooldown Timeline Visualization
@@ -4468,7 +4470,7 @@
           html += `
             <section class="card">
               <h3 style="display:flex;justify-content:space-between;align-items:center;">
-                <span>⚡ Totem Twisting</span>
+                <span>Totem Twisting</span>
                 <span style="background:${twistScore >= 70 ? '#264d2f' : twistScore >= 40 ? '#4d3d1a' : '#4d1a1a'};color:${twistScore >= 70 ? '#7ddf8a' : twistScore >= 40 ? '#f0ad4e' : '#ff6b6b'};padding:4px 12px;border-radius:12px;font-size:0.85rem;font-weight:700;">${twistScore} <span style="opacity:0.6;font-weight:400;">/100</span></span>
               </h3>
 
@@ -4526,7 +4528,7 @@
                 <div class="mini-stat"><div class="mini-stat-value">${avgTwistGap.toFixed(2)}s</div><div class="mini-stat-label">Avg Twist Gap</div></div>
                 <div class="mini-stat"><div class="mini-stat-value">${twistCount}/${wfTimes.length}</div><div class="mini-stat-label">Clean Twists</div></div>
               </div>
-              ${wfDrops > 0 ? `<p class="mini-note" style="color:#ff6b6b;">${wfDrops} WF drop${wfDrops > 1 ? 's' : ''} — your group lost significant Windfury uptime.</p>` : `<p class="mini-note" style="color:#7ddf8a;">✓ No WF drops — excellent twist maintenance.</p>`}
+              ${wfDrops > 0 ? `<p class="mini-note" style="color:#ff6b6b;">${wfDrops} WF drop${wfDrops > 1 ? 's' : ''} — your group lost significant Windfury uptime.</p>` : `<p class="mini-note" style="color:#7ddf8a;">No WF drops — excellent twist maintenance.</p>`}
             </section>`;
 
         } else if (wfTimes.length > 0 || goaTimes.length > 0) {
@@ -4700,7 +4702,7 @@
                   `).join('')}
                 </tbody>
               </table>
-              ${overallOhPct > 35 ? `<p class="mini-note" style="margin-top:8px;">⚠️ High overheal (${overallOhPct}%) — consider using more efficient spells or better heal targeting to avoid wasting mana.</p>` : ''}
+              ${overallOhPct > 35 ? `<p class="mini-note" style="margin-top:8px;">High overheal (${overallOhPct}%) — consider using more efficient spells or better heal targeting to avoid wasting mana.</p>` : ''}
             </section>`;
         }
       }
@@ -5087,18 +5089,17 @@
 
         // Phase info overlay
         const badge = phase.escaped
-          ? '<span class="ww-badge escaped">⚠️ WW Escaped</span>'
-          : '<span class="ww-badge clean">✅ Contained</span>';
+          ? '<span class="ww-badge escaped">WW Escaped</span>'
+          : '<span class="ww-badge clean">Contained</span>';
 
         const rangedChips = (phase.ranged_targets || []).map(t => {
           const cls = t.hits <= 2 ? 'ranged-ok' : 'ranged-bad';
-          const icon = t.hits <= 2 ? '🟡' : '🔴';
           const label = t.hits <= 2 ? `${t.hits} hit${t.hits > 1 ? 's' : ''} (glancing)` : `${t.hits} hits over ${t.exposure}s`;
-          return `<span class="ww-target-chip ${cls}">${icon} ${escapeHtml(t.name)} — ${label}</span>`;
+          return `<span class="ww-target-chip ${cls}">${escapeHtml(t.name)} — ${label}</span>`;
         }).join('');
 
         const deathsHtml = (phase.deaths || []).length > 0
-          ? `<div class="ww-deaths-row">💀 Deaths: ${phase.deaths.map(d => `${escapeHtml(d.player)} (${d.relative_time.toFixed(0)}s)`).join(', ')}</div>`
+          ? `<div class="ww-deaths-row">Deaths: ${phase.deaths.map(d => `${escapeHtml(d.player)} (${d.relative_time.toFixed(0)}s)`).join(', ')}</div>`
           : '';
 
         return `
@@ -5123,7 +5124,7 @@
 
       return `
         <section class="card">
-          <h2>🌀 Whirlwind Phase Analysis</h2>
+          <h2>Whirlwind Phase Analysis</h2>
           <p class="mini-note" style="margin-bottom:12px;">The dashed yellow line shows Leo's path (centroid of hit positions per second). Blue = melee, Red = ranged hit by WW.</p>
           <div class="ww-summary-grid">
             <div class="ww-summary-stat"><div class="value">${ww.total_phases}</div><div class="label">WW Phases</div></div>
