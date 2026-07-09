@@ -477,6 +477,28 @@
       border-color: rgba(143, 124, 255, 0.35);
     }
 
+    .progress-phase-btn {
+      padding: 6px 14px;
+      border-radius: 999px;
+      border: 1px solid rgba(179, 169, 255, 0.12);
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--muted);
+      font-size: 0.82rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.2s, color 0.2s, border-color 0.2s;
+    }
+    .progress-phase-btn:hover {
+      background: rgba(143, 124, 255, 0.1);
+      color: var(--text);
+      border-color: rgba(143, 124, 255, 0.25);
+    }
+    .progress-phase-btn.active {
+      background: linear-gradient(135deg, rgba(143, 124, 255, 0.18), rgba(232, 102, 168, 0.14));
+      color: var(--text);
+      border-color: rgba(143, 124, 255, 0.35);
+    }
+
     .detail-views {
       position: relative;
       min-height: 420px;
@@ -2063,34 +2085,81 @@
         container.innerHTML = '<div class="empty">No boss kill data available yet.</div>';
         return;
       }
-      const rows = data.progress.map(b => {
-        const firstDate = new Date(b.first_kill_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-        const fastestDate = new Date(b.fastest_date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
-        return `<tr>
-          <td style="font-weight:600;white-space:nowrap;">${escapeHtml(b.boss)}</td>
-          <td style="text-align:center;">${b.kills}</td>
-          <td style="text-align:center;color:var(--kill);font-weight:600;cursor:default;" title="${fastestDate}">${formatTime(b.fastest)}</td>
-          <td style="text-align:center;cursor:default;" title="Median of ${b.kills} kills">${formatTime(b.median)}</td>
-          <td style="text-align:center;color:var(--muted);cursor:default;" title="Average of ${b.kills} kills">${formatTime(b.average)}</td>
-          <td style="text-align:center;color:var(--muted);font-size:0.82rem;">${firstDate}</td>
-        </tr>`;
-      }).join('');
 
-      container.innerHTML = `
-        <div style="margin-bottom:8px;font-size:0.82rem;color:var(--muted);">${data.raids_analyzed} raids analyzed</div>
-        <div style="overflow-x:auto; border-radius:12px; border:1px solid var(--border);">
-        <table style="min-width:580px;">
-          <thead><tr>
-            <th style="text-align:left;">Boss</th>
-            <th style="text-align:center;">Kills</th>
-            <th style="text-align:center;">Fastest</th>
-            <th style="text-align:center;">Median</th>
-            <th style="text-align:center;">Average</th>
-            <th style="text-align:center;">First Kill</th>
-          </tr></thead>
-          <tbody>${rows}</tbody>
-        </table>
+      const RAID_GROUPS = {
+        5: [
+          { label: 'Serpentshrine Cavern', bosses: ['Hydross the Unstable', 'The Lurker Below', 'Leotheras the Blind', 'Fathom-Lord Karathress', 'Morogrim Tidewalker', 'Lady Vashj'] },
+          { label: 'Tempest Keep', bosses: ["Al'ar", 'Void Reaver', 'High Astromancer Solarian', 'Kael\'thas Sunstrider'] },
+        ],
+        4: [
+          { label: 'Karazhan', bosses: ['Attumen the Huntsman', 'Moroes', 'Maiden of Virtue', 'Opera Event', 'The Curator', 'Shade of Aran', 'Terestian Illhoof', 'Netherspite', 'Chess Event', 'Prince Malchezaar', 'Nightbane'] },
+          { label: 'Gruul\'s Lair', bosses: ['High King Maulgar', 'Gruul the Dragonkiller'] },
+          { label: 'Magtheridon\'s Lair', bosses: ['Magtheridon'] },
+        ],
+      };
+
+      const bossByName = {};
+      data.progress.forEach(b => { bossByName[b.boss] = b; });
+
+      let activePhase = 5;
+
+      function buildTable(bossList) {
+        const filtered = bossList.filter(name => bossByName[name]);
+        if (!filtered.length) return '<div class="empty" style="padding:8px;">No kills recorded.</div>';
+        const rows = filtered.map(name => {
+          const b = bossByName[name];
+          const firstDate = new Date(b.first_kill_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+          const fastestDate = new Date(b.fastest_date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+          return `<tr>
+            <td style="font-weight:600;white-space:nowrap;">${escapeHtml(b.boss)}</td>
+            <td style="text-align:center;">${b.kills}</td>
+            <td style="text-align:center;color:var(--kill);font-weight:600;cursor:default;" title="${fastestDate}">${formatTime(b.fastest)}</td>
+            <td style="text-align:center;cursor:default;" title="Median of ${b.kills} kills">${formatTime(b.median)}</td>
+            <td style="text-align:center;color:var(--muted);cursor:default;" title="Average of ${b.kills} kills">${formatTime(b.average)}</td>
+            <td style="text-align:center;color:var(--muted);font-size:0.82rem;">${firstDate}</td>
+          </tr>`;
+        }).join('');
+        return `<div style="overflow-x:auto; border-radius:12px; border:1px solid var(--border);">
+          <table style="min-width:580px;">
+            <thead><tr>
+              <th style="text-align:left;">Boss</th>
+              <th style="text-align:center;">Kills</th>
+              <th style="text-align:center;">Fastest</th>
+              <th style="text-align:center;">Median</th>
+              <th style="text-align:center;">Average</th>
+              <th style="text-align:center;">First Kill</th>
+            </tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
         </div>`;
+      }
+
+      function render() {
+        const groups = RAID_GROUPS[activePhase] || [];
+        const sections = groups.map(g => `
+          <div style="margin-bottom:1.2rem;">
+            <h4 style="margin:0 0 6px;font-size:0.92rem;color:var(--text-secondary);">${g.label}</h4>
+            ${buildTable(g.bosses)}
+          </div>
+        `).join('');
+
+        container.innerHTML = `
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+            <button class="progress-phase-btn${activePhase === 5 ? ' active' : ''}" data-phase="5">Phase 5 (SSC/TK)</button>
+            <button class="progress-phase-btn${activePhase === 4 ? ' active' : ''}" data-phase="4">Phase 4 (Kara/Gruul/Mag)</button>
+            <span style="margin-left:auto;font-size:0.82rem;color:var(--muted);">${data.raids_analyzed} raids analyzed</span>
+          </div>
+          ${sections}`;
+
+        container.querySelectorAll('.progress-phase-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            activePhase = parseInt(btn.dataset.phase);
+            render();
+          });
+        });
+      }
+
+      render();
     }
 
     setActiveDetailView('attendance');
