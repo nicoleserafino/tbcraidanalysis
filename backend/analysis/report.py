@@ -806,11 +806,16 @@ def build_pull_data(
         if target_id not in players_by_id:
             continue
         player = players_by_id[target_id]["name"]
-        buff_events.setdefault(player, []).append({
+        entry = {
             "spell": spell_name(ev, ability_names),
             "type": ev["type"],
             "time": rel_sec(ev["timestamp"]),
-        })
+        }
+        # Include source (caster) for external buffs like Power Infusion, Pain Suppression
+        source_id = ev.get("sourceID")
+        if source_id and source_id != target_id and source_id in players_by_id:
+            entry["source"] = players_by_id[source_id]["name"]
+        buff_events.setdefault(player, []).append(entry)
 
     # Process threat events (new in v2!)
     threat_events = []

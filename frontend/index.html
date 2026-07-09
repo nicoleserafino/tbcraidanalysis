@@ -4290,6 +4290,8 @@
         'Icy Veins': { cd: 180, dur: 20, role: 'DPS', color: '#69d2e7' },
         'Combustion': { cd: 180, dur: 0, role: 'DPS', color: '#e76f51' },
         'Shadowfiend': { cd: 300, dur: 15, role: 'Healer', color: '#9b5de5' },
+        'Power Infusion': { cd: 180, dur: 15, role: 'Healer', color: '#ffe066', external: true },
+        'Pain Suppression': { cd: 180, dur: 8, role: 'Healer', color: '#ff6b6b', external: true },
         'Drums of Battle': { cd: 120, dur: 30, role: 'Any', color: '#b5838d' },
         'Drums of War': { cd: 120, dur: 30, role: 'Any', color: '#b5838d' },
         'Drums of Restoration': { cd: 120, dur: 30, role: 'Any', color: '#b5838d' },
@@ -4300,10 +4302,47 @@
       const cdTimeline = [];
       const usedCDs = new Set();
 
+      // For external CDs (Power Infusion, Pain Suppression), gather casts from all targets
+      const externalCasts = {};  // cdName -> [{target, time, endTime}]
+      for (const [cdName, cdInfo] of Object.entries(COOLDOWNS)) {
+        if (!cdInfo.external) continue;
+        const castCount = spells[cdName] || 0;
+        if (castCount === 0) continue;
+        externalCasts[cdName] = [];
+        // Scan all players' buff events for this spell cast by current player
+        for (const [targetName, targetEvts] of Object.entries(pull.buff_events || {})) {
+          let activeStart = null;
+          for (const evt of targetEvts) {
+            if (evt.spell !== cdName) continue;
+            if (evt.source !== player) continue;
+            if (evt.type === 'applybuff') {
+              activeStart = evt.time;
+            } else if (evt.type === 'removebuff' && activeStart !== null) {
+              externalCasts[cdName].push({ target: targetName, start: activeStart, end: evt.time });
+              activeStart = null;
+            }
+          }
+          if (activeStart !== null) {
+            externalCasts[cdName].push({ target: targetName, start: activeStart, end: Math.min(activeStart + cdInfo.dur, duration) });
+          }
+        }
+      }
+
       for (const [cdName, cdInfo] of Object.entries(COOLDOWNS)) {
         const castCount = spells[cdName] || 0;
         if (castCount === 0) continue;
         usedCDs.add(cdName);
+
+        // External CDs: use cross-player data with targets
+        if (cdInfo.external && externalCasts[cdName]) {
+          const casts = externalCasts[cdName];
+          const windows = casts.map(c => ({ start: c.start, end: c.end, target: c.target }));
+          if (windows.length > 0 || castCount > 0) {
+            const maxPossible = Math.max(1, Math.floor(duration / cdInfo.cd) + 1);
+            cdTimeline.push({ name: cdName, windows, castCount, maxPossible, color: cdInfo.color, dur: cdInfo.dur, external: true, targets: casts.map(c => c.target) });
+          }
+          continue;
+        }
 
         // Find activation windows from buff events
         const windows = [];
@@ -4319,11 +4358,6 @@
         }
         // If no buff events found, estimate from cast timeline
         if (windows.length === 0 && cdInfo.dur > 0) {
-          const castTimes = timeline.filter(t => {
-            // Find casts that match — approximate via spell_casts timestamps
-            return true; // fallback: spread evenly
-          });
-          // Use evenly-spaced estimates based on cast count
           const interval = duration / Math.max(castCount, 1);
           for (let i = 0; i < castCount; i++) {
             const start = i * interval;
@@ -4360,14 +4394,19 @@
         for (const cd of cdTimeline) {
           const effPct = Math.min(100, Math.round((cd.castCount / cd.maxPossible) * 100));
           const effColor = effPct >= 80 ? 'var(--kill)' : effPct >= 50 ? 'var(--warning-color,#f0ad4e)' : 'var(--wipe)';
+          // For external CDs, show target names
+          const label = cd.external && cd.targets?.length
+            ? `${cd.name} → ${[...new Set(cd.targets)].join(', ')}`
+            : cd.name;
           html += `
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
-              <div style="width:130px;font-size:0.78rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${escapeHtml(cd.name)}">${escapeHtml(cd.name)}</div>
+              <div style="width:160px;font-size:0.78rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${escapeHtml(label)}">${escapeHtml(label)}</div>
               <div style="flex:1;position:relative;height:18px;background:rgba(255,255,255,0.04);border-radius:4px;overflow:hidden;">
                 ${cd.windows.map(w => {
                   const left = Math.max(0, (w.start / duration) * 100);
                   const width = Math.max(0.5, ((w.end - w.start) / duration) * 100);
-                  return `<div style="position:absolute;left:${left}%;width:${width}%;height:100%;background:${cd.color};opacity:0.75;border-radius:3px;" title="${formatTime(w.start)} — ${formatTime(w.end)}"></div>`;
+                  const tooltip = w.target ? `${w.target}: ${formatTime(w.start)} — ${formatTime(w.end)}` : `${formatTime(w.start)} — ${formatTime(w.end)}`;
+                  return `<div style="position:absolute;left:${left}%;width:${width}%;height:100%;background:${cd.color};opacity:0.75;border-radius:3px;" title="${tooltip}"></div>`;
                 }).join('')}
                 ${cd.dur === 0 ? cd.windows.map(w => {
                   const left = (w.start / duration) * 100;
