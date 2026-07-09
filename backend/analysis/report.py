@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+from collections import defaultdict
 
 from backend.analysis.utils import actor_name, infer_role, spell_name
 from backend.wcl.client import graphql_query
-from backend.wcl.queries import REPORT_FIGHTS, REPORT_EVENTS, REPORT_EVENTS_ENEMY_DEATHS, REPORT_TABLE
+from backend.wcl.queries import REPORT_FIGHTS, REPORT_EVENTS, REPORT_EVENTS_ENEMY_DEATHS, REPORT_TABLE, REPORT_EVENTS_WITH_RESOURCES
 
 
 async def fetch_report_metadata(report_code: str) -> dict:
@@ -29,8 +30,11 @@ async def fetch_events_paginated(
     """Fetch all pages of events for a fight."""
     all_events = []
     current_start = start_time
+    max_pages = 50  # safety guard against infinite pagination
 
-    while current_start is not None:
+    for _ in range(max_pages):
+        if current_start is None:
+            break
         variables = {
             "code": report_code,
             "fightIDs": fight_ids,
@@ -48,7 +52,10 @@ async def fetch_events_paginated(
         data = await graphql_query(REPORT_EVENTS, variables)
         events_data = data["reportData"]["report"]["events"]
         all_events.extend(events_data.get("data", []))
-        current_start = events_data.get("nextPageTimestamp")
+        next_start = events_data.get("nextPageTimestamp")
+        if next_start == current_start:
+            break  # prevent infinite loop on stuck pagination
+        current_start = next_start
 
     return all_events
 
@@ -62,7 +69,9 @@ async def fetch_enemy_deaths(
     """Fetch enemy/NPC death events for a fight."""
     all_events = []
     current_start = start_time
-    while current_start is not None:
+    for _ in range(50):
+        if current_start is None:
+            break
         variables = {
             "code": report_code,
             "fightIDs": fight_ids,
@@ -72,7 +81,10 @@ async def fetch_enemy_deaths(
         data = await graphql_query(REPORT_EVENTS_ENEMY_DEATHS, variables)
         events_data = data["reportData"]["report"]["events"]
         all_events.extend(events_data.get("data", []))
-        current_start = events_data.get("nextPageTimestamp")
+        next_start = events_data.get("nextPageTimestamp")
+        if next_start == current_start:
+            break
+        current_start = next_start
     return all_events
 
 
@@ -104,6 +116,39 @@ async def fetch_table(
     if isinstance(table, dict) and "data" in table and isinstance(table["data"], dict):
         return table["data"]
     return table
+
+
+async def fetch_events_with_resources(
+    report_code: str,
+    fight_ids: list[int],
+    data_type: str,
+    start_time: float,
+    end_time: float,
+    filter_expression: str | None = None,
+) -> list[dict]:
+    """Fetch events with position/resource data (x, y, facing)."""
+    all_events = []
+    current_start = start_time
+    for _ in range(50):
+        if current_start is None:
+            break
+        variables = {
+            "code": report_code,
+            "fightIDs": fight_ids,
+            "dataType": data_type,
+            "startTime": current_start,
+            "endTime": end_time,
+        }
+        if filter_expression:
+            variables["filterExpression"] = filter_expression
+        data = await graphql_query(REPORT_EVENTS_WITH_RESOURCES, variables)
+        events_data = data["reportData"]["report"]["events"]
+        all_events.extend(events_data.get("data", []))
+        next_start = events_data.get("nextPageTimestamp")
+        if next_start == current_start:
+            break
+        current_start = next_start
+    return all_events
 
 
 async def fetch_full_report(report_code: str) -> dict:
@@ -164,11 +209,25 @@ async def fetch_full_report(report_code: str) -> dict:
                 fetch_table(report_code, [fight_id], "Healing", start, end),
             )
 
+            # Fetch WW position data for Leotheras fights
+            ww_position_events = []
+            all_player_positions = []
+            if "leotheras" in fight.get("name", "").lower():
+                ww_position_events, all_player_positions = await asyncio.gather(
+                    fetch_events_with_resources(
+                        report_code, [fight_id], "DamageTaken", start, end,
+                        filter_expression="ability.name = 'Whirlwind'"
+                    ),
+                    fetch_events_with_resources(
+                        report_code, [fight_id], "Casts", start, end,
+                    ),
+                )
+
             pull = build_pull_data(
                 fight, actors_by_id, players_by_id, ability_names,
                 deaths, enemy_deaths, interrupts, dispels, healing, casts,
                 damage_taken, damage_done, buffs, threat,
-                dmg_table, heal_table,
+                dmg_table, heal_table, ww_position_events, all_player_positions,
             )
             return fight, pull
 
@@ -206,9 +265,17 @@ async def fetch_full_report(report_code: str) -> dict:
         else:
             entry["wipes"] += 1
 
+    # Only include players who participated in at least one boss fight
+    active_names = set()
+    for boss_entry in bosses.values():
+        for pull in boss_entry["pulls"]:
+            active_names.update(pull.get("players", []))
+
     player_info = {}
     for p in sorted(players, key=lambda x: x["name"]):
         name = p["name"]
+        if name not in active_names:
+            continue
         player_class = p["subType"]
         role = infer_role(
             player_class,
@@ -256,6 +323,8 @@ def build_pull_data(
     threat: list,
     dmg_table: dict | None = None,
     heal_table: dict | None = None,
+    ww_position_events: list | None = None,
+    all_player_positions: list | None = None,
 ) -> dict:
     """Build a normalized pull data structure from raw events."""
     start = fight["startTime"]
@@ -427,6 +496,19 @@ def build_pull_data(
     casts_by_player = {}
     cast_timeline = {}
     spell_casts = {}
+    spell_cast_times = {}  # player -> spell -> [relative_seconds] for totem/CD tracking
+    # Spells to track timestamps for (totems, CDs, key abilities)
+    TRACKED_SPELL_TIMES = {
+        "Windfury Totem", "Grace of Air Totem", "Wrath of Air Totem",
+        "Tranquil Air Totem", "Grounding Totem",
+        "Strength of Earth Totem", "Stoneskin Totem", "Tremor Totem",
+        "Earthbind Totem", "Earth Elemental Totem",
+        "Searing Totem", "Totem of Wrath", "Fire Nova Totem",
+        "Magma Totem", "Fire Elemental Totem",
+        "Mana Spring Totem", "Mana Tide Totem", "Healing Stream Totem",
+        "Bloodlust", "Heroism", "Drums of Battle", "Drums of War",
+        "Drums of Restoration",
+    }
     # Track NPC casts that completed (for missed interrupt detection)
     # Key spells that SHOULD be interrupted per boss
     INTERRUPTIBLE_SPELLS = {
@@ -460,6 +542,11 @@ def build_pull_data(
             cast_timeline.setdefault(player, []).append(rel_sec(ev["timestamp"]))
             spell_casts.setdefault(player, {})
             spell_casts[player][spell] = spell_casts[player].get(spell, 0) + 1
+            # Track per-spell timestamps for totems and key abilities
+            if spell in TRACKED_SPELL_TIMES:
+                spell_cast_times.setdefault(player, {}).setdefault(spell, []).append(
+                    rel_sec(ev["timestamp"])
+                )
         else:
             # NPC cast that completed — track if it's an interruptible spell
             if spell in INTERRUPTIBLE_SPELLS:
@@ -521,20 +608,194 @@ def build_pull_data(
                 "amount": amount,
             })
 
+    # ─── Leotheras Whirlwind Phase Analysis ───────────────────────────────
+    # Detects WW phases, identifies ranged targets hit (WW escaped melee),
+    # and includes per-second position data for path visualization.
+    whirlwind_analysis = None
+    if "leotheras" in fight["name"].lower():
+        RANGED_CLASSES = {"Mage", "Warlock", "Hunter", "Priest"}
+        ww_events = []
+        for ev in damage_taken:
+            if ev.get("type") != "damage":
+                continue
+            ability = spell_name(ev, ability_names)
+            if "whirlwind" not in ability.lower():
+                continue
+            target_id = ev.get("targetID")
+            if target_id not in players_by_id:
+                continue
+            ww_events.append({
+                "timestamp": ev["timestamp"],
+                "target_id": target_id,
+                "target": players_by_id[target_id]["name"],
+                "class": players_by_id[target_id].get("subType", ""),
+                "amount": ev.get("amount", 0) + ev.get("absorbed", 0),
+                "time": rel_sec(ev["timestamp"]),
+            })
+
+        # Build position lookup from ww_position_events (has x/y per hit)
+        pos_events = ww_position_events or []
+        # Index: (timestamp, target_id) -> (x, y)
+        pos_lookup: dict[tuple[int, int], tuple[int, int]] = {}
+        for ev in pos_events:
+            if ev.get("x") is not None and ev.get("targetID") in players_by_id:
+                pos_lookup[(ev["timestamp"], ev["targetID"])] = (ev["x"], ev["y"])
+
+        # Build a timeline of all player positions from cast events
+        # Key: sourceID -> list of (timestamp, x, y)
+        cast_pos_timeline: dict[int, list[tuple[int, int, int]]] = defaultdict(list)
+        for ev in (all_player_positions or []):
+            if ev.get("x") is not None and ev.get("sourceID") in players_by_id:
+                cast_pos_timeline[ev["sourceID"]].append(
+                    (ev["timestamp"], ev["x"], ev["y"])
+                )
+
+        if ww_events:
+            # Split into phases (gap > 5s between damage = new phase)
+            phases = []
+            current_phase: list[dict] = [ww_events[0]]
+            for ev in ww_events[1:]:
+                if ev["timestamp"] - current_phase[-1]["timestamp"] > 5000:
+                    phases.append(current_phase)
+                    current_phase = [ev]
+                else:
+                    current_phase.append(ev)
+            phases.append(current_phase)
+
+            phase_results = []
+            for phase_events in phases:
+                phase_start = phase_events[0]["time"]
+                phase_end = phase_events[-1]["time"]
+                # Group by 1-second ticks per target
+                target_ticks: dict[str, list[float]] = {}
+                for ev in phase_events:
+                    target_ticks.setdefault(ev["target"], []).append(ev["time"])
+
+                # Classify targets
+                melee_targets = []
+                ranged_targets = []
+                for ev in phase_events:
+                    name = ev["target"]
+                    pclass = ev["class"]
+                    entry = {"name": name, "class": pclass}
+                    if pclass in RANGED_CLASSES:
+                        if not any(t["name"] == name for t in ranged_targets):
+                            ticks = target_ticks[name]
+                            ranged_targets.append({
+                                **entry,
+                                "hits": len(ticks),
+                                "first_hit": min(ticks),
+                                "last_hit": max(ticks),
+                                "exposure": round(max(ticks) - min(ticks), 1) if len(ticks) > 1 else 0,
+                            })
+                    else:
+                        if not any(t["name"] == name for t in melee_targets):
+                            melee_targets.append({**entry, "hits": len(target_ticks[name])})
+
+                # Deaths during this phase
+                phase_deaths = [
+                    d for d in deaths_out
+                    if phase_start <= d["relative_time"] <= phase_end + 3
+                ]
+
+                # Build per-second path data (centroid of hit positions per tick)
+                # and player positions for the map visualization
+                path_points = []
+                player_positions: dict[str, dict] = {}  # name -> {x, y, class, is_ranged, was_hit}
+                phase_start_ts = phase_events[0]["timestamp"]
+                phase_end_ts = phase_events[-1]["timestamp"]
+
+                # Group position events by second
+                sec_positions: dict[int, list[tuple[int, int]]] = defaultdict(list)
+
+                for ev in phase_events:
+                    tid = ev["target_id"]
+                    ts = ev["timestamp"]
+                    pos = pos_lookup.get((ts, tid))
+                    if pos:
+                        sec = int((ts - phase_start_ts) / 1000)
+                        sec_positions[sec].append(pos)
+                        # Track hit player position (use first seen position)
+                        if ev["target"] not in player_positions:
+                            player_positions[ev["target"]] = {
+                                "x": pos[0], "y": pos[1],
+                                "class": ev["class"],
+                                "is_ranged": ev["class"] in RANGED_CLASSES,
+                                "was_hit": True,
+                            }
+
+                # Add positions for ALL players from cast events during this phase
+                for pid, timeline in cast_pos_timeline.items():
+                    pname = players_by_id[pid]["name"]
+                    if pname in player_positions:
+                        continue  # already have from WW hits
+                    pclass = players_by_id[pid].get("subType", "")
+                    # Find closest cast position to phase start
+                    best_pos = None
+                    best_dist = float("inf")
+                    for ts, x, y in timeline:
+                        # Prefer positions during the phase, or just before
+                        if phase_start_ts - 5000 <= ts <= phase_end_ts + 2000:
+                            dist = abs(ts - phase_start_ts)
+                            if dist < best_dist:
+                                best_dist = dist
+                                best_pos = (x, y)
+                    if best_pos:
+                        player_positions[pname] = {
+                            "x": best_pos[0], "y": best_pos[1],
+                            "class": pclass,
+                            "is_ranged": pclass in RANGED_CLASSES,
+                            "was_hit": False,
+                        }
+
+                for sec in sorted(sec_positions.keys()):
+                    positions = sec_positions[sec]
+                    cx = sum(p[0] for p in positions) / len(positions)
+                    cy = sum(p[1] for p in positions) / len(positions)
+                    path_points.append({
+                        "sec": sec,
+                        "x": round(cx),
+                        "y": round(cy),
+                    })
+
+                escaped = len(ranged_targets) > 0
+                phase_results.append({
+                    "phase_num": len(phase_results) + 1,
+                    "start_time": phase_start,
+                    "end_time": phase_end,
+                    "duration": round(phase_end - phase_start, 1),
+                    "escaped": escaped,
+                    "melee_targets": melee_targets,
+                    "ranged_targets": ranged_targets,
+                    "deaths": phase_deaths,
+                    "total_targets": len(melee_targets) + len(ranged_targets),
+                    "path": path_points,
+                    "positions": player_positions,
+                })
+
+            whirlwind_analysis = {
+                "total_phases": len(phase_results),
+                "escaped_phases": sum(1 for p in phase_results if p["escaped"]),
+                "clean_phases": sum(1 for p in phase_results if not p["escaped"]),
+                "phases": phase_results,
+            }
+
     # Process damage done table
     damage_done_out = {}
+    damage_totals = {}  # Canonical per-player totals from WCL table
     if dmg_table and "entries" in dmg_table:
         for entry in dmg_table["entries"]:
             pid = entry.get("id")
             if pid not in players_by_id:
                 continue
             player = players_by_id[pid]["name"]
+            damage_totals[player] = entry.get("total", 0)
             damage_done_out[player] = {}
             for ab in entry.get("abilities", []):
                 name = ab.get("name", "Unknown")
                 if name == "Melee":
                     name = "Melee (Auto Attack)"
-                damage_done_out[player][name] = ab.get("total", 0)
+                damage_done_out[player][name] = damage_done_out[player].get(name, 0) + ab.get("total", 0)
 
     # Process buff events
     buff_events = {}
@@ -545,11 +806,16 @@ def build_pull_data(
         if target_id not in players_by_id:
             continue
         player = players_by_id[target_id]["name"]
-        buff_events.setdefault(player, []).append({
+        entry = {
             "spell": spell_name(ev, ability_names),
             "type": ev["type"],
             "time": rel_sec(ev["timestamp"]),
-        })
+        }
+        # Include source (caster) for external buffs like Power Infusion, Pain Suppression
+        source_id = ev.get("sourceID")
+        if source_id and source_id != target_id and source_id in players_by_id:
+            entry["source"] = players_by_id[source_id]["name"]
+        buff_events.setdefault(player, []).append(entry)
 
     # Process threat events (new in v2!)
     threat_events = []
@@ -567,10 +833,14 @@ def build_pull_data(
     biggest_heals.sort(key=lambda x: -x["amount"])
     biggest_crits.sort(key=lambda x: -x["amount"])
 
-    # Determine participants
-    participants = sorted(set(
-        players_by_id[pid]["name"] for pid in players_by_id
-    ))
+    # Determine participants — only players who had activity in this fight
+    active_players = set()
+    active_players.update(casts_by_player.keys())
+    active_players.update(heals_by_player.keys())
+    active_players.update(damage_done_out.keys())
+    active_players.update(player_damage_taken_total.keys())
+    active_players.update(d["player"] for d in deaths_out)
+    participants = sorted(active_players)
 
     return {
         "fight_id": fight["id"],
@@ -587,8 +857,10 @@ def build_pull_data(
         "casts_by_player": casts_by_player,
         "cast_timeline": cast_timeline,
         "spell_casts": spell_casts,
+        "spell_cast_times": spell_cast_times,
         "cancelled_casts": cancelled_casts,
         "damage_done": damage_done_out,
+        "damage_totals": damage_totals,
         "damage_sources": damage_sources,
         "player_damage_taken": player_damage_taken,
         "player_damage_taken_amounts": player_damage_taken_amounts,
@@ -597,6 +869,7 @@ def build_pull_data(
         "buff_events": buff_events,
         "threat_events": threat_events,
         "conflagrations": conflagrations,
+        "whirlwind_analysis": whirlwind_analysis,
         "clutch_heals": clutch_heals[:10],
         "biggest_heals": biggest_heals[:5],
         "biggest_crits": biggest_crits[:5],

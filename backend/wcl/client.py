@@ -6,7 +6,7 @@ import asyncio
 import logging
 
 import httpx
-from backend.wcl.auth import get_access_token
+from backend.wcl.auth import get_access_token, invalidate_token
 
 GRAPHQL_URL = "https://www.warcraftlogs.com/api/v2/client"
 RETRY_STATUS_CODES = {429, 500, 502, 503, 504}
@@ -50,6 +50,11 @@ async def graphql_query(query: str, variables: dict | None = None) -> dict:
                     json=payload,
                     headers={"Authorization": f"Bearer {token}"},
                 )
+                if resp.status_code == 401 and attempt < len(RETRY_BACKOFFS):
+                    invalidate_token()
+                    token = await get_access_token()
+                    await asyncio.sleep(RETRY_BACKOFFS[attempt])
+                    continue
                 if resp.status_code in RETRY_STATUS_CODES and attempt < len(RETRY_BACKOFFS):
                     backoff = RETRY_BACKOFFS[attempt]
                     logger.warning(
