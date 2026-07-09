@@ -26,11 +26,13 @@ async def fetch_events_paginated(
     filter_expression: str | None = None,
     source_id: int | None = None,
     target_id: int | None = None,
+    include_resources: bool = False,
 ) -> list[dict]:
     """Fetch all pages of events for a fight."""
     all_events = []
     current_start = start_time
     max_pages = 50  # safety guard against infinite pagination
+    query_template = REPORT_EVENTS_WITH_RESOURCES if include_resources else REPORT_EVENTS
 
     for _ in range(max_pages):
         if current_start is None:
@@ -49,7 +51,7 @@ async def fetch_events_paginated(
         if target_id is not None:
             variables["targetID"] = target_id
 
-        data = await graphql_query(REPORT_EVENTS, variables)
+        data = await graphql_query(query_template, variables)
         events_data = data["reportData"]["report"]["events"]
         all_events.extend(events_data.get("data", []))
         next_start = events_data.get("nextPageTimestamp")
@@ -199,7 +201,7 @@ async def fetch_full_report(report_code: str) -> dict:
                 fetch_enemy_deaths(report_code, [fight_id], start, end),
                 fetch_events_paginated(report_code, [fight_id], "Interrupts", start, end),
                 fetch_events_paginated(report_code, [fight_id], "Dispels", start, end),
-                fetch_events_paginated(report_code, [fight_id], "Healing", start, end),
+                fetch_events_paginated(report_code, [fight_id], "Healing", start, end, include_resources=True),
                 fetch_events_paginated(report_code, [fight_id], "Casts", start, end),
                 fetch_events_paginated(report_code, [fight_id], "DamageTaken", start, end),
                 fetch_events_paginated(report_code, [fight_id], "DamageDone", start, end),
@@ -448,23 +450,21 @@ def build_pull_data(
         if ev.get("tick"):
             heal_details[player][spell]["is_hot"] = True
 
-        # Clutch heal tracking
+        # Clutch heal tracking — hitPoints is HP% after heal (0-100 from includeResources)
         target_id = ev.get("targetID")
         target_name = players_by_id.get(target_id, {}).get("name") if target_id else None
-        hit_points = ev.get("hitPoints")
+        hit_points_pct = ev.get("hitPoints")  # HP% after heal
 
-        if amount > 0 and hit_points and target_name and spell not in NON_HEAL_ABILITIES:
-            hp_before = hit_points - amount
-            if hp_before >= 0 and hit_points > 0:
-                hp_pct = round(hp_before / hit_points * 100, 1)
-                if hp_pct < 20:
-                    clutch_heals.append({
-                        "healer": player, "target": target_name, "spell": spell,
-                        "amount": amount, "hp_pct": hp_pct,
-                        "time": rel_sec(ev["timestamp"]),
-                        "self_heal": source_id == target_id,
-                        "is_hot": bool(ev.get("tick")),
-                    })
+        if amount > 0 and hit_points_pct is not None and target_name and spell not in NON_HEAL_ABILITIES:
+            # Target HP% after receiving this heal — if still under 25%, they were critically low
+            if hit_points_pct < 25:
+                clutch_heals.append({
+                    "healer": player, "target": target_name, "spell": spell,
+                    "amount": amount, "hp_pct": round(hit_points_pct, 1),
+                    "time": rel_sec(ev["timestamp"]),
+                    "self_heal": source_id == target_id,
+                    "is_hot": bool(ev.get("tick")),
+                })
 
         if amount > 0:
             biggest_heals.append({
