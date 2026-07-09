@@ -1225,8 +1225,12 @@
             <div class="detail-note-card">
               Week-over-week performance trends per player. Track DPS/HPS improvements and death rates.
             </div>
-            <div id="trendsControls" style="margin-bottom:12px;display:flex;gap:8px;align-items:center;">
+            <div id="trendsControls" style="margin-bottom:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
               <input id="trendsSearch" type="text" placeholder="Search player..." style="min-width:180px;padding:6px 10px;font-size:0.85rem;">
+              <div style="display:flex;align-items:center;gap:4px;">
+                <label for="trendsMinWeeks" style="font-size:0.82rem;color:var(--muted);">Min weeks</label>
+                <input id="trendsMinWeeks" type="number" min="1" step="1" value="3" style="width:60px;padding:4px 6px;font-size:0.85rem;">
+              </div>
               <button class="progress-phase-btn active" data-trend-role="dps" type="button">DPS</button>
               <button class="progress-phase-btn" data-trend-role="healer" type="button">Healers</button>
             </div>
@@ -2201,6 +2205,7 @@
     let trendsData = null;
     let trendsRole = 'dps';
     let trendsFilter = '';
+    let trendsMinWeeks = 3;
 
     async function loadTrends() {
       if (trendsLoaded) return;
@@ -2221,7 +2226,7 @@
         return;
       }
 
-      let players = trendsData.players.filter(p => p.role === trendsRole);
+      let players = trendsData.players.filter(p => p.role === trendsRole && p.weeks.length >= trendsMinWeeks);
       if (trendsFilter) {
         const q = trendsFilter.toLowerCase();
         players = players.filter(p => p.player.toLowerCase().includes(q));
@@ -2307,6 +2312,11 @@
 
     document.getElementById('trendsSearch').addEventListener('input', e => {
       trendsFilter = e.target.value;
+      renderTrends();
+    });
+
+    document.getElementById('trendsMinWeeks').addEventListener('input', e => {
+      trendsMinWeeks = Math.max(1, Number(e.target.value || 1));
       renderTrends();
     });
 
