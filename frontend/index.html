@@ -6336,10 +6336,11 @@
       // Helper: top N from an object
       const topN = (obj, n = 3) => Object.entries(obj).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, n);
       const bottomN = (obj, n = 3) => Object.entries(obj).filter(([,v]) => v > 0).sort((a, b) => a[1] - b[1] || a[0].localeCompare(b[0])).slice(0, n);
+      const hasClearWinner = (sorted) => sorted.length >= 2 ? sorted[0][1] !== sorted[1][1] : sorted.length === 1;
 
       // ─── UTILITY / SUPPORT ─────────────────────────────────────────
       const topInterrupters = topN(playerInterrupts);
-      if (topInterrupters.length && topInterrupters[0][1] > 0) {
+      if (topInterrupters.length && topInterrupters[0][1] > 0 && hasClearWinner(topInterrupters)) {
         awards.utility.push({
           title: 'MVP Interrupt', winner: topInterrupters[0][0],
           value: `${topInterrupters[0][1]} interrupts`,
@@ -6348,7 +6349,7 @@
       }
 
       const topDispellers = topN(playerDispels);
-      if (topDispellers.length && topDispellers[0][1] > 0) {
+      if (topDispellers.length && topDispellers[0][1] > 0 && hasClearWinner(topDispellers)) {
         awards.utility.push({
           title: 'Dispel Hero', winner: topDispellers[0][0],
           value: `${topDispellers[0][1]} dispels`,
@@ -6357,7 +6358,7 @@
       }
 
       const topDrummers = topN(playerDrumUses);
-      if (topDrummers.length && topDrummers[0][1] > 0) {
+      if (topDrummers.length && topDrummers[0][1] > 0 && hasClearWinner(topDrummers)) {
         awards.utility.push({
           title: 'Drumline Captain', winner: topDrummers[0][0],
           value: `${topDrummers[0][1]} drum uses`,
@@ -6379,7 +6380,7 @@
         });
       });
       const topInnervate = topN(innervateTargets);
-      if (topInnervate.length && topInnervate[0][1] >= 2) {
+      if (topInnervate.length && topInnervate[0][1] >= 2 && hasClearWinner(topInnervate)) {
         awards.utility.push({
           title: 'Innervate Magnet', winner: topInnervate[0][0],
           value: `${topInnervate[0][1]} Innervates received`,
@@ -6390,7 +6391,7 @@
       // ─── THROUGHPUT / BIG NUMBERS ──────────────────────────────────
       // Pump Lord — top total damage
       const topDamagers = topN(playerTotalDamage);
-      if (topDamagers.length) {
+      if (topDamagers.length && hasClearWinner(topDamagers)) {
         const dps = pulls.reduce((s, p) => s + (p.duration_sec || 0), 0);
         const dpsValue = dps > 0 ? Math.round(topDamagers[0][1] / dps) : topDamagers[0][1];
         awards.pump.push({
@@ -6402,7 +6403,7 @@
 
       // HPS Monster — top total healing
       const topHealers = topN(playerTotalHealing);
-      if (topHealers.length) {
+      if (topHealers.length && hasClearWinner(topHealers)) {
         const totalTime = pulls.reduce((s, p) => s + (p.duration_sec || 0), 0);
         const hpsValue = totalTime > 0 ? Math.round(topHealers[0][1] / totalTime) : topHealers[0][1];
         awards.pump.push({
@@ -6482,7 +6483,7 @@
 
       // Mechanic Enjoyer — most avoidable damage
       const dirtyPlayers = avoidableEntries.filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
-      if (dirtyPlayers.length) {
+      if (dirtyPlayers.length && hasClearWinner(dirtyPlayers)) {
         awards.fun.push({
           title: 'Standing in It Champion', winner: dirtyPlayers[0][0],
           value: `${dirtyPlayers[0][1]} avoidable hits`,
@@ -6492,7 +6493,7 @@
 
       // Floor Inspector — most deaths
       const topDeaths = topN(playerDeaths);
-      if (topDeaths.length && topDeaths[0][1] > 0) {
+      if (topDeaths.length && topDeaths[0][1] > 0 && hasClearWinner(topDeaths)) {
         awards.mechanics.push({
           title: 'Floor Inspector', winner: topDeaths[0][0],
           value: `${topDeaths[0][1]} deaths`,
@@ -6502,7 +6503,7 @@
 
       // First Blood — most first deaths on pulls
       const topFirstDeaths = topN(playerFirstDeaths);
-      if (topFirstDeaths.length && topFirstDeaths[0][1] > 1) {
+      if (topFirstDeaths.length && topFirstDeaths[0][1] > 1 && hasClearWinner(topFirstDeaths)) {
         awards.mechanics.push({
           title: 'First Blood', winner: topFirstDeaths[0][0],
           value: `First to die ${topFirstDeaths[0][1]}x`,
@@ -6512,7 +6513,7 @@
 
       // Last Alive — most times being last alive on wipes
       const topLastAlive = topN(playerLastAlive);
-      if (topLastAlive.length && topLastAlive[0][1] > 1) {
+      if (topLastAlive.length && topLastAlive[0][1] > 1 && hasClearWinner(topLastAlive)) {
         awards.mechanics.push({
           title: 'Last One Standing', winner: topLastAlive[0][0],
           value: `Survived last ${topLastAlive[0][1]}x`,
@@ -6522,7 +6523,7 @@
 
       // ─── PREP / CONSUMABLES ────────────────────────────────────────
       const topPotions = topN(playerPotionUses);
-      if (topPotions.length && topPotions[0][1] > 0) {
+      if (topPotions.length && topPotions[0][1] > 0 && hasClearWinner(topPotions)) {
         awards.preparation.push({
           title: 'Potion Goblin', winner: topPotions[0][0],
           value: `${topPotions[0][1]} potions used`,
@@ -6531,7 +6532,7 @@
       }
 
       const topDarkRunes = topN(playerDarkRuneUses);
-      if (topDarkRunes.length && topDarkRunes[0][1] > 0) {
+      if (topDarkRunes.length && topDarkRunes[0][1] > 0 && hasClearWinner(topDarkRunes)) {
         awards.preparation.push({
           title: 'Dark Rune Enthusiast', winner: topDarkRunes[0][0],
           value: `${topDarkRunes[0][1]} runes used`,
@@ -6540,7 +6541,7 @@
       }
 
       const topHS = topN(playerHealthstoneUses);
-      if (topHS.length && topHS[0][1] > 0) {
+      if (topHS.length && topHS[0][1] > 0 && hasClearWinner(topHS)) {
         awards.preparation.push({
           title: 'Healthstone Enjoyer', winner: topHS[0][0],
           value: `${topHS[0][1]} stones used`,
@@ -6590,7 +6591,7 @@
           guardianCounts[h.healer] = (guardianCounts[h.healer] || 0) + 1;
         });
         const topGuardians = topN(guardianCounts);
-        if (topGuardians.length && topGuardians[0][1] >= 2) {
+        if (topGuardians.length && topGuardians[0][1] >= 2 && hasClearWinner(topGuardians)) {
           awards.clutch.push({
             title: 'Guardian Angel', winner: topGuardians[0][0],
             value: `${topGuardians[0][1]} clutch saves (<15% HP)`,
@@ -6629,18 +6630,6 @@
         });
       }
 
-      // Overheal Enjoyer — highest overheal % (fun award)
-      if (healerOHEntries.length >= 2) {
-        const worst = healerOHEntries[healerOHEntries.length - 1];
-        if (worst[1] > 20) {
-          awards.fun.push({
-            title: 'Overheal Enjoyer', winner: worst[0],
-            value: `${worst[1]}% overheal`,
-            detail: 'Most wasted healing — every point of overheal is mana you didn\'t need to spend',
-          });
-        }
-      }
-
       // ─── FUN / MEME ────────────────────────────────────────────────
       // Main Character Syndrome — most targeted by boss conflagrations (Kael pulls only)
       const conflagCounts = {};
@@ -6650,7 +6639,7 @@
         });
       });
       const topConflag = topN(conflagCounts);
-      if (topConflag.length && topConflag[0][1] > 2) {
+      if (topConflag.length && topConflag[0][1] > 2 && hasClearWinner(topConflag)) {
         awards.fun.push({
           title: 'Main Character Syndrome', winner: topConflag[0][0],
           value: `Conflag'd ${topConflag[0][1]}x`,
@@ -6671,7 +6660,7 @@
         });
       });
       const topThreatEnjoyers = topN(playerBossMelee);
-      if (topThreatEnjoyers.length && topThreatEnjoyers[0][1] > 2) {
+      if (topThreatEnjoyers.length && topThreatEnjoyers[0][1] > 2 && hasClearWinner(topThreatEnjoyers)) {
         awards.fun.push({
           title: 'Threat Enjoyer', winner: topThreatEnjoyers[0][0],
           value: `${topThreatEnjoyers[0][1]} boss melee hits taken`,
@@ -6697,7 +6686,7 @@
         });
       });
       const topPrepared = topN(playerBuffScore);
-      if (topPrepared.length && topPrepared[0][1] >= totalPulls) {
+      if (topPrepared.length && topPrepared[0][1] >= totalPulls && hasClearWinner(topPrepared)) {
         awards.preparation.push({
           title: 'Prepared Gamer', winner: topPrepared[0][0],
           value: `Buff score: ${topPrepared[0][1]}/${totalPulls * 2}`,
@@ -6710,7 +6699,7 @@
         .filter(([p]) => (playerPullsPresent[p] || 0) >= 3 && allPlayers[p]?.role === 'DPS')
         .map(([p, s]) => [p, s.size])
         .sort((a, b) => a[1] - b[1]);
-      if (uniqueSpellEntries.length) {
+      if (uniqueSpellEntries.length && hasClearWinner(uniqueSpellEntries)) {
         awards.fun.push({
           title: 'One Trick Pony', winner: uniqueSpellEntries[0][0],
           value: `${uniqueSpellEntries[0][1]} unique spells`,
@@ -6723,7 +6712,7 @@
         .filter(([p]) => (playerPullsPresent[p] || 0) >= 3)
         .map(([p, s]) => [p, s.size])
         .sort((a, b) => b[1] - a[1]);
-      if (swissEntries.length) {
+      if (swissEntries.length && hasClearWinner(swissEntries)) {
         awards.fun.push({
           title: 'Swiss Army Knife', winner: swissEntries[0][0],
           value: `${swissEntries[0][1]} unique spells`,
@@ -6736,7 +6725,7 @@
         .filter(([p]) => allPlayers[p]?.role === 'Healer' && (playerTotalRawHealing[p] || 0) > 0)
         .map(([p, oh]) => [p, Math.round(oh / playerTotalRawHealing[p] * 100)])
         .sort((a, b) => b[1] - a[1]);
-      if (overhealEntries.length && overhealEntries[0][1] > 0) {
+      if (overhealEntries.length && overhealEntries[0][1] > 0 && hasClearWinner(overhealEntries)) {
         awards.fun.push({
           title: 'Overheal Olympics', winner: overhealEntries[0][0],
           value: `${overhealEntries[0][1]}% overheal`,
@@ -6748,7 +6737,7 @@
       const glassCannonEntries = Object.entries(playerTotalDamage)
         .filter(([p]) => (playerDeaths[p] || 0) > 0 && allPlayers[p]?.role === 'DPS')
         .sort((a, b) => b[1] - a[1]);
-      if (glassCannonEntries.length) {
+      if (glassCannonEntries.length && hasClearWinner(glassCannonEntries)) {
         const [p, d] = glassCannonEntries[0];
         awards.fun.push({
           title: 'Glass Cannon', winner: p,
@@ -6761,7 +6750,7 @@
       const survivalEntries = Object.entries(playerPullsSurvived)
         .filter(([p]) => (playerPullsPresent[p] || 0) >= 5)
         .sort((a, b) => b[1] - a[1]);
-      if (survivalEntries.length) {
+      if (survivalEntries.length && hasClearWinner(survivalEntries)) {
         const [p, survived] = survivalEntries[0];
         awards.fun.push({
           title: 'Unkillable', winner: p,
@@ -6775,7 +6764,7 @@
         .filter(([p]) => (playerTotalTime[p] || 0) >= 60)
         .map(([p, c]) => [p, Math.round(c / playerTotalTime[p] * 60)])
         .sort((a, b) => b[1] - a[1]);
-      if (cpmEntries.length) {
+      if (cpmEntries.length && hasClearWinner(cpmEntries)) {
         awards.fun.push({
           title: 'Button Masher', winner: cpmEntries[0][0],
           value: `${cpmEntries[0][1]} casts/min`,
@@ -6788,7 +6777,7 @@
         .filter(([p]) => (playerTotalTime[p] || 0) >= 60 && allPlayers[p]?.role === 'DPS')
         .map(([p, c]) => [p, Math.round(c / playerTotalTime[p] * 60)])
         .sort((a, b) => a[1] - b[1]);
-      if (afkEntries.length) {
+      if (afkEntries.length && hasClearWinner(afkEntries)) {
         awards.fun.push({
           title: 'AFK Champion', winner: afkEntries[0][0],
           value: `${afkEntries[0][1]} casts/min`,
