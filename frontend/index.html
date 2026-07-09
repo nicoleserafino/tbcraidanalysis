@@ -3801,6 +3801,24 @@
       const dispels = countByPlayer(pull.dispels, 'source', player);
       const interrupts = countByPlayer(pull.interrupts, 'source', player);
 
+      // Compute DPS/HPS for the metric grid
+      const duration = pull.duration_sec || 1;
+      const role = getPlayerRole(player);
+      const dpsData = pull.damage_done?.[player] || {};
+      const totalDmg = Object.values(dpsData).reduce((s, v) => s + Number(v || 0), 0);
+      const dps = Math.round(totalDmg / duration);
+      const healData = pull.heal_details?.[player] || {};
+      const totalHeal = Object.values(healData).reduce((s, d) => s + (d.total || 0), 0);
+      const hps = Math.round(totalHeal / duration);
+
+      const throughputMetrics = role === 'Healer' && hps > 0
+        ? `<div class="metric"><span class="metric-label">HPS</span><span class="metric-value">${hps.toLocaleString()}</span></div>
+           <div class="metric"><span class="metric-label">Total Healing</span><span class="metric-value">${(totalHeal / 1000).toFixed(0)}k</span></div>`
+        : dps > 0
+          ? `<div class="metric"><span class="metric-label">DPS</span><span class="metric-value">${dps.toLocaleString()}</span></div>
+             <div class="metric"><span class="metric-label">Total Damage</span><span class="metric-value">${(totalDmg / 1000).toFixed(0)}k</span></div>`
+          : '';
+
       return `
         <section class="card">
           <div class="grid grid-2">
@@ -3812,12 +3830,11 @@
                 <span class="pill">Class: ${escapeHtml(meta.class || 'Unknown')}</span>
               </div>
               <div class="metric-grid" style="margin-top:14px;">
-                <div class="metric"><span class="muted">Deaths</span><span class="num">${deaths.length}</span></div>
-                <div class="metric"><span class="muted">${mechanicLabel || 'Mechanic hits'}</span><span class="num">${mechanicCount}</span></div>
-                <div class="metric"><span class="muted">Casts</span><span class="num">${casts}</span></div>
-                <div class="metric"><span class="muted">Heals</span><span class="num">${heals}</span></div>
-                <div class="metric"><span class="muted">Dispels</span><span class="num">${dispels}</span></div>
-                <div class="metric"><span class="muted">Interrupts</span><span class="num">${interrupts}</span></div>
+                ${throughputMetrics}
+                <div class="metric"><span class="metric-label">Deaths</span><span class="metric-value">${deaths.length}</span></div>
+                <div class="metric"><span class="metric-label">${mechanicLabel || 'Mechanic hits'}</span><span class="metric-value">${mechanicCount}</span></div>
+                <div class="metric"><span class="metric-label">Casts</span><span class="metric-value">${casts}</span></div>
+                <div class="metric"><span class="metric-label">Interrupts</span><span class="metric-value">${interrupts}</span></div>
               </div>
             </div>
             <div>
@@ -4198,24 +4215,18 @@
           </div>`;
       }
 
-      // DPS/HPS stat header
-      const dpsData = pull.damage_done?.[player] || {};
-      const totalDmg = Object.values(dpsData).reduce((s, v) => s + Number(v || 0), 0);
-      const dps = Math.round(totalDmg / duration);
-      const healData = pull.heal_details?.[player] || {};
-      const totalHeal = Object.values(healData).reduce((s, d) => s + (d.total || 0), 0);
-      const hps = Math.round(totalHeal / duration);
+      // DPS/HPS stat header — now in the metric grid above, skip here
+      const dpsData2 = pull.damage_done?.[player] || {};
+      const totalDmg2 = Object.values(dpsData2).reduce((s, v) => s + Number(v || 0), 0);
+      const dps2 = Math.round(totalDmg2 / duration);
+      const healData2 = pull.heal_details?.[player] || {};
+      const totalHeal2 = Object.values(healData2).reduce((s, d) => s + (d.total || 0), 0);
+      const hps2 = Math.round(totalHeal2 / duration);
 
-      if (role === 'Healer' && hps > 0) {
-        html += `<div style="display:flex;gap:16px;margin-bottom:16px;">
-          <div class="mini-stat"><div class="mini-stat-value">${hps.toLocaleString()}</div><div class="mini-stat-label">HPS</div></div>
-          <div class="mini-stat"><div class="mini-stat-value">${(totalHeal / 1000).toFixed(0)}k</div><div class="mini-stat-label">Total Healing</div></div>
-        </div>`;
-      } else if (dps > 0) {
-        html += `<div style="display:flex;gap:16px;margin-bottom:16px;">
-          <div class="mini-stat"><div class="mini-stat-value">${dps.toLocaleString()}</div><div class="mini-stat-label">DPS</div></div>
-          <div class="mini-stat"><div class="mini-stat-value">${(totalDmg / 1000).toFixed(0)}k</div><div class="mini-stat-label">Total Damage</div></div>
-        </div>`;
+      if (role === 'Healer' && hps2 > 0) {
+        // Shown in metric grid above
+      } else if (dps2 > 0) {
+        // Shown in metric grid above
       }
 
       // 1. Active Time / Downtime Analysis
