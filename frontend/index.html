@@ -2167,6 +2167,34 @@
       return issues;
     }
 
+    // Threat-mistake deaths from the backend classifier. Surfaced at the TOP of "What
+    // Went Wrong" because a DPS pulling aggro before it is safe is a death the raid
+    // cannot heal through — unlike avoidable mechanic damage (e.g. Conflagration).
+    function threatDeathIssues() {
+      const pull = getPull();
+      if (!pull) return [];
+      const td = pull.threat_deaths || {};
+      const total = td.threat_death_total || 0;
+      if (!total) return [];
+      const af = td.attacked_first_total || 0;
+      const rip = td.ripped_threat_total || 0;
+      const players = td.threat_players || {};
+      const names = Object.keys(players).sort((a, b) => (players[b].total || 0) - (players[a].total || 0));
+      const breakdown = [];
+      if (af) breakdown.push(`${af} attacked before the tank had aggro`);
+      if (rip) breakdown.push(`${rip} out-threated the tank (ripped aggro)`);
+      const offenders = names.map(n => `${n} (${players[n].total})`).join(', ');
+      const mech = td.mechanic_death_total || 0;
+      const compare = mech
+        ? ` For comparison, ${mech} death${mech > 1 ? 's' : ''} came from avoidable mechanic damage — which is far more healable than a DPS taking aggro.`
+        : '';
+      return [{
+        title: `Threat deaths — DPS pulled aggro before it was safe (${total})`,
+        body: `${breakdown.join('; ')}. Offenders: ${offenders}.${compare} This is the primary wipe driver: the raid can't heal through a DPS holding the boss/add.`,
+        severity: 'critical'
+      }];
+    }
+
     function bossSpecificIssueSummary(player) {
       const pull = getPull();
       if (!pull) return '';
@@ -2308,11 +2336,18 @@
           let confidence = 'Medium';
 
           // Determine likely cause based on evidence
-          if (role === 'DPS' && death.relative_time < 30) {
+          const backendCat = death.cause_category;
+          if (backendCat === 'attacked_first' || backendCat === 'ripped_threat') {
+            likelyCause = backendCat === 'ripped_threat'
+              ? 'Threat — out-threated the tank and ripped aggro'
+              : 'Threat — attacked before the tank had aggro';
+            evidence = death.cause || 'Backend threat classifier: DPS took aggro before it was safe';
+            confidence = 'High';
+          } else if (role === 'DPS' && death.relative_time < 30 && !backendCat) {
             likelyCause = 'Threat — pulled aggro before tank established';
             evidence = 'Died within first 30 seconds as DPS';
             confidence = 'High';
-          } else if (role === 'DPS' && /Melee/i.test(topDmg) && death.relative_time < 60) {
+          } else if (role === 'DPS' && /Melee/i.test(topDmg) && death.relative_time < 60 && !backendCat) {
             likelyCause = 'Threat — melee damage from boss/add on a non-tank';
             evidence = `Primary damage source: ${topDmg}`;
             confidence = 'High';
@@ -3514,7 +3549,7 @@
     function renderSummary() {
       const pull = getPull();
       if (!pull) return '<div class="card empty">No pull data available.</div>';
-      const issues = [...bossSpecificIssues(), ...generalIssues()];
+      const issues = [...threatDeathIssues(), ...bossSpecificIssues(), ...generalIssues()];
       const topSources = aggregateDamageSources(pull).slice(0, 8);
 
       return `
@@ -5113,6 +5148,18 @@
         pushEvent(death.relative_time, 'death', `${death.player} (${role}) dies${impact}`, role === 'DPS' ? 'warning' : 'critical');
       });
 
+      // Threat-mistake deaths (from backend classifier) — a DPS taking aggro before it
+      // was safe. These are deaths the raid generally CANNOT heal through, so they are
+      // surfaced as triggers and can override the boss-specific root cause below.
+      (pull.deaths || []).forEach(death => {
+        if ((death.cause_category === 'attacked_first' || death.cause_category === 'ripped_threat')
+            && (death.relative_time || 0) >= windowStart) {
+          const how = death.cause_category === 'ripped_threat'
+            ? 'out-threated the tank' : 'attacked before the tank had it';
+          pushEvent(death.relative_time - 1, 'trigger', `${death.player} pulled aggro (${how}) and died`, 'critical');
+        }
+      });
+
       events.sort((a, b) => a.time - b.time);
 
       let rootCause = 'Unknown — insufficient evidence';
@@ -5213,6 +5260,29 @@
           rootCause = 'Players stood in Void Zones during P3 burn phase';
           confidence = 'Medium';
         }
+      }
+
+      // Threat mistakes are the primary wipe cause whenever they occur in meaningful
+      // numbers: the raid can usually heal through avoidable mechanic damage (e.g.
+      // Conflagration) but NOT a DPS pulling the boss/add off the tank. So threat deaths
+      // outrank mechanic deaths here even when the raw mechanic-death count is higher.
+      const td = pull.threat_deaths || {};
+      const threatTotal = td.threat_death_total || 0;
+      const mechTotal = td.mechanic_death_total || 0;
+      if (threatTotal > 0) {
+        const names = Object.keys(td.threat_players || {}).sort((a, b) =>
+          (td.threat_players[b].total || 0) - (td.threat_players[a].total || 0));
+        const af = td.attacked_first_total || 0;
+        const rip = td.ripped_threat_total || 0;
+        const parts = [];
+        if (af) parts.push(`${af} opened before the tank had aggro`);
+        if (rip) parts.push(`${rip} out-threated the tank`);
+        const mechNote = mechTotal
+          ? ` (${mechTotal} death${mechTotal > 1 ? 's' : ''} came from avoidable mechanic damage, but that is healable — these threat deaths are not)`
+          : '';
+        rootCause = `Threat mistakes — ${parts.join(', ')} (${names.join(', ')})${mechNote}. `
+          + `The raid can't heal through a DPS holding the boss/add.`;
+        confidence = threatTotal >= 2 ? 'High' : 'Medium';
       }
 
       return `

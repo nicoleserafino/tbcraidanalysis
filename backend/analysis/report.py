@@ -6,6 +6,7 @@ import asyncio
 from collections import defaultdict
 
 from backend.analysis.utils import actor_name, infer_role, spell_name
+from backend.analysis.death_cause import build_death_context, classify_deaths
 from backend.wcl.client import graphql_query
 from backend.wcl.queries import REPORT_FIGHTS, REPORT_EVENTS, REPORT_EVENTS_ENEMY_DEATHS, REPORT_TABLE, REPORT_EVENTS_WITH_RESOURCES
 
@@ -196,6 +197,7 @@ async def fetch_full_report(report_code: str) -> dict:
                 threat,
                 dmg_table,
                 heal_table,
+                threat_table,
             ) = await asyncio.gather(
                 fetch_events_paginated(report_code, [fight_id], "Deaths", start, end),
                 fetch_enemy_deaths(report_code, [fight_id], start, end),
@@ -209,6 +211,7 @@ async def fetch_full_report(report_code: str) -> dict:
                 fetch_events_paginated(report_code, [fight_id], "Threat", start, end),
                 fetch_table(report_code, [fight_id], "DamageDone", start, end),
                 fetch_table(report_code, [fight_id], "Healing", start, end),
+                fetch_table(report_code, [fight_id], "Threat", start, end),
             )
 
             # Fetch WW position data for Leotheras fights
@@ -230,6 +233,7 @@ async def fetch_full_report(report_code: str) -> dict:
                 deaths, enemy_deaths, interrupts, dispels, healing, casts,
                 damage_taken, damage_done, buffs, threat,
                 dmg_table, heal_table, ww_position_events, all_player_positions,
+                threat_table,
             )
             return fight, pull
 
@@ -296,6 +300,15 @@ async def fetch_full_report(report_code: str) -> dict:
                 if name in player_info:
                     pull["roles"][name] = player_info[name]["role"]
 
+            # Finalize threat-cause classification now that tank/healer/DPS roles are known.
+            classified = classify_deaths(pull.get("death_context", []), pull["roles"])
+            pull["threat_deaths"] = classified["summary"]
+            # Set an evidence-based cause on each death (aligned by order with death_context).
+            for death, verdict in zip(pull.get("deaths", []), classified["deaths"]):
+                death["cause"] = verdict["cause"]
+                death["cause_category"] = verdict["category"]
+            pull.pop("death_context", None)
+
     return {
         "log_info": {
             "file": report_code,
@@ -327,6 +340,7 @@ def build_pull_data(
     heal_table: dict | None = None,
     ww_position_events: list | None = None,
     all_player_positions: list | None = None,
+    threat_table: dict | None = None,
 ) -> dict:
     """Build a normalized pull data structure from raw events."""
     start = fight["startTime"]
@@ -844,6 +858,13 @@ def build_pull_data(
     active_players.update(d["player"] for d in deaths_out)
     participants = sorted(active_players)
 
+    # Role-independent per-death facts for threat-cause classification (finalized in
+    # a post-pass once raid roles are known). See backend/analysis/death_cause.py.
+    death_context = build_death_context(
+        fight, actors_by_id, players_by_id, ability_names,
+        deaths, damage_taken, damage_done_events, threat_table,
+    )
+
     return {
         "fight_id": fight["id"],
         "encounter_id": fight.get("encounterID"),
@@ -876,4 +897,5 @@ def build_pull_data(
         "biggest_heals": biggest_heals[:5],
         "biggest_crits": biggest_crits[:5],
         "players": participants,
+        "death_context": death_context,
     }
