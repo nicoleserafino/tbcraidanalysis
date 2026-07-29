@@ -20,23 +20,49 @@ HEAL_SPELLS = {
     "Lifebloom", "Regrowth", "Swiftmend", "Earth Shield", "Binding Heal", "Renew",
 }
 
+# Canonical names for spell IDs that WCL's ability database mislabels, so that
+# every rank of an ability collapses to one consistent name for cast counting
+# and buff-uptime tracking. Notably the "fresh classic" DB shows Holy Shield
+# Rank 1 (20925) as "Sacred Shield" (an ability that does not exist in TBC),
+# which otherwise splits a Paladin's Holy Shield across two names.
+# Holy Shield ranks: R1 20925, R2 20927, R3 20928, R4 27179.
+CANONICAL_SPELL_NAMES: dict[int, str] = {
+    20925: "Holy Shield",
+    20927: "Holy Shield",
+    20928: "Holy Shield",
+    27179: "Holy Shield",
+}
+
 
 def spell_name(payload: dict[str, Any], ability_names: dict[int, str]) -> str:
-    """Resolve an ability name from a v2 table row or event."""
-    if payload.get("name"):
-        return str(payload["name"])
+    """Resolve an ability name from a v2 table row or event.
 
-    ability = payload.get("ability")
-    if isinstance(ability, dict) and ability.get("name"):
-        return str(ability["name"])
-
+    Applies CANONICAL_SPELL_NAMES overrides (by spell/game ID) first so known
+    WCL naming quirks (e.g. Holy Shield Rank 1 shown as "Sacred Shield") do not
+    fragment an ability's ranks across different display names.
+    """
     game_id: int | None = None
     for key in ("abilityGameID", "gameID", "guid", "id"):
         value = payload.get(key)
         if isinstance(value, int):
             game_id = value
-            if value in ability_names:
-                return ability_names[value]
+            break
+    ability = payload.get("ability")
+    if game_id is None and isinstance(ability, dict):
+        guid = ability.get("guid")
+        if isinstance(guid, int):
+            game_id = guid
+    if game_id is not None and game_id in CANONICAL_SPELL_NAMES:
+        return CANONICAL_SPELL_NAMES[game_id]
+
+    if payload.get("name"):
+        return str(payload["name"])
+
+    if isinstance(ability, dict) and ability.get("name"):
+        return str(ability["name"])
+
+    if game_id is not None and game_id in ability_names:
+        return ability_names[game_id]
 
     return f"Spell {game_id}" if game_id else "Unknown"
 
