@@ -17,7 +17,7 @@
       --border: rgba(179, 169, 255, 0.16);
       --border-strong: rgba(232, 102, 168, 0.24);
       --text: #f2f5ff;
-      --muted: #9ea8c8;
+      --muted: #b0bad8;
       --kill: #44d17a;
       --wipe: #ff6363;
       --tank: #57a6ff;
@@ -330,6 +330,7 @@
 
     .table-wrap {
       overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
     }
 
     table {
@@ -421,6 +422,16 @@
     .action-item h4 { margin: 0 0 4px; font-size: 0.9rem; }
     .action-item p { margin: 0; font-size: 0.82rem; color: var(--muted); line-height: 1.5; }
     .action-item .who { margin-top: 6px; font-size: 0.8rem; color: #57a6ff; font-weight: 600; }
+
+    .ai-summary { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+    .ai-count { display: inline-flex; align-items: center; gap: 6px; font-size: 0.78rem; font-weight: 700; padding: 5px 12px; border-radius: 20px; text-transform: uppercase; letter-spacing: 0.02em; }
+    .ai-count .ai-dot { width: 8px; height: 8px; border-radius: 50%; }
+    .ai-count.critical { background: rgba(255,107,107,0.12); color: #ff8585; }
+    .ai-count.critical .ai-dot { background: #ff6b6b; }
+    .ai-count.warning { background: rgba(255,209,102,0.12); color: #ffd166; }
+    .ai-count.warning .ai-dot { background: #ffd166; }
+    .ai-count.info { background: rgba(87,166,255,0.12); color: #7db8ff; }
+    .ai-count.info .ai-dot { background: #57a6ff; }
 
     .interrupt-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; margin: 10px 0; }
     .interrupt-table th, .interrupt-table td { padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border); }
@@ -1048,6 +1059,9 @@
       .card { padding: 16px; }
       table { min-width: 580px; font-size: 0.82rem; }
       th, td { padding: 8px 6px; }
+      /* Pin the first column (usually player/pull label) while scrolling metrics horizontally */
+      .table-wrap td:first-child { position: sticky; left: 0; z-index: 1; background: var(--panel-strong); }
+      .table-wrap th:first-child { left: 0; z-index: 3; }
       .awards-grid { grid-template-columns: 1fr; }
       .death-tables { grid-template-columns: 1fr !important; }
     }
@@ -1284,11 +1298,13 @@
 
     const TABS = [
       { id: 'summary', label: 'Summary' },
-      { id: 'individual', label: 'Player' },
       { id: 'action-items', label: 'Action Items' },
+      { id: 'individual', label: 'Player' },
+      { id: '_separator' },
       { id: 'tank', label: 'Tanks' },
       { id: 'healer', label: 'Healers' },
       { id: 'dps', label: 'DPS' },
+      { id: '_separator' },
       { id: 'strategy', label: 'Strategy' },
       { id: 'threat', label: 'Threat' },
       { id: 'positioning', label: 'Positioning' },
@@ -3601,9 +3617,9 @@
         <section class="card">
           <h2>What Went Wrong</h2>
           <ul class="issues-list">
-            ${issues.map(issue => `
+            ${issues.slice().sort((a, b) => ({critical:0,warning:1,info:2}[a.severity] ?? 3) - ({critical:0,warning:1,info:2}[b.severity] ?? 3)).map(issue => `
               <li class="issue-item ${issue.severity || ''}" title="Evidence comes directly from combat log analysis.">
-                <span class="issue-title">${escapeHtml(issue.title)}</span>
+                <span class="issue-title"><span class="severity-badge ${issue.severity || 'info'}">${issue.severity === 'critical' ? 'CRITICAL' : issue.severity === 'warning' ? 'IMPORTANT' : 'INFO'}</span>${escapeHtml(issue.title)}</span>
                 <span>${escapeHtml(issue.body)}</span>
               </li>
             `).join('')}
@@ -3933,22 +3949,22 @@
       // Findings across all pulls
       const findings = [];
       if (totalDeaths >= pulls.length) {
-        findings.push({ severity: 'critical', text: `Died on every single pull (${totalDeaths} deaths across ${pulls.length} pulls). Survivability is the primary issue — check positioning and damage intake.` });
+        findings.push({ severity: 'critical', title: `Died on every pull (${totalDeaths} deaths)`, body: `${totalDeaths} deaths across ${pulls.length} pulls. Survivability is the primary issue — check positioning and damage intake.` });
       } else if (totalDeaths > pulls.length * 0.5) {
-        findings.push({ severity: 'warning', text: `Died on ${totalDeaths > pulls.length ? 'multiple pulls' : Math.round(totalDeaths/pulls.length*100) + '% of pulls'}. Focus on staying alive through the critical phases.` });
+        findings.push({ severity: 'warning', title: `High death rate`, body: `Died on ${totalDeaths > pulls.length ? 'multiple pulls' : Math.round(totalDeaths/pulls.length*100) + '% of pulls'}. Focus on staying alive through the critical phases.` });
       }
       if (isKael && totalConflags > 3) {
-        findings.push({ severity: 'warning', text: `Hit by Conflagration ${totalConflags} times across all pulls. Conflag only hits targets within 30 yards of Capernian — you are too close. Only the Warlock tank (Kamiguruu) should be within range. Move >30 yards away.` });
+        findings.push({ severity: 'warning', title: `Standing too close to Capernian (${totalConflags} Conflag hits)`, body: `Conflagration only hits targets within 30 yards of Capernian — you are too close. Only the Warlock tank (Kamiguruu) should be within range. Move >30 yards away.` });
       }
       if (isKael && ['Rogue', 'Shaman', 'Mage', 'Warrior'].includes(pClass) && role === 'DPS' && totalInterrupts === 0) {
-        findings.push({ severity: 'warning', text: `Zero interrupts across all ${pulls.length} pulls. As a ${pClass}, you have an interrupt ability. In Phase 4, interrupts on Kael's Fireballs and Pyroblast (after Shock Barrier) are critical.` });
+        findings.push({ severity: 'warning', title: `Zero interrupts across ${pulls.length} pulls`, body: `As a ${pClass}, you have an interrupt ability. In Phase 4, interrupts on Kael's Fireballs and Pyroblast (after Shock Barrier) are critical.` });
       }
       if (isKael && ['Priest', 'Paladin'].includes(pClass) && role === 'Healer' && totalDispels === 0) {
         // Note: Kael fight has no standard-dispellable debuffs. MC requires Mass Dispel (Priest only) or damage via Infinity Blade.
         // Don't warn about zero dispels — it's expected.
       }
       if (pullsAlive > 0 && totalDeaths > 0) {
-        findings.push({ severity: 'info', text: `Survived ${pullsAlive}/${pulls.length} pulls without dying. Focus on replicating what worked on those pulls.` });
+        findings.push({ severity: 'info', title: `Survived ${pullsAlive}/${pulls.length} pulls`, body: `You made it through ${pullsAlive} pull(s) without dying. Focus on replicating what worked on those pulls.` });
       }
 
       return `
@@ -3982,7 +3998,7 @@
         ${findings.length ? `
           <section class="card">
             <h3>Key Findings</h3>
-            ${findings.map(f => `<div class="issue-card ${f.severity}">${f.text}</div>`).join('')}
+            ${findings.slice().sort((a, b) => ({critical:0,warning:1,info:2}[a.severity] ?? 3) - ({critical:0,warning:1,info:2}[b.severity] ?? 3)).map(f => `<div class="issue-card ${f.severity}"><span class="issue-title"><span class="severity-badge ${f.severity}">${f.severity === 'critical' ? 'CRITICAL' : f.severity === 'warning' ? 'IMPORTANT' : 'INFO'}</span>${escapeHtml(f.title)}</span><p>${escapeHtml(f.body)}</p></div>`).join('')}
           </section>
         ` : ''}
       `;
@@ -5888,7 +5904,11 @@
         ? 'These are the top priorities to address before your next attempt. Addressing items #1 and #2 alone will likely get you past Phase 3.'
         : 'These are the biggest repeat failures across your pulls. Fix the critical items first, then tighten the warnings.';
 
-      actionItems.sort((a, b) => a.priority - b.priority);
+      const sevRank = { critical: 0, warning: 1, info: 2 };
+      actionItems.sort((a, b) => (sevRank[a.severity] ?? 3) - (sevRank[b.severity] ?? 3) || a.priority - b.priority);
+      const critCount = actionItems.filter(a => a.severity === 'critical').length;
+      const warnCount = actionItems.filter(a => a.severity === 'warning').length;
+      const infoCount = actionItems.filter(a => a.severity === 'info').length;
 
       let interruptTableHtml = '';
       if (isKael && interruptCapable.length > 0) {
@@ -5916,7 +5936,12 @@
       return `
         <section class="card">
           <h2>Action Items to Clear ${escapeHtml(state.boss)}</h2>
-          <p style="font-size:0.85rem;color:var(--muted);margin-bottom:14px;">${headerText}</p>
+          <p style="font-size:0.85rem;color:var(--muted);margin-bottom:10px;">${headerText}</p>
+          <div class="ai-summary">
+            ${critCount ? `<span class="ai-count critical"><span class="ai-dot"></span>${critCount} Critical</span>` : ''}
+            ${warnCount ? `<span class="ai-count warning"><span class="ai-dot"></span>${warnCount} Important</span>` : ''}
+            ${infoCount ? `<span class="ai-count info"><span class="ai-dot"></span>${infoCount} Info</span>` : ''}
+          </div>
           ${actionItems.map((item, i) => `
             <div class="action-item ${item.severity}">
               <h4><span class="severity-badge ${item.severity}">${item.severity === 'critical' ? 'CRITICAL' : item.severity === 'warning' ? 'IMPORTANT' : 'INFO'}</span> #${i + 1}: ${item.title}</h4>

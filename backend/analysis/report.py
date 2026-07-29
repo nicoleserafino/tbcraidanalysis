@@ -197,7 +197,6 @@ async def fetch_full_report(report_code: str) -> dict:
                 buffs,
                 threat,
                 dmg_table,
-                heal_table,
                 threat_table,
             ) = await asyncio.gather(
                 fetch_events_paginated(report_code, [fight_id], "Deaths", start, end),
@@ -211,7 +210,6 @@ async def fetch_full_report(report_code: str) -> dict:
                 fetch_events_paginated(report_code, [fight_id], "Buffs", start, end),
                 fetch_events_paginated(report_code, [fight_id], "Threat", start, end),
                 fetch_table(report_code, [fight_id], "DamageDone", start, end),
-                fetch_table(report_code, [fight_id], "Healing", start, end),
                 fetch_table(report_code, [fight_id], "Threat", start, end),
             )
 
@@ -233,7 +231,7 @@ async def fetch_full_report(report_code: str) -> dict:
                 fight, actors_by_id, players_by_id, ability_names,
                 deaths, enemy_deaths, interrupts, dispels, healing, casts,
                 damage_taken, damage_done, buffs, threat,
-                dmg_table, heal_table, ww_position_events, all_player_positions,
+                dmg_table, ww_position_events, all_player_positions,
                 threat_table,
             )
             return fight, pull
@@ -338,7 +336,6 @@ def build_pull_data(
     buffs: list,
     threat: list,
     dmg_table: dict | None = None,
-    heal_table: dict | None = None,
     ww_position_events: list | None = None,
     all_player_positions: list | None = None,
     threat_table: dict | None = None,
