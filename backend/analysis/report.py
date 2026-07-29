@@ -195,7 +195,6 @@ async def fetch_full_report(report_code: str) -> dict:
                 damage_taken,
                 damage_done,
                 buffs,
-                threat,
                 dmg_table,
                 threat_table,
             ) = await asyncio.gather(
@@ -208,7 +207,6 @@ async def fetch_full_report(report_code: str) -> dict:
                 fetch_events_paginated(report_code, [fight_id], "DamageTaken", start, end),
                 fetch_events_paginated(report_code, [fight_id], "DamageDone", start, end),
                 fetch_events_paginated(report_code, [fight_id], "Buffs", start, end),
-                fetch_events_paginated(report_code, [fight_id], "Threat", start, end),
                 fetch_table(report_code, [fight_id], "DamageDone", start, end),
                 fetch_table(report_code, [fight_id], "Threat", start, end),
             )
@@ -230,7 +228,7 @@ async def fetch_full_report(report_code: str) -> dict:
             pull = build_pull_data(
                 fight, actors_by_id, players_by_id, ability_names,
                 deaths, enemy_deaths, interrupts, dispels, healing, casts,
-                damage_taken, damage_done, buffs, threat,
+                damage_taken, damage_done, buffs,
                 dmg_table, ww_position_events, all_player_positions,
                 threat_table,
             )
@@ -334,7 +332,6 @@ def build_pull_data(
     damage_taken: list,
     damage_done_events: list,
     buffs: list,
-    threat: list,
     dmg_table: dict | None = None,
     ww_position_events: list | None = None,
     all_player_positions: list | None = None,
@@ -878,17 +875,6 @@ def build_pull_data(
                 "splash_damage": sum(v["amount"] for v in splash),
             })
 
-    # Process threat events (new in v2!)
-    threat_events = []
-    for ev in threat:
-        source_id = ev.get("sourceID")
-        if source_id in players_by_id:
-            threat_events.append({
-                "player": players_by_id[source_id]["name"],
-                "amount": ev.get("amount", 0),
-                "time": rel_sec(ev["timestamp"]),
-            })
-
     # Sort and trim
     clutch_heals.sort(key=lambda x: x["hp_pct"])
     biggest_heals.sort(key=lambda x: -x["amount"])
@@ -941,7 +927,6 @@ def build_pull_data(
         "player_damage_taken_total": player_damage_taken_total,
         "enemy_casts_completed": enemy_casts_completed,
         "buff_events": buff_events,
-        "threat_events": threat_events,
         "conflagrations": conflagrations,
         "wrath_explosions": wrath_explosions,
         "whirlwind_analysis": whirlwind_analysis,
