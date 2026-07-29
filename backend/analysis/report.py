@@ -6,6 +6,8 @@ import asyncio
 from collections import defaultdict
 
 from backend.analysis.utils import actor_name, infer_role, spell_name
+from backend.analysis.death_cause import build_death_context, classify_deaths
+from backend.analysis.death_timeline import build_death_timelines
 from backend.wcl.client import graphql_query
 from backend.wcl.queries import REPORT_FIGHTS, REPORT_EVENTS, REPORT_EVENTS_ENEMY_DEATHS, REPORT_TABLE, REPORT_EVENTS_WITH_RESOURCES
 
@@ -26,11 +28,13 @@ async def fetch_events_paginated(
     filter_expression: str | None = None,
     source_id: int | None = None,
     target_id: int | None = None,
+    include_resources: bool = False,
 ) -> list[dict]:
     """Fetch all pages of events for a fight."""
     all_events = []
     current_start = start_time
     max_pages = 50  # safety guard against infinite pagination
+    query_template = REPORT_EVENTS_WITH_RESOURCES if include_resources else REPORT_EVENTS
 
     for _ in range(max_pages):
         if current_start is None:
@@ -49,7 +53,7 @@ async def fetch_events_paginated(
         if target_id is not None:
             variables["targetID"] = target_id
 
-        data = await graphql_query(REPORT_EVENTS, variables)
+        data = await graphql_query(query_template, variables)
         events_data = data["reportData"]["report"]["events"]
         all_events.extend(events_data.get("data", []))
         next_start = events_data.get("nextPageTimestamp")
@@ -194,12 +198,13 @@ async def fetch_full_report(report_code: str) -> dict:
                 threat,
                 dmg_table,
                 heal_table,
+                threat_table,
             ) = await asyncio.gather(
                 fetch_events_paginated(report_code, [fight_id], "Deaths", start, end),
                 fetch_enemy_deaths(report_code, [fight_id], start, end),
                 fetch_events_paginated(report_code, [fight_id], "Interrupts", start, end),
                 fetch_events_paginated(report_code, [fight_id], "Dispels", start, end),
-                fetch_events_paginated(report_code, [fight_id], "Healing", start, end),
+                fetch_events_paginated(report_code, [fight_id], "Healing", start, end, include_resources=True),
                 fetch_events_paginated(report_code, [fight_id], "Casts", start, end),
                 fetch_events_paginated(report_code, [fight_id], "DamageTaken", start, end),
                 fetch_events_paginated(report_code, [fight_id], "DamageDone", start, end),
@@ -207,6 +212,7 @@ async def fetch_full_report(report_code: str) -> dict:
                 fetch_events_paginated(report_code, [fight_id], "Threat", start, end),
                 fetch_table(report_code, [fight_id], "DamageDone", start, end),
                 fetch_table(report_code, [fight_id], "Healing", start, end),
+                fetch_table(report_code, [fight_id], "Threat", start, end),
             )
 
             # Fetch WW position data for Leotheras fights
@@ -228,6 +234,7 @@ async def fetch_full_report(report_code: str) -> dict:
                 deaths, enemy_deaths, interrupts, dispels, healing, casts,
                 damage_taken, damage_done, buffs, threat,
                 dmg_table, heal_table, ww_position_events, all_player_positions,
+                threat_table,
             )
             return fight, pull
 
@@ -294,6 +301,15 @@ async def fetch_full_report(report_code: str) -> dict:
                 if name in player_info:
                     pull["roles"][name] = player_info[name]["role"]
 
+            # Finalize threat-cause classification now that tank/healer/DPS roles are known.
+            classified = classify_deaths(pull.get("death_context", []), pull["roles"])
+            pull["threat_deaths"] = classified["summary"]
+            # Set an evidence-based cause on each death (aligned by order with death_context).
+            for death, verdict in zip(pull.get("deaths", []), classified["deaths"]):
+                death["cause"] = verdict["cause"]
+                death["cause_category"] = verdict["category"]
+            pull.pop("death_context", None)
+
     return {
         "log_info": {
             "file": report_code,
@@ -325,6 +341,7 @@ def build_pull_data(
     heal_table: dict | None = None,
     ww_position_events: list | None = None,
     all_player_positions: list | None = None,
+    threat_table: dict | None = None,
 ) -> dict:
     """Build a normalized pull data structure from raw events."""
     start = fight["startTime"]
@@ -448,28 +465,28 @@ def build_pull_data(
         if ev.get("tick"):
             heal_details[player][spell]["is_hot"] = True
 
-        # Clutch heal tracking
+        # Clutch heal tracking — hitPoints is HP% after heal (0-100 from includeResources)
         target_id = ev.get("targetID")
         target_name = players_by_id.get(target_id, {}).get("name") if target_id else None
-        hit_points = ev.get("hitPoints")
+        hit_points_pct = ev.get("hitPoints")  # HP% after heal
 
-        if amount > 0 and hit_points and target_name and spell not in NON_HEAL_ABILITIES:
-            hp_before = hit_points - amount
-            if hp_before >= 0 and hit_points > 0:
-                hp_pct = round(hp_before / hit_points * 100, 1)
-                if hp_pct < 20:
-                    clutch_heals.append({
-                        "healer": player, "target": target_name, "spell": spell,
-                        "amount": amount, "hp_pct": hp_pct,
-                        "time": rel_sec(ev["timestamp"]),
-                        "self_heal": source_id == target_id,
-                    })
+        if amount > 0 and hit_points_pct is not None and target_name and spell not in NON_HEAL_ABILITIES:
+            # Target HP% after receiving this heal — if still under 25%, they were critically low
+            if hit_points_pct < 25:
+                clutch_heals.append({
+                    "healer": player, "target": target_name, "spell": spell,
+                    "amount": amount, "hp_pct": round(hit_points_pct, 1),
+                    "time": rel_sec(ev["timestamp"]),
+                    "self_heal": source_id == target_id,
+                    "is_hot": bool(ev.get("tick")),
+                })
 
         if amount > 0:
             biggest_heals.append({
-                "player": player, "target": target_name or "Unknown",
-                "spell": spell, "amount": amount,
-                "crit": ev.get("hitType") == 2, "time": rel_sec(ev["timestamp"]),
+            "player": player, "target": target_name or "Unknown",
+            "spell": spell, "amount": amount,
+            "crit": ev.get("hitType") == 2, "time": rel_sec(ev["timestamp"]),
+            "is_hot": bool(ev.get("tick")),
             })
         if ev.get("hitType") == 2 and amount > 0:
             biggest_crits.append({
@@ -566,6 +583,7 @@ def build_pull_data(
     player_damage_taken_amounts = {}  # per-ability damage amounts (not just counts)
     damage_sources = {}
     conflagrations = []
+    wrath_damage = []  # Solarian: timestamped Wrath of the Astromancer hits
 
     # Conflagration spell IDs (Kael'thas - Capernian)
     CONFLAG_IDS = {36965, 37018, 37019}
@@ -605,6 +623,15 @@ def build_pull_data(
             conflagrations.append({
                 "target": player,
                 "relative_time": rel_sec(ev["timestamp"]),
+                "amount": amount,
+            })
+
+        # Track Wrath of the Astromancer hits (Solarian) with timestamps so we can
+        # reconstruct each detonation and see whether the bombed player ran out.
+        if "wrath of the astromancer" in ability.lower():
+            wrath_damage.append({
+                "time": rel_sec(ev["timestamp"]),
+                "player": player,
                 "amount": amount,
             })
 
@@ -799,6 +826,7 @@ def build_pull_data(
 
     # Process buff events
     buff_events = {}
+    wrath_targets = []  # Solarian: (time, player) each time the bomb is applied
     for ev in buffs:
         if ev.get("type") not in ("applybuff", "removebuff", "refreshbuff", "applydebuff", "removedebuff"):
             continue
@@ -806,8 +834,9 @@ def build_pull_data(
         if target_id not in players_by_id:
             continue
         player = players_by_id[target_id]["name"]
+        spell = spell_name(ev, ability_names)
         entry = {
-            "spell": spell_name(ev, ability_names),
+            "spell": spell,
             "type": ev["type"],
             "time": rel_sec(ev["timestamp"]),
         }
@@ -816,6 +845,41 @@ def build_pull_data(
         if source_id and source_id != target_id and source_id in players_by_id:
             entry["source"] = players_by_id[source_id]["name"]
         buff_events.setdefault(player, []).append(entry)
+        if ev["type"] in ("applybuff", "applydebuff") and "wrath of the astromancer" in spell.lower():
+            wrath_targets.append((rel_sec(ev["timestamp"]), player))
+
+    # Reconstruct Wrath of the Astromancer detonations (Solarian). Each bomb is a
+    # debuff on one player that explodes and damages EVERYONE nearby. If the bombed
+    # player runs 20+ yards out, only they take the hit; if they stay in the raid,
+    # many players take splash damage. We group the timestamped Wrath hits into
+    # detonations and attribute each to the player who was carrying the bomb.
+    wrath_explosions = []
+    if wrath_damage:
+        wrath_damage.sort(key=lambda x: x["time"])
+        clusters = []
+        for hit in wrath_damage:
+            if clusters and hit["time"] - clusters[-1]["time"] <= 1.5:
+                clusters[-1]["victims"].append(hit)
+            else:
+                clusters.append({"time": hit["time"], "victims": [hit]})
+        for c in clusters:
+            # Attribute the bomb to the nearest debuff application (<=2.5s).
+            target = None
+            best = 2.5
+            for t, p in wrath_targets:
+                if abs(t - c["time"]) <= best:
+                    best = abs(t - c["time"])
+                    target = p
+            splash = [v for v in c["victims"]
+                      if v["amount"] > 0 and v["player"] != target]
+            wrath_explosions.append({
+                "time": round(c["time"], 1),
+                "target": target,
+                "moved_out": len(splash) == 0,
+                "splash_count": len(splash),
+                "splash_players": [v["player"] for v in splash],
+                "splash_damage": sum(v["amount"] for v in splash),
+            })
 
     # Process threat events (new in v2!)
     threat_events = []
@@ -841,6 +905,19 @@ def build_pull_data(
     active_players.update(player_damage_taken_total.keys())
     active_players.update(d["player"] for d in deaths_out)
     participants = sorted(active_players)
+
+    # Role-independent per-death facts for threat-cause classification (finalized in
+    # a post-pass once raid roles are known). See backend/analysis/death_cause.py.
+    death_context = build_death_context(
+        fight, actors_by_id, players_by_id, ability_names,
+        deaths, damage_taken, damage_done_events, threat_table,
+    )
+
+    # Forensic per-death timeline: damage taken + heals received in the final seconds.
+    death_timelines = build_death_timelines(
+        fight, actors_by_id, players_by_id, ability_names,
+        deaths, damage_taken, healing,
+    )
 
     return {
         "fight_id": fight["id"],
@@ -869,9 +946,12 @@ def build_pull_data(
         "buff_events": buff_events,
         "threat_events": threat_events,
         "conflagrations": conflagrations,
+        "wrath_explosions": wrath_explosions,
         "whirlwind_analysis": whirlwind_analysis,
         "clutch_heals": clutch_heals[:10],
         "biggest_heals": biggest_heals[:5],
         "biggest_crits": biggest_crits[:5],
         "players": participants,
+        "death_context": death_context,
+        "death_timelines": death_timelines,
     }

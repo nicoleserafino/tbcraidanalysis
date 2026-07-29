@@ -1049,6 +1049,7 @@
       table { min-width: 580px; font-size: 0.82rem; }
       th, td { padding: 8px 6px; }
       .awards-grid { grid-template-columns: 1fr; }
+      .death-tables { grid-template-columns: 1fr !important; }
     }
 
     @media (max-width: 480px) {
@@ -1291,6 +1292,7 @@
       { id: 'strategy', label: 'Strategy' },
       { id: 'threat', label: 'Threat' },
       { id: 'positioning', label: 'Positioning' },
+      { id: 'deaths', label: 'Deaths' },
       { id: '_separator' },
       { id: 'awards', label: 'Awards' },
     ];
@@ -2167,6 +2169,34 @@
       return issues;
     }
 
+    // Threat-mistake deaths from the backend classifier. Surfaced at the TOP of "What
+    // Went Wrong" because a DPS pulling aggro before it is safe is a death the raid
+    // cannot heal through — unlike avoidable mechanic damage (e.g. Conflagration).
+    function threatDeathIssues() {
+      const pull = getPull();
+      if (!pull) return [];
+      const td = pull.threat_deaths || {};
+      const total = td.threat_death_total || 0;
+      if (!total) return [];
+      const af = td.attacked_first_total || 0;
+      const rip = td.ripped_threat_total || 0;
+      const players = td.threat_players || {};
+      const names = Object.keys(players).sort((a, b) => (players[b].total || 0) - (players[a].total || 0));
+      const breakdown = [];
+      if (af) breakdown.push(`${af} attacked before the tank had aggro`);
+      if (rip) breakdown.push(`${rip} out-threated the tank (ripped aggro)`);
+      const offenders = names.map(n => `${n} (${players[n].total})`).join(', ');
+      const mech = td.mechanic_death_total || 0;
+      const compare = mech
+        ? ` For comparison, ${mech} death${mech > 1 ? 's' : ''} came from avoidable mechanic damage — which is far more healable than a DPS taking aggro.`
+        : '';
+      return [{
+        title: `Threat deaths — DPS pulled aggro before it was safe (${total})`,
+        body: `${breakdown.join('; ')}. Offenders: ${offenders}.${compare} This is the primary wipe driver: the raid can't heal through a DPS holding the boss/add.`,
+        severity: 'critical'
+      }];
+    }
+
     function bossSpecificIssueSummary(player) {
       const pull = getPull();
       if (!pull) return '';
@@ -2308,11 +2338,18 @@
           let confidence = 'Medium';
 
           // Determine likely cause based on evidence
-          if (role === 'DPS' && death.relative_time < 30) {
+          const backendCat = death.cause_category;
+          if (backendCat === 'attacked_first' || backendCat === 'ripped_threat') {
+            likelyCause = backendCat === 'ripped_threat'
+              ? 'Threat — out-threated the tank and ripped aggro'
+              : 'Threat — attacked before the tank had aggro';
+            evidence = death.cause || 'Backend threat classifier: DPS took aggro before it was safe';
+            confidence = 'High';
+          } else if (role === 'DPS' && death.relative_time < 30 && !backendCat) {
             likelyCause = 'Threat — pulled aggro before tank established';
             evidence = 'Died within first 30 seconds as DPS';
             confidence = 'High';
-          } else if (role === 'DPS' && /Melee/i.test(topDmg) && death.relative_time < 60) {
+          } else if (role === 'DPS' && /Melee/i.test(topDmg) && death.relative_time < 60 && !backendCat) {
             likelyCause = 'Threat — melee damage from boss/add on a non-tank';
             evidence = `Primary damage source: ${topDmg}`;
             confidence = 'High';
@@ -2530,23 +2567,34 @@
         // Shield Block uptime (Warrior) — skip for unblockable bosses (elementals like Hydross, Void Reaver)
         const UNBLOCKABLE_BOSSES = new Set([BOSS_KEYS.HYDROSS, BOSS_KEYS.VOID_REAVER]);
         if (playerClass === 'Warrior' && !UNBLOCKABLE_BOSSES.has(bossKey)) {
-          const sbCasts = spellCasts['Shield Block'] || 0;
-          const sbBuffs = buffEvts.filter(b => b.spell === 'Shield Block');
+          const sbCasts = Object.entries(spellCasts).reduce((n, [k, v]) => /^Shield Block/i.test(k) ? n + v : n, 0);
           const activeTime = deaths.length ? deaths[0].relative_time : pull.duration_sec;
-          // Shield Block lasts 5s or 2 charges, 6s CD. Ideal uptime = cast every 6s
-          const idealSBCasts = Math.floor(activeTime / 6);
-          const sbUptime = idealSBCasts > 0 ? (sbCasts / idealSBCasts * 100) : 100;
-          if (sbCasts < idealSBCasts * 0.4 && activeTime > 30) {
+          // Measure ACTUAL Shield Block buff uptime from apply/refresh/remove
+          // events (the buff drops when its 2 charges are consumed and refreshes
+          // on recast) instead of assuming a fixed duration per cast. The regex
+          // captures every rank of Shield Block (WCL logs them under one name,
+          // but this is defensive against any rank-suffixed variant).
+          const sbUp = computeBuffUptime(buffEvts, /^Shield Block/i, activeTime);
+          const sbPct = Math.round(sbUp.uptimePct);
+          if (activeTime > 30 && sbUp.applications > 0) {
+            if (sbPct < 50) {
+              findings.push({
+                title: `Shield Block uptime critically low: ${sbPct}% up (${sbCasts} casts in ${activeTime.toFixed(0)}s)`,
+                body: `Shield Block prevents crushing blows (150% damage hits). It was only up ${sbPct}% of the fight, leaving long windows where a crushing blow can spike you before healers react. Press it on cooldown (every 6s) to keep uptime as close to 100% as possible. This is likely contributing to your deaths.`,
+                severity: 'critical'
+              });
+            } else if (sbPct < 80) {
+              findings.push({
+                title: `Shield Block uptime has gaps: ${sbPct}% up (${sbCasts} casts)`,
+                body: `You're using Shield Block but it was only up ${sbPct}% of the fight. Every gap is a window for a crushing blow. Consider a WeakAura to track the buff and recast the moment it drops.`,
+                severity: 'warning'
+              });
+            }
+          } else if (activeTime > 30 && sbCasts === 0) {
             findings.push({
-              title: `Shield Block uptime critically low: ${sbCasts} casts in ${activeTime.toFixed(0)}s (expected ~${idealSBCasts})`,
-              body: `Shield Block prevents crushing blows (150% damage hits). Without it up, you take massive spike damage that healers cannot react to. It should be pressed every 6 seconds without fail. This is likely contributing to your deaths.`,
+              title: `No Shield Block used in ${activeTime.toFixed(0)}s`,
+              body: `Shield Block prevents crushing blows (150% damage hits). It was never up this pull, leaving you exposed to unavoidable spike damage. Press it on cooldown (every 6s).`,
               severity: 'critical'
-            });
-          } else if (sbCasts < idealSBCasts * 0.7 && activeTime > 30) {
-            findings.push({
-              title: `Shield Block could be higher: ${sbCasts}/${idealSBCasts} ideal casts`,
-              body: `You're using Shield Block but there are gaps. Every gap is a window for crushing blows. Consider a WeakAura to track the cooldown.`,
-              severity: 'warning'
             });
           }
 
@@ -2578,14 +2626,33 @@
 
         // Holy Shield uptime (Paladin) — skip for unblockable bosses
         if (playerClass === 'Paladin' && !UNBLOCKABLE_BOSSES.has(bossKey)) {
-          const hsCasts = spellCasts['Holy Shield'] || 0;
+          const hsCasts = Object.entries(spellCasts).reduce((n, [k, v]) => /^Holy Shield/i.test(k) ? n + v : n, 0);
           const activeTime = deaths.length ? deaths[0].relative_time : pull.duration_sec;
-          // Holy Shield lasts 10s, 8 charges, 10s CD
-          const idealHSCasts = Math.floor(activeTime / 10);
-          if (hsCasts < idealHSCasts * 0.5 && activeTime > 30) {
+          // Measure ACTUAL Holy Shield buff uptime from apply/refresh/remove
+          // events (8 charges / 10s, refreshes on recast) instead of assuming a
+          // fixed 10s per cast. The regex captures every rank of Holy Shield —
+          // ranks share one name in WCL and you can't have two ranks up at once,
+          // so this counts all ranks as the single buff they are.
+          const hsUp = computeBuffUptime(buffEvts, /^Holy Shield/i, activeTime);
+          const hsPct = Math.round(hsUp.uptimePct);
+          if (activeTime > 30 && hsUp.applications > 0) {
+            if (hsPct < 50) {
+              findings.push({
+                title: `Holy Shield uptime critically low: ${hsPct}% up (${hsCasts} casts in ${activeTime.toFixed(0)}s)`,
+                body: `Holy Shield prevents crushing blows for Paladins. It was only up ${hsPct}% of the fight, so you took 150% damage hits that spike through healer throughput. Press it every 10 seconds — this is your #1 button.`,
+                severity: 'critical'
+              });
+            } else if (hsPct < 80) {
+              findings.push({
+                title: `Holy Shield uptime has gaps: ${hsPct}% up (${hsCasts} casts)`,
+                body: `Holy Shield was only up ${hsPct}% of the fight. Every gap exposes you to crushing blows. Recast it the moment it drops or its charges are consumed.`,
+                severity: 'warning'
+              });
+            }
+          } else if (activeTime > 30 && hsCasts === 0) {
             findings.push({
-              title: `Holy Shield uptime critically low: ${hsCasts} casts in ${activeTime.toFixed(0)}s (expected ~${idealHSCasts})`,
-              body: `Holy Shield prevents crushing blows for Paladins. Without it, you take 150% damage hits that spike through healer throughput. Press it every 10 seconds. This is your #1 button.`,
+              title: `No Holy Shield used in ${activeTime.toFixed(0)}s`,
+              body: `Holy Shield prevents crushing blows for Paladins. It was never up this pull. Press it every 10 seconds — this is your #1 button.`,
               severity: 'critical'
             });
           }
@@ -2741,23 +2808,24 @@
               severity: 'warning'
             });
           }
-          // Slice and Dice uptime (all specs)
+          // Slice and Dice uptime (all specs) — measured from actual buff windows,
+          // including any pre-pull application (combo points built on adds before
+          // the pull, e.g. Hydross), which the raw in-fight cast count misses.
           const snd = spellCasts['Slice and Dice'] || 0;
-          if (snd === 0 && activeTime > 20) {
+          const sndUp = computeBuffUptime(buffEvts, 'Slice and Dice', activeTime);
+          const hasSnd = sndUp.windows.length > 0 || snd > 0;
+          if (!hasSnd && activeTime > 20) {
             findings.push({
               title: 'Zero Slice and Dice casts',
               body: 'Slice and Dice increases attack speed by 30% and should be maintained at all times. Even at 1 combo point to get it rolling early. Without SnD, your DPS drops by ~30%.',
               severity: 'critical'
             });
-          } else if (snd > 0) {
-            const roughUptime = (snd * 15 / activeTime) * 100;
-            if (roughUptime < 60 && activeTime > 40) {
-              findings.push({
-                title: `Slice and Dice uptime low: ~${roughUptime.toFixed(0)}% (${snd} refreshes in ${activeTime.toFixed(0)}s)`,
-                body: 'SnD should have near 100% uptime. Refresh at 5 combo points for maximum duration. If it falls off, your auto-attack damage drops significantly.',
-                severity: 'warning'
-              });
-            }
+          } else if (hasSnd && activeTime > 40 && sndUp.uptimePct < 80) {
+            findings.push({
+              title: `Slice and Dice uptime low: ${sndUp.uptimePct.toFixed(0)}% (${sndUp.applications} cast${sndUp.applications !== 1 ? 's' : ''}${sndUp.preApplied ? ', incl. pre-pull' : ''} over ${activeTime.toFixed(0)}s)`,
+              body: 'SnD should have near 100% uptime. Refresh at 5 combo points for maximum duration. If it falls off, your auto-attack damage drops significantly.',
+              severity: 'warning'
+            });
           }
           // Feint usage for threat
           const feint = spellCasts['Feint'] || 0;
@@ -2926,6 +2994,15 @@
               severity: 'warning'
             });
           }
+
+          // Soulshatter usage for threat management
+          if (soulshatter.length === 0 && activeTime > 120) {
+            findings.push({
+              title: 'No Soulshatter used in a 2+ minute fight',
+              body: 'Soulshatter (5 min CD) reduces threat by 50%. Warlocks generate massive threat — use it proactively before you catch the tank, especially after burst openers.',
+              severity: 'info'
+            });
+          }
         }
 
         if (playerClass === 'Warrior' && role === 'DPS') {
@@ -3017,8 +3094,84 @@
           }
         }
 
+        // Ret Paladin DPS advice
+        if (playerClass === 'Paladin' && role === 'DPS') {
+          const crusaderStrike = spellCasts['Crusader Strike'] || 0;
+          const judgement = (spellCasts['Judgement of Blood'] || 0) + (spellCasts['Judgement of Command'] || 0) + (spellCasts['Judgement of Righteousness'] || 0) + (spellCasts['Judgement of the Crusader'] || 0);
+          const avengingWrath = buffEvts.filter(b => b.spell === 'Avenging Wrath');
+
+          if (crusaderStrike === 0 && activeTime > 20) {
+            findings.push({
+              title: 'Zero Crusader Strike casts',
+              body: 'Crusader Strike (6s CD) is your core DPS ability as Ret. It should be used on every cooldown. Without it, you lose a huge portion of your damage.',
+              severity: 'critical'
+            });
+          }
+          if (judgement === 0 && activeTime > 30) {
+            findings.push({
+              title: 'Zero Judgement casts',
+              body: 'Judgement should be used on cooldown (10s CD). It deals instant damage and refreshes your seal. Keep your seal active and judge consistently.',
+              severity: 'warning'
+            });
+          }
+          if (activeTime > 120 && avengingWrath.length === 0) {
+            findings.push({
+              title: 'No Avenging Wrath used',
+              body: 'Avenging Wrath (3 min CD) increases all damage and healing by 30% for 20s. Use on cooldown, ideally during Bloodlust/Heroism for stacking effects.',
+              severity: 'warning'
+            });
+          }
+        }
+
+        // Balance Druid DPS advice
+        if (playerClass === 'Druid' && role === 'DPS') {
+          const wrath = spellCasts['Wrath'] || 0;
+          const starfire = spellCasts['Starfire'] || 0;
+          const moonfire = spellCasts['Moonfire'] || 0;
+          const insectSwarm = spellCasts['Insect Swarm'] || 0;
+          const isBalance = starfire > 0 || wrath > 5 || moonfire > 0;
+          const isCat = (spellCasts['Shred'] || 0) > 0 || (spellCasts['Mangle (Cat)'] || 0) > 0 || (spellCasts['Rip'] || 0) > 0;
+
+          if (isBalance && !isCat) {
+            if (starfire === 0 && wrath === 0 && activeTime > 20) {
+              findings.push({
+                title: 'Zero Starfire/Wrath casts',
+                body: 'As Balance, Starfire is your primary nuke (use during Lunar eclipse procs). Wrath is used for movement and Nature\'s Grace procs. You should be casting constantly.',
+                severity: 'critical'
+              });
+            }
+            if (insectSwarm === 0 && activeTime > 30) {
+              findings.push({
+                title: 'Zero Insect Swarm casts',
+                body: 'Insect Swarm should be maintained on the boss. It does consistent damage and reduces hit chance by 2%, benefiting the tank.',
+                severity: 'info'
+              });
+            }
+          }
+          if (isCat) {
+            const shred = spellCasts['Shred'] || 0;
+            const rip = spellCasts['Rip'] || 0;
+            const savageRoar = spellCasts['Savage Roar'] || 0;
+            const mangleCat = spellCasts['Mangle (Cat)'] || 0;
+            if (mangleCat === 0 && activeTime > 20) {
+              findings.push({
+                title: 'Zero Mangle (Cat) casts',
+                body: 'Mangle increases bleed damage by 30% and should be maintained on the target. Apply before Rip for maximum bleed damage.',
+                severity: 'warning'
+              });
+            }
+            if (rip === 0 && activeTime > 30) {
+              findings.push({
+                title: 'Zero Rip casts',
+                body: 'Rip is your strongest finisher for sustained fights. It should be maintained at 5 combo points. Only use Ferocious Bite if the boss will die before Rip runs out.',
+                severity: 'warning'
+              });
+            }
+          }
+        }
+
         // Generic cooldown check for all DPS
-        if (activeTime > 180 && buffEvts.length === 0 && !['Warrior', 'Shaman', 'Mage'].includes(playerClass)) {
+        if (activeTime > 180 && buffEvts.length === 0 && !['Warrior', 'Shaman', 'Mage', 'Hunter', 'Rogue', 'Paladin', 'Druid'].includes(playerClass)) {
           findings.push({
             title: 'No cooldowns detected in a 3+ minute fight',
             body: 'Every DPS class has offensive or defensive cooldowns that should be used during a fight of this length. Not using them means leaving damage (or survivability) on the table. Use them during Bloodlust/Heroism windows for maximum impact.',
@@ -3429,7 +3582,7 @@
     function renderSummary() {
       const pull = getPull();
       if (!pull) return '<div class="card empty">No pull data available.</div>';
-      const issues = [...bossSpecificIssues(), ...generalIssues()];
+      const issues = [...threatDeathIssues(), ...bossSpecificIssues(), ...generalIssues()];
       const topSources = aggregateDamageSources(pull).slice(0, 8);
 
       return `
@@ -4376,6 +4529,7 @@
 
       // Build CD timeline from buff events
       const buffEvts = pull.buff_events?.[player] || [];
+      const castTimesMap = pull.spell_cast_times?.[player] || {};
       const cdTimeline = [];
       const usedCDs = new Set();
 
@@ -4421,29 +4575,21 @@
           continue;
         }
 
-        // Find activation windows from buff events
-        const windows = [];
-        let activeStart = null;
-        for (const evt of buffEvts) {
-          if (evt.spell !== cdName) continue;
-          if (evt.type === 'applybuff' || evt.type === 'applydebuff') {
-            activeStart = evt.time;
-          } else if ((evt.type === 'removebuff' || evt.type === 'removedebuff') && activeStart !== null) {
-            windows.push({ start: activeStart, end: evt.time });
-            activeStart = null;
+        // Activation windows from ACTUAL buff events (handles refreshes and
+        // buffs applied pre-pull), rather than assuming a fixed duration per cast.
+        // Talents/glyphs can change durations, so we trust the logged aura.
+        const up = computeBuffUptime(buffEvts, cdName, duration);
+        let windows = up.windows;
+        // If the aura was never logged on this player (e.g. Mana Tide Totem —
+        // the mana return is logged on the healers it buffs, not the caster),
+        // anchor the bar to the ACTUAL cast timestamp(s) and draw the known
+        // duration. Never distribute evenly from 0, which falsely shows the CD
+        // active at the pull start.
+        if (windows.length === 0 && cdInfo.dur > 0 && castCount > 0) {
+          const castTimes = castTimesMap[cdName] || [];
+          for (const t of castTimes) {
+            windows.push({ start: t, end: Math.min(t + cdInfo.dur, duration) });
           }
-        }
-        // If no buff events found, estimate from cast timeline
-        if (windows.length === 0 && cdInfo.dur > 0) {
-          const interval = duration / Math.max(castCount, 1);
-          for (let i = 0; i < castCount; i++) {
-            const start = i * interval;
-            windows.push({ start, end: Math.min(start + cdInfo.dur, duration) });
-          }
-        }
-        // Close any unclosed window
-        if (activeStart !== null) {
-          windows.push({ start: activeStart, end: Math.min(activeStart + cdInfo.dur, duration) });
         }
 
         if (windows.length > 0 || castCount > 0) {
@@ -5028,6 +5174,18 @@
         pushEvent(death.relative_time, 'death', `${death.player} (${role}) dies${impact}`, role === 'DPS' ? 'warning' : 'critical');
       });
 
+      // Threat-mistake deaths (from backend classifier) — a DPS taking aggro before it
+      // was safe. These are deaths the raid generally CANNOT heal through, so they are
+      // surfaced as triggers and can override the boss-specific root cause below.
+      (pull.deaths || []).forEach(death => {
+        if ((death.cause_category === 'attacked_first' || death.cause_category === 'ripped_threat')
+            && (death.relative_time || 0) >= windowStart) {
+          const how = death.cause_category === 'ripped_threat'
+            ? 'out-threated the tank' : 'attacked before the tank had it';
+          pushEvent(death.relative_time - 1, 'trigger', `${death.player} pulled aggro (${how}) and died`, 'critical');
+        }
+      });
+
       events.sort((a, b) => a.time - b.time);
 
       let rootCause = 'Unknown — insufficient evidence';
@@ -5128,6 +5286,29 @@
           rootCause = 'Players stood in Void Zones during P3 burn phase';
           confidence = 'Medium';
         }
+      }
+
+      // Threat mistakes are the primary wipe cause whenever they occur in meaningful
+      // numbers: the raid can usually heal through avoidable mechanic damage (e.g.
+      // Conflagration) but NOT a DPS pulling the boss/add off the tank. So threat deaths
+      // outrank mechanic deaths here even when the raw mechanic-death count is higher.
+      const td = pull.threat_deaths || {};
+      const threatTotal = td.threat_death_total || 0;
+      const mechTotal = td.mechanic_death_total || 0;
+      if (threatTotal > 0) {
+        const names = Object.keys(td.threat_players || {}).sort((a, b) =>
+          (td.threat_players[b].total || 0) - (td.threat_players[a].total || 0));
+        const af = td.attacked_first_total || 0;
+        const rip = td.ripped_threat_total || 0;
+        const parts = [];
+        if (af) parts.push(`${af} opened before the tank had aggro`);
+        if (rip) parts.push(`${rip} out-threated the tank`);
+        const mechNote = mechTotal
+          ? ` (${mechTotal} death${mechTotal > 1 ? 's' : ''} came from avoidable mechanic damage, but that is healable — these threat deaths are not)`
+          : '';
+        rootCause = `Threat mistakes — ${parts.join(', ')} (${names.join(', ')})${mechNote}. `
+          + `The raid can't heal through a DPS holding the boss/add.`;
+        confidence = threatTotal >= 2 ? 'High' : 'Medium';
       }
 
       return `
@@ -5461,6 +5642,44 @@
         });
       }
 
+      // Boss-generic: threat-mistake deaths (from backend classifier). Ranked as the top
+      // action item because a DPS pulling aggro before it is safe is un-healable, unlike
+      // avoidable mechanic damage (e.g. Conflagration).
+      const threatAgg = { af: 0, rip: 0, total: 0, mech: 0, players: {} };
+      pulls.forEach(pull => {
+        const td = pull.threat_deaths;
+        if (!td) return;
+        threatAgg.af += td.attacked_first_total || 0;
+        threatAgg.rip += td.ripped_threat_total || 0;
+        threatAgg.total += td.threat_death_total || 0;
+        threatAgg.mech += td.mechanic_death_total || 0;
+        Object.entries(td.threat_players || {}).forEach(([name, v]) => {
+          const p = threatAgg.players[name] || { total: 0, attacked_first: 0, ripped_threat: 0 };
+          p.total += v.total || 0;
+          p.attacked_first += v.attacked_first || 0;
+          p.ripped_threat += v.ripped_threat || 0;
+          threatAgg.players[name] = p;
+        });
+      });
+      if (threatAgg.total > 0) {
+        const ranked = Object.entries(threatAgg.players).sort((a, b) => b[1].total - a[1].total);
+        const offenders = ranked.map(([n, v]) => `${n} (${v.total})`).join(', ');
+        const parts = [];
+        if (threatAgg.af) parts.push(`${threatAgg.af} opened before the tank had aggro`);
+        if (threatAgg.rip) parts.push(`${threatAgg.rip} out-threated the tank (ripped aggro)`);
+        const mechNote = threatAgg.mech
+          ? ` For comparison, ${threatAgg.mech} death${threatAgg.mech > 1 ? 's' : ''} came from avoidable mechanic damage — but that is healable; these are not.`
+          : '';
+        actionItems.push({
+          severity: 'critical',
+          priority: 0,
+          title: `Melee are pulling aggro before it's safe (${threatAgg.total} death${threatAgg.total > 1 ? 's' : ''})`,
+          description: `${parts.join('; ')}. Offenders: ${offenders}.${mechNote} This is the #1 wipe driver — the raid can't heal through a DPS holding the boss/add.`,
+          who: `DPS: ${ranked.slice(0, 6).map(([n]) => n).join(', ')}`,
+          fix: 'Wait for the tank to lock threat (a few Sunders / a solid opener) before committing damage. Use threat drops — Feign Death, Vanish/Feint, Soulshatter, Invisibility — and throttle your opener. Never open on a fresh target before the tank has it.'
+        });
+      }
+
       if (isKael && avgConflagsPerPull > 3) {
         const worstTargets = Object.entries(playerConflags).sort((a, b) => b[1] - a[1]).slice(0, 5);
         const otherHits = Object.entries(playerConflags).filter(([name]) => !/Kamiguruu/i.test(name)).reduce((sum, [, count]) => sum + count, 0);
@@ -5581,7 +5800,39 @@
         const wrathDeaths = aggregateDeathsBy(death => /Wrath of the Astromancer/i.test(death.topDamage || ''));
         const voidData = aggregateMechanic(/Void/i);
         const addDeaths = aggregateDeathsBy(death => /Solarian Agent|Solarian Priest/i.test(death.topDamage || ''));
-        if (wrathData.totalHits > pulls.length * 3) actionItems.push({ severity: 'critical', priority: 1, title: 'Run out with Wrath of the Astromancer', description: `${wrathData.totalHits} Wrath hit(s) across ${pulls.length} pulls — the bomb is splashing too many players. Most hit: ${wrathData.worst.map(([name, count]) => `${name} (${count})`).join(', ')}.`, who: 'Whoever gets the debuff + nearby players', fix: 'The targeted player has 6 seconds to run 20+ yards away from the raid. Everyone else should not be in a position where the bomb can reach them. Spread at least 5 yards at all times.' });
+
+        // Name the specific players who carried the Wrath bomb and did NOT run out.
+        // Each Wrath detonation is reconstructed backend-side (wrath_explosions):
+        // if the bombed player runs 20+ yards out, only they take the hit; if they
+        // stay in the raid, the explosion splashes everyone nearby.
+        const wrathOffenders = {};  // name -> {count, damage, maxSplash}
+        let wrathClean = 0, wrathTotal = 0;
+        for (const pull of pulls) {
+          for (const ex of (pull.wrath_explosions || [])) {
+            if (!ex.target) continue;
+            wrathTotal++;
+            if (ex.moved_out) { wrathClean++; continue; }
+            const o = wrathOffenders[ex.target] || { count: 0, damage: 0, maxSplash: 0 };
+            o.count++;
+            o.damage += ex.splash_damage || 0;
+            o.maxSplash = Math.max(o.maxSplash, ex.splash_count || 0);
+            wrathOffenders[ex.target] = o;
+          }
+        }
+        const wrathOffenderList = Object.entries(wrathOffenders).sort((a, b) => b[1].count - a[1].count);
+        if (wrathOffenderList.length > 0) {
+          const names = wrathOffenderList.map(([n, o]) =>
+            `${n} (${o.count}× — splashed up to ${o.maxSplash} teammate${o.maxSplash === 1 ? '' : 's'}, ${o.damage.toLocaleString()} raid damage)`).join('; ');
+          actionItems.push({
+            severity: 'critical', priority: 1,
+            title: 'Wrath of the Astromancer: these players did NOT run out',
+            description: `${wrathOffenderList.length} player${wrathOffenderList.length === 1 ? '' : 's'} detonated their Wrath bomb inside the raid: ${names}. The other ${wrathClean} of ${wrathTotal} Wrath bombs were handled correctly — the target ran out and nobody else was hit.`,
+            who: wrathOffenderList.map(([n]) => n).join(', '),
+            fix: 'When you get the Wrath of the Astromancer debuff you have ~6 seconds to run 20+ yards away from everyone. The players above stayed in the raid and the bomb splashed the group. Set up a WeakAura that flashes the screen when you have the debuff, and have the raid call the target on voice so they move immediately.'
+          });
+        } else if (wrathData.totalHits > pulls.length * 3) {
+          actionItems.push({ severity: 'critical', priority: 1, title: 'Run out with Wrath of the Astromancer', description: `${wrathData.totalHits} Wrath hit(s) across ${pulls.length} pulls — the bomb is splashing too many players. Most hit: ${wrathData.worst.map(([name, count]) => `${name} (${count})`).join(', ')}.`, who: 'Whoever gets the debuff + nearby players', fix: 'The targeted player has 6 seconds to run 20+ yards away from the raid. Everyone else should not be in a position where the bomb can reach them. Spread at least 5 yards at all times.' });
+        }
         if (wrathDeaths.length > 0) actionItems.push({ severity: 'critical', priority: 2, title: 'Wrath of the Astromancer is killing players', description: `${wrathDeaths.length} death(s) were caused by the Wrath explosion.`, who: 'Entire raid', fix: 'Call the Wrath target on voice immediately. The target runs out, everyone else checks spacing. If multiple people die to one Wrath, the raid was too stacked.' });
         if (voidData.totalHits > 0) actionItems.push({ severity: 'warning', priority: 3, title: 'Move from Void Zones in P3', description: `${voidData.totalHits} Void Zone tick(s) hit players.`, who: 'Entire raid', fix: 'In P3 (Voidwalker form), black circles appear on the ground. Move out immediately — ticking damage stacks fast.' });
         if (addDeaths.length > 0) actionItems.push({ severity: 'warning', priority: 4, title: 'Control split-phase adds faster', description: `${addDeaths.length} death(s) occurred during add waves or had add damage as a primary source.`, who: 'DPS + off-tanks', fix: 'Kill Priests first (they heal), then agents. Have the off-tank pick up Priests immediately on spawn.' });
@@ -6249,9 +6500,8 @@
       const totalPulls = pulls.length;
 
       // Helper: top N from an object
-      const topN = (obj, n = 3) => Object.entries(obj).sort((a, b) => b[1] - a[1]).slice(0, n);
-      const bottomN = (obj, n = 3) => Object.entries(obj).filter(([,v]) => v > 0).sort((a, b) => a[1] - b[1]).slice(0, n);
-      // Skip awards where the top two players are tied
+      const topN = (obj, n = 3) => Object.entries(obj).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, n);
+      const bottomN = (obj, n = 3) => Object.entries(obj).filter(([,v]) => v > 0).sort((a, b) => a[1] - b[1] || a[0].localeCompare(b[0])).slice(0, n);
       const hasClearWinner = (sorted) => sorted.length >= 2 ? sorted[0][1] !== sorted[1][1] : sorted.length === 1;
 
       // ─── UTILITY / SUPPORT ─────────────────────────────────────────
@@ -6296,7 +6546,7 @@
         });
       });
       const topInnervate = topN(innervateTargets);
-      if (topInnervate.length && topInnervate[0][1] >= 2) {
+      if (topInnervate.length && topInnervate[0][1] >= 2 && hasClearWinner(topInnervate)) {
         awards.utility.push({
           title: 'Innervate Magnet', winner: topInnervate[0][0],
           value: `${topInnervate[0][1]} Innervates received`,
@@ -6365,8 +6615,9 @@
         });
       }
 
-      // Biggest Heal — from per-event data
-      const allBigHeals = pulls.flatMap(p => p.biggest_heals || []);
+      // Biggest Heal — from per-event data (exclude Lay on Hands — it's a full HP restore cooldown, not a heal)
+      const LAY_ON_HANDS = new Set(['Lay on Hands']);
+      const allBigHeals = pulls.flatMap(p => p.biggest_heals || []).filter(h => !LAY_ON_HANDS.has(h.spell));
       if (allBigHeals.length) {
         allBigHeals.sort((a, b) => b.amount - a.amount);
         const top = allBigHeals[0];
@@ -6384,7 +6635,7 @@
       const presentPlayers = allPullPlayers.filter(p => allPlayers[p]);
       const avoidableEntries = presentPlayers.map(p => [p, playerAvoidableDmg[p] || 0]);
       const cleanPlayers = avoidableEntries.filter(([p]) => allPlayers[p]?.role !== 'Tank').sort((a, b) => a[1] - b[1]);
-      if (cleanPlayers.length >= 3 && cleanPlayers[0][1] === 0 && hasClearWinner(cleanPlayers.map(([p, v]) => [p, -v]))) {
+      if (cleanPlayers.length >= 3 && cleanPlayers[0][1] === 0) {
         // Only award if there's a unique winner (i.e., not multiple people at 0)
         const zeroCount = cleanPlayers.filter(([, v]) => v === 0).length;
         if (zeroCount === 1) {
@@ -6489,11 +6740,10 @@
           });
         }
 
-        // Closest Call — lowest HP% survival where player didn't die that pull
-        // (approximate: check if target is NOT in the deaths list for this boss)
-        const survivedClutches = allClutchHeals.filter(h => !deadPlayers.has(h.target));
-        if (survivedClutches.length) {
-          const closest = survivedClutches[0];
+        // Closest Call — lowest HP% survival from a direct heal (not HoT tick)
+        const survivedDirectHeals = allClutchHeals.filter(h => !deadPlayers.has(h.target) && !h.is_hot);
+        if (survivedDirectHeals.length) {
+          const closest = survivedDirectHeals[0];
           awards.clutch.push({
             title: 'Closest Call', winner: closest.target,
             value: `Survived at ${closest.hp_pct}% HP`,
@@ -6501,19 +6751,49 @@
           });
         }
 
-        // Guardian Angel — healer with most clutch saves (< 15% HP)
+        // Guardian Angel — healer with most clutch saves (target under 25% HP)
         const guardianCounts = {};
-        allClutchHeals.filter(h => h.hp_pct < 15).forEach(h => {
+        allClutchHeals.filter(h => !h.self_heal).forEach(h => {
           guardianCounts[h.healer] = (guardianCounts[h.healer] || 0) + 1;
         });
         const topGuardians = topN(guardianCounts);
         if (topGuardians.length && topGuardians[0][1] >= 2 && hasClearWinner(topGuardians)) {
           awards.clutch.push({
             title: 'Guardian Angel', winner: topGuardians[0][0],
-            value: `${topGuardians[0][1]} clutch saves (<15% HP)`,
+            value: `${topGuardians[0][1]} clutch saves (<25% HP)`,
             detail: topGuardians.slice(1, 3).map(([p, c]) => `${p}: ${c}`).join(', ') || null,
           });
         }
+      }
+
+      // ─── HEALER AWARDS ────────────────────────────────────────────
+      // Build healer totals for efficiency awards
+      const healerTotals = {};
+      allBossPulls.forEach(({ pull }) => {
+        if (!pull.duration_sec || pull.duration_sec < 15) return;
+        safeEntries(pull.heal_details).forEach(([player, spells]) => {
+          if (allPlayers[player]?.role !== 'Healer') return;
+          if (!healerTotals[player]) healerTotals[player] = { healing: 0, time: 0, overheal: 0, totalRaw: 0 };
+          safeEntries(spells).forEach(([, info]) => {
+            healerTotals[player].healing += (info.total || 0);
+            healerTotals[player].overheal += (info.overheal || 0);
+            healerTotals[player].totalRaw += (info.total || 0) + (info.overheal || 0);
+          });
+          healerTotals[player].time += pull.duration_sec;
+        });
+      });
+
+      // Heal Sniper — lowest overheal % among healers (efficiency award)
+      const healerOHEntries = Object.entries(healerTotals)
+        .filter(([, t]) => t.totalRaw > 10000)
+        .map(([p, t]) => [p, t.totalRaw > 0 ? Math.round((t.overheal / t.totalRaw) * 100) : 100])
+        .sort((a, b) => a[1] - b[1]);
+      if (healerOHEntries.length >= 2) {
+        awards.pump.push({
+          title: 'Heal Sniper', winner: healerOHEntries[0][0],
+          value: `${healerOHEntries[0][1]}% overheal`,
+          detail: `Most efficient healer — next: ${healerOHEntries.slice(1, 3).map(([p, v]) => `${p}: ${v}%`).join(', ')}`,
+        });
       }
 
       // ─── FUN / MEME ────────────────────────────────────────────────
@@ -6941,6 +7221,9 @@
 
       // Show targets if mechanic
       if (snapshot.targets && snapshot.targets.length) {
+        if (snapshot.mechanic_type === 'proximity_aoe') {
+          html += `<p class="note" style="margin-bottom:6px">Conflagged (stood too close to Capernian):</p>`;
+        }
         html += `<div class="snapshot-targets">`;
         snapshot.targets.forEach(t => {
           html += `<span class="target-pill">${escapeHtml(t)}</span>`;
@@ -6961,9 +7244,12 @@
 
       // Proximity issues
       if (snapshot.proximity_issues && snapshot.proximity_issues.length > 0) {
-        html += `<div class="proximity-list"><h4>Proximity Analysis</h4>`;
+        const isAoe = snapshot.mechanic_type === 'proximity_aoe';
+        html += `<div class="proximity-list"><h4>${isAoe ? 'Caught too close together' : 'Proximity Analysis'}</h4>`;
         snapshot.proximity_issues.forEach(issue => {
-          if (issue.type === 'clustered_hit') {
+          if (issue.type === 'caught_together') {
+            html += `<div class="proximity-item" style="color:var(--wipe)">● ${escapeHtml(issue.player)} and ${escapeHtml(issue.near)} were only ${issue.distance} yards apart — both caught by the same Conflagration (stood too close to Capernian)</div>`;
+          } else if (issue.type === 'clustered_hit') {
             html += `<div class="proximity-item" style="color:var(--wipe)">● ${escapeHtml(issue.player)} and ${escapeHtml(issue.near)} were only ${issue.distance} yards apart (both hit)</div>`;
           } else {
             html += `<div class="proximity-item">○ ${escapeHtml(issue.player)} was ${issue.distance} yards from ${escapeHtml(issue.near)} (close call)</div>`;
@@ -7061,6 +7347,168 @@
       return svg;
     }
 
+    // ─── Death Analysis (forensic per-death damage-in / heals-in timeline) ──────
+    function deathHpColor(pct) {
+      if (pct === null || pct === undefined) return 'var(--muted)';
+      if (pct >= 60) return 'var(--kill)';
+      if (pct >= 30) return 'var(--warning-color, #f0ad4e)';
+      return 'var(--wipe)';
+    }
+
+    function getDeathPulls() {
+      const bossData = getBossData();
+      if (state.pullIndex === 'summary') return bossData.pulls || [];
+      const p = getPull();
+      return p ? [p] : [];
+    }
+
+    function setDeathFilter(role) {
+      state.deathFilter = role;
+      renderContent();
+    }
+
+    function renderDeathCard(dt, pull) {
+      const cls = dt.player_class || getPlayerClass(dt.player);
+      const color = CLASS_COLORS[cls] || '#999';
+      const role = getPlayerRole(dt.player);
+      const net = (dt.damage_taken_total || 0) - (dt.healing_received_total || 0);
+
+      const dmgRows = (dt.damage_by_source || []).map(d => `
+        <tr><td>${escapeHtml(cleanDamageLabel(d.label))}</td>
+        <td class="num">${(d.amount || 0).toLocaleString()}</td>
+        <td class="num">${d.count || 0}</td></tr>`).join('')
+        || '<tr><td colspan="3" class="empty">No damage recorded in window</td></tr>';
+
+      const healRows = (dt.healing_by_healer || []).map(h => `
+        <tr><td>${escapeHtml(h.healer)}${h.healer === dt.player ? ' <span style="color:var(--muted)">(self)</span>' : ''}</td>
+        <td class="num">${(h.amount || 0).toLocaleString()}</td>
+        <td class="num">${h.count || 0}</td>
+        <td class="num" style="color:var(--muted)">${(h.overheal || 0).toLocaleString()}</td></tr>`).join('')
+        || '<tr><td colspan="4" class="empty">No heals received in window</td></tr>';
+
+      // Merged chronological timeline (oldest first, ending at death).
+      const merged = [];
+      (dt.damage_events || []).forEach(e => merged.push({ ...e, kind: 'dmg' }));
+      (dt.healing_events || []).forEach(e => merged.push({ ...e, kind: 'heal' }));
+      merged.sort((a, b) => b.dt_ms - a.dt_ms);
+      const timelineRows = merged.map(e => {
+        const secs = '-' + (e.dt_ms / 1000).toFixed(1) + 's';
+        if (e.kind === 'dmg') {
+          return `<tr style="background:rgba(255,99,99,0.06)">
+            <td class="num" style="color:var(--muted)">${secs}</td>
+            <td style="color:var(--wipe)">✦ ${escapeHtml(cleanDamageLabel(e.ability))}</td>
+            <td class="num" style="color:var(--wipe)">-${(e.amount || 0).toLocaleString()}</td>
+            <td class="num">—</td></tr>`;
+        }
+        return `<tr style="background:rgba(68,209,122,0.06)">
+          <td class="num" style="color:var(--muted)">${secs}</td>
+          <td style="color:var(--kill)">＋ ${escapeHtml(e.spell)} <span style="color:var(--muted)">· ${escapeHtml(e.healer)}</span>${e.is_hot ? ' <span style="color:var(--muted)">(hot)</span>' : ''}</td>
+          <td class="num" style="color:var(--kill)">+${(e.amount || 0).toLocaleString()}${e.overheal ? ` <span style="color:var(--muted)">(${(e.overheal).toLocaleString()} oh)</span>` : ''}</td>
+          <td class="num" style="color:${deathHpColor(e.hp_after)};font-weight:bold">${e.hp_after !== null && e.hp_after !== undefined ? e.hp_after + '%' : '—'}</td></tr>`;
+      }).join('');
+
+      const bh = dt.biggest_hit;
+      const bhText = bh ? `${escapeHtml(cleanDamageLabel(bh.ability))} — <strong style="color:var(--wipe)">${(bh.amount || 0).toLocaleString()}</strong>` : '—';
+      const killText = dt.killing_blow ? escapeHtml(dt.killing_blow) : (bh ? escapeHtml(cleanDamageLabel(bh.ability)) : 'Unknown');
+
+      return `
+        <section class="card" style="border-left:3px solid ${color}">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;">
+            <h3 style="margin:0">
+              <span style="color:${color}">${escapeHtml(dt.player)}</span>
+              <span class="tag" style="margin-left:6px">${role}</span>
+            </h3>
+            <span style="font-size:0.82rem;color:var(--muted)">
+              ${escapeHtml(pull.boss_name || state.boss)} · ${pullStatus(pull)} · died at ${formatFightTime(dt.relative_time)}
+            </span>
+          </div>
+          <p style="font-size:0.82rem;color:var(--muted);margin:8px 0 10px;">
+            Killing blow: <strong>${killText}</strong> · Biggest hit: ${bhText}
+            <span style="color:var(--muted)"> (last ${dt.window_sec}s before death)</span>
+          </p>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
+            <div class="metric"><span class="metric-label">Damage Taken</span><span class="metric-value" style="color:var(--wipe)">${(dt.damage_taken_total || 0).toLocaleString()}</span></div>
+            <div class="metric"><span class="metric-label">Healing In</span><span class="metric-value" style="color:var(--kill)">${(dt.healing_received_total || 0).toLocaleString()}</span></div>
+            <div class="metric"><span class="metric-label">Deficit</span><span class="metric-value" style="color:${net > 0 ? 'var(--wipe)' : 'var(--kill)'}">${net.toLocaleString()}</span></div>
+            <div class="metric"><span class="metric-label">Overheal</span><span class="metric-value" style="color:var(--muted)">${(dt.overhealing_total || 0).toLocaleString()}</span></div>
+          </div>
+          <div class="death-tables" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div style="min-width:0;">
+              <h4 style="font-size:0.8rem;color:var(--muted);margin:0 0 4px">Damage Taken — by source</h4>
+              <div style="overflow-x:auto;">
+              <table class="data-table compact">
+                <thead><tr><th>Ability · Source</th><th>Amount</th><th>Hits</th></tr></thead>
+                <tbody>${dmgRows}</tbody>
+              </table>
+              </div>
+            </div>
+            <div style="min-width:0;">
+              <h4 style="font-size:0.8rem;color:var(--muted);margin:0 0 4px">Healing Received — by healer</h4>
+              <div style="overflow-x:auto;">
+              <table class="data-table compact">
+                <thead><tr><th>Healer</th><th>Effective</th><th>Casts</th><th>Overheal</th></tr></thead>
+                <tbody>${healRows}</tbody>
+              </table>
+              </div>
+            </div>
+          </div>
+          <details style="margin-top:12px;">
+            <summary style="cursor:pointer;font-size:0.82rem;color:var(--muted)">Event-by-event timeline (${merged.length} events)</summary>
+            <table class="data-table compact" style="margin-top:8px;">
+              <thead><tr><th>Before death</th><th>Event</th><th>Amount</th><th>HP after</th></tr></thead>
+              <tbody>${timelineRows}</tbody>
+              <tbody><tr style="background:rgba(255,99,99,0.15)"><td class="num" style="color:var(--muted)">0.0s</td><td style="color:var(--wipe);font-weight:bold">☠ ${escapeHtml(dt.player)} dies</td><td class="num">—</td><td class="num" style="color:var(--wipe);font-weight:bold">0%</td></tr></tbody>
+            </table>
+          </details>
+        </section>`;
+    }
+
+    function renderDeathsView() {
+      const pulls = getDeathPulls();
+      const rows = [];
+      pulls.forEach(pull => {
+        (pull.death_timelines || []).forEach(dt => rows.push({ dt, pull }));
+      });
+
+      const filter = state.deathFilter || 'All';
+      const roleOrder = { Tank: 0, Healer: 1, DPS: 2 };
+      let filtered = filter === 'All' ? rows : rows.filter(r => getPlayerRole(r.dt.player) === filter);
+      // Tanks first (the primary use-case), then chronological within role.
+      filtered = filtered.slice().sort((a, b) => {
+        const ra = roleOrder[getPlayerRole(a.dt.player)] ?? 3;
+        const rb = roleOrder[getPlayerRole(b.dt.player)] ?? 3;
+        if (ra !== rb) return ra - rb;
+        return a.dt.relative_time - b.dt.relative_time;
+      });
+
+      const counts = { All: rows.length, Tank: 0, Healer: 0, DPS: 0 };
+      rows.forEach(r => { const rl = getPlayerRole(r.dt.player); if (counts[rl] !== undefined) counts[rl]++; });
+      const filterBtns = ['All', 'Tank', 'Healer', 'DPS'].map(r =>
+        `<button class="tab-btn ${filter === r ? 'active' : ''}" onclick="setDeathFilter('${r}')" style="padding:4px 12px;font-size:0.8rem;">${r} (${counts[r] || 0})</button>`
+      ).join('');
+
+      const scope = state.pullIndex === 'summary'
+        ? `all ${pulls.length} pull(s) on ${escapeHtml(state.boss)}`
+        : `this pull`;
+
+      const header = `
+        <section class="card">
+          <h3>Death Analysis</h3>
+          <p style="font-size:0.82rem;color:var(--muted);margin-bottom:10px;">
+            For each death, the damage taken and heals received (and from whom) in the final ${(rows[0]?.dt.window_sec) || 10}s — showing ${scope}. Tank deaths are listed first.
+          </p>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">${filterBtns}</div>
+        </section>`;
+
+      if (!rows.length) {
+        return header + '<div class="card empty">No deaths recorded for this selection — nobody died. 🎉</div>';
+      }
+      if (!filtered.length) {
+        return header + `<div class="card empty">No ${filter} deaths in this selection.</div>`;
+      }
+      return header + filtered.map(r => renderDeathCard(r.dt, r.pull)).join('');
+    }
+
     function renderContent() {
       destroyCharts();
       if (!state.report) {
@@ -7096,6 +7544,8 @@
                     ? renderThreatView()
                     : state.tab === 'positioning'
                       ? renderPositioningView()
+                      : state.tab === 'deaths'
+                        ? renderDeathsView()
                       : state.tab === 'individual'
                         ? renderAllPullsIndividual()
                         : renderProgressionSummary();
@@ -7118,6 +7568,8 @@
                   ? renderThreatView()
                   : state.tab === 'positioning'
                     ? renderPositioningView()
+                    : state.tab === 'deaths'
+                      ? renderDeathsView()
                     : renderIndividual();
 
       els.content.innerHTML = html;
@@ -7325,6 +7777,48 @@
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
+    }
+
+    // Reconstruct active windows for a buff/debuff from apply/refresh/remove events
+    // and return true measured uptime. spellName may be an exact string OR a RegExp
+    // (use a RegExp to catch every rank of an ability, e.g. /^Holy Shield/). Correctly
+    // handles buffs applied BEFORE the fight (pre-pull): rogues build combo points on trash/adds before engaging
+    // (e.g. Hydross), so Slice and Dice is already active at t0. In that case the
+    // first in-fight event is a remove/refresh with no preceding apply, which we
+    // treat as "active from the start of the fight".
+    function computeBuffUptime(buffEvts, spellName, durationSec) {
+      const matches = spellName instanceof RegExp
+        ? (s => spellName.test(s))
+        : (s => s === spellName);
+      const evts = (buffEvts || [])
+        .filter(e => matches(e.spell))
+        .sort((a, b) => a.time - b.time);
+      const result = { uptimePct: 0, activeSec: 0, windows: [], applications: 0, preApplied: false };
+      if (!evts.length || !(durationSec > 0)) return result;
+
+      let activeStart = null;
+      const firstType = evts[0].type;
+      // Buff removed/refreshed before ever being applied in-fight ⇒ pre-pull cast.
+      if (['removebuff', 'removedebuff', 'refreshbuff', 'refreshdebuff'].includes(firstType)) {
+        activeStart = 0;
+        result.preApplied = true;
+        result.applications += 1;
+      }
+      for (const e of evts) {
+        if (e.type === 'applybuff' || e.type === 'applydebuff') {
+          if (activeStart === null) activeStart = e.time;
+          result.applications += 1;
+        } else if (e.type === 'refreshbuff' || e.type === 'refreshdebuff') {
+          if (activeStart === null) { activeStart = 0; result.preApplied = true; }
+          result.applications += 1;
+        } else if (e.type === 'removebuff' || e.type === 'removedebuff') {
+          if (activeStart !== null) { result.windows.push({ start: activeStart, end: e.time }); activeStart = null; }
+        }
+      }
+      if (activeStart !== null) result.windows.push({ start: activeStart, end: durationSec });
+      result.activeSec = result.windows.reduce((s, w) => s + Math.max(0, w.end - w.start), 0);
+      result.uptimePct = Math.min(100, (result.activeSec / durationSec) * 100);
+      return result;
     }
 
     function formatTime(sec) {

@@ -16,9 +16,14 @@ from backend.wcl.client import graphql_query
 
 # Mechanics worth tracking positions for (spell IDs)
 TRACKED_MECHANICS = {
-    # Kael'thas - Conflagration from Capernian (8yd AoE ~700 game units)
-    37018: {"name": "Conflagration", "boss": "Kael'thas Sunstrider", "spread_range": 700, "type": "spread"},
-    37019: {"name": "Conflagration", "boss": "Kael'thas Sunstrider", "spread_range": 700, "type": "spread"},
+    # Kael'thas - Conflagration from Capernian: an AoE that catches players who
+    # stand too close to her. WCL does not reliably log Capernian's own position
+    # (her cast events carry no coords; her damage events carry the victim's
+    # position), so we cannot measure true distance-to-Capernian. Instead we flag
+    # the players actually hit, and when a single cast catches 2+ of them we call
+    # them out as clustered too close together in her danger zone.
+    37018: {"name": "Conflagration", "boss": "Kael'thas Sunstrider", "spread_range": 700, "type": "proximity_aoe"},
+    37019: {"name": "Conflagration", "boss": "Kael'thas Sunstrider", "spread_range": 700, "type": "proximity_aoe"},
     # Hydross - Water Tomb (targets random players)
     38235: {"name": "Water Tomb", "boss": "Hydross the Unstable", "type": "stack"},
     # Vashj - Static Charge (must spread)
@@ -271,7 +276,29 @@ async def fetch_positioning_data(report_code: str, fight_id: int) -> dict[str, A
 
         # Calculate proximity analysis: find clusters of hit players
         proximity_issues = []
-        if mechanic_info.get("type") == "spread" and len(targets) > 1:
+        if mechanic_info.get("type") == "proximity_aoe" and len(targets) >= 1:
+            # Conflagration-style AoE: everyone hit was too close to the caster.
+            # We can't measure distance to Capernian (not logged), so the callout
+            # is simply "who got hit", and when a single cast catches 2+ players
+            # we flag them as clustered too close together in the danger zone.
+            hit_with_pos = [t for t in targets if t in positions]
+            if len(targets) >= 2:
+                seen_pairs = set()
+                for i, t1 in enumerate(hit_with_pos):
+                    for t2 in hit_with_pos[i + 1:]:
+                        key = tuple(sorted((t1, t2)))
+                        if key in seen_pairs:
+                            continue
+                        seen_pairs.add(key)
+                        dist = _distance(positions[t1], positions[t2])
+                        proximity_issues.append({
+                            "player": t2,
+                            "near": t1,
+                            "distance": round(dist / UNITS_PER_YARD, 1),
+                            "type": "caught_together",
+                        })
+                proximity_issues.sort(key=lambda x: x["distance"])
+        elif mechanic_info.get("type") == "spread" and len(targets) > 1:
             # Find pairs of hit players that were close to each other
             # This indicates stacking/clustering which causes multi-target hits
             for i, t1 in enumerate(targets):

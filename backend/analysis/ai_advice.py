@@ -55,6 +55,7 @@ BOSS-SPECIFIC KNOWLEDGE (use when relevant):
 
 RULES:
 - Be specific — reference actual numbers from the data (damage amounts, death times, specific spells)
+- THREAT MISTAKES ARE THE HIGHEST PRIORITY: if the data shows this player died from a threat mistake (attacked before the tank had aggro, or out-threated the tank / ripped aggro), call it out first and coach it directly. The raid can heal through avoidable mechanic damage (e.g. Conflagration) but NOT a DPS pulling the boss/add off the tank. Do not let topping the damage meters justify pulling threat.
 - Be constructive — frame advice as coaching, not criticism
 - Consider fight context — dying at 90% boss HP vs 5% is very different
 - If the player performed well, acknowledge it and suggest only minor optimizations
@@ -150,13 +151,46 @@ def _build_player_context(
             lines.append(f"\n=== PLAYER DEATHS ({len(player_deaths)}) ===")
             for d in player_deaths:
                 time_s = d.get("relative_time", 0) or 0
-                lines.append(f"  - Died at {time_s:.1f}s into the fight")
+                cause = d.get("cause")
+                if cause:
+                    lines.append(f"  - Died at {time_s:.1f}s into the fight — classified cause: {cause}")
+                else:
+                    lines.append(f"  - Died at {time_s:.1f}s into the fight")
 
         # Show death timeline for context (who died before/after)
         if all_deaths:
             lines.append(f"\n=== RAID DEATH TIMELINE ===")
             for d in all_deaths[:10]:
-                lines.append(f"  - {d.get('player', '?')} died at {d.get('relative_time', 0):.1f}s")
+                cause = d.get("cause")
+                suffix = f" ({cause})" if cause else ""
+                lines.append(f"  - {d.get('player', '?')} died at {d.get('relative_time', 0):.1f}s{suffix}")
+
+    # === THREAT-MISTAKE DEATHS (evidence-based classifier) ===
+    # A DPS taking aggro before it is safe is the highest-priority failure: the raid can
+    # usually heal through avoidable mechanic damage, but not a DPS holding the boss/add.
+    threat = pull_data.get("threat_deaths", {})
+    if isinstance(threat, dict) and (threat.get("threat_death_total", 0) or 0) > 0:
+        af = threat.get("attacked_first_total", 0)
+        rip = threat.get("ripped_threat_total", 0)
+        mech = threat.get("mechanic_death_total", 0)
+        lines.append(f"\n=== THREAT-MISTAKE DEATHS (pull total) ===")
+        lines.append(
+            f"  {threat.get('threat_death_total', 0)} death(s) from threat mistakes this pull: "
+            f"{af} attacked before the tank had aggro, {rip} out-threated the tank."
+        )
+        if mech:
+            lines.append(
+                f"  For comparison, {mech} death(s) came from avoidable mechanic damage "
+                f"(healable — threat deaths are not)."
+            )
+        player_threat = (threat.get("threat_players", {}) or {}).get(player_name)
+        if player_threat:
+            lines.append(
+                f"  >>> THIS PLAYER ({player_name}) had {player_threat.get('total', 0)} threat death(s): "
+                f"{player_threat.get('attacked_first', 0)} attacked first, "
+                f"{player_threat.get('ripped_threat', 0)} ripped aggro. "
+                f"This is the top thing for them to fix."
+            )
 
     # === DAMAGE TAKEN (detailed per-source) ===
     raw_dmg_taken = pull_data.get("player_damage_taken", {})
