@@ -17,7 +17,7 @@
       --border: rgba(179, 169, 255, 0.16);
       --border-strong: rgba(232, 102, 168, 0.24);
       --text: #f2f5ff;
-      --muted: #9ea8c8;
+      --muted: #b0bad8;
       --kill: #44d17a;
       --wipe: #ff6363;
       --tank: #57a6ff;
@@ -330,6 +330,7 @@
 
     .table-wrap {
       overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
     }
 
     table {
@@ -1058,6 +1059,9 @@
       .card { padding: 16px; }
       table { min-width: 580px; font-size: 0.82rem; }
       th, td { padding: 8px 6px; }
+      /* Pin the first column (usually player/pull label) while scrolling metrics horizontally */
+      .table-wrap td:first-child { position: sticky; left: 0; z-index: 1; background: var(--panel-strong); }
+      .table-wrap th:first-child { left: 0; z-index: 3; }
       .awards-grid { grid-template-columns: 1fr; }
       .death-tables { grid-template-columns: 1fr !important; }
     }
@@ -3613,9 +3617,9 @@
         <section class="card">
           <h2>What Went Wrong</h2>
           <ul class="issues-list">
-            ${issues.map(issue => `
+            ${issues.slice().sort((a, b) => ({critical:0,warning:1,info:2}[a.severity] ?? 3) - ({critical:0,warning:1,info:2}[b.severity] ?? 3)).map(issue => `
               <li class="issue-item ${issue.severity || ''}" title="Evidence comes directly from combat log analysis.">
-                <span class="issue-title">${escapeHtml(issue.title)}</span>
+                <span class="issue-title"><span class="severity-badge ${issue.severity || 'info'}">${issue.severity === 'critical' ? 'CRITICAL' : issue.severity === 'warning' ? 'IMPORTANT' : 'INFO'}</span>${escapeHtml(issue.title)}</span>
                 <span>${escapeHtml(issue.body)}</span>
               </li>
             `).join('')}
