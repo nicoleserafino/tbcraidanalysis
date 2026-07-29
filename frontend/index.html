@@ -1291,6 +1291,7 @@
       { id: 'strategy', label: 'Strategy' },
       { id: 'threat', label: 'Threat' },
       { id: 'positioning', label: 'Positioning' },
+      { id: 'deaths', label: 'Deaths' },
       { id: '_separator' },
       { id: 'awards', label: 'Awards' },
     ];
@@ -5616,6 +5617,44 @@
         });
       }
 
+      // Boss-generic: threat-mistake deaths (from backend classifier). Ranked as the top
+      // action item because a DPS pulling aggro before it is safe is un-healable, unlike
+      // avoidable mechanic damage (e.g. Conflagration).
+      const threatAgg = { af: 0, rip: 0, total: 0, mech: 0, players: {} };
+      pulls.forEach(pull => {
+        const td = pull.threat_deaths;
+        if (!td) return;
+        threatAgg.af += td.attacked_first_total || 0;
+        threatAgg.rip += td.ripped_threat_total || 0;
+        threatAgg.total += td.threat_death_total || 0;
+        threatAgg.mech += td.mechanic_death_total || 0;
+        Object.entries(td.threat_players || {}).forEach(([name, v]) => {
+          const p = threatAgg.players[name] || { total: 0, attacked_first: 0, ripped_threat: 0 };
+          p.total += v.total || 0;
+          p.attacked_first += v.attacked_first || 0;
+          p.ripped_threat += v.ripped_threat || 0;
+          threatAgg.players[name] = p;
+        });
+      });
+      if (threatAgg.total > 0) {
+        const ranked = Object.entries(threatAgg.players).sort((a, b) => b[1].total - a[1].total);
+        const offenders = ranked.map(([n, v]) => `${n} (${v.total})`).join(', ');
+        const parts = [];
+        if (threatAgg.af) parts.push(`${threatAgg.af} opened before the tank had aggro`);
+        if (threatAgg.rip) parts.push(`${threatAgg.rip} out-threated the tank (ripped aggro)`);
+        const mechNote = threatAgg.mech
+          ? ` For comparison, ${threatAgg.mech} death${threatAgg.mech > 1 ? 's' : ''} came from avoidable mechanic damage — but that is healable; these are not.`
+          : '';
+        actionItems.push({
+          severity: 'critical',
+          priority: 0,
+          title: `Melee are pulling aggro before it's safe (${threatAgg.total} death${threatAgg.total > 1 ? 's' : ''})`,
+          description: `${parts.join('; ')}. Offenders: ${offenders}.${mechNote} This is the #1 wipe driver — the raid can't heal through a DPS holding the boss/add.`,
+          who: `DPS: ${ranked.slice(0, 6).map(([n]) => n).join(', ')}`,
+          fix: 'Wait for the tank to lock threat (a few Sunders / a solid opener) before committing damage. Use threat drops — Feign Death, Vanish/Feint, Soulshatter, Invisibility — and throttle your opener. Never open on a fresh target before the tank has it.'
+        });
+      }
+
       if (isKael && avgConflagsPerPull > 3) {
         const worstTargets = Object.entries(playerConflags).sort((a, b) => b[1] - a[1]).slice(0, 5);
         const otherHits = Object.entries(playerConflags).filter(([name]) => !/Kamiguruu/i.test(name)).reduce((sum, [, count]) => sum + count, 0);
@@ -7245,6 +7284,164 @@
       return svg;
     }
 
+    // ─── Death Analysis (forensic per-death damage-in / heals-in timeline) ──────
+    function deathHpColor(pct) {
+      if (pct === null || pct === undefined) return 'var(--muted)';
+      if (pct >= 60) return 'var(--kill)';
+      if (pct >= 30) return 'var(--warning-color, #f0ad4e)';
+      return 'var(--wipe)';
+    }
+
+    function getDeathPulls() {
+      const bossData = getBossData();
+      if (state.pullIndex === 'summary') return bossData.pulls || [];
+      const p = getPull();
+      return p ? [p] : [];
+    }
+
+    function setDeathFilter(role) {
+      state.deathFilter = role;
+      renderContent();
+    }
+
+    function renderDeathCard(dt, pull) {
+      const cls = dt.player_class || getPlayerClass(dt.player);
+      const color = CLASS_COLORS[cls] || '#999';
+      const role = getPlayerRole(dt.player);
+      const net = (dt.damage_taken_total || 0) - (dt.healing_received_total || 0);
+
+      const dmgRows = (dt.damage_by_source || []).map(d => `
+        <tr><td>${escapeHtml(cleanDamageLabel(d.label))}</td>
+        <td class="num">${(d.amount || 0).toLocaleString()}</td>
+        <td class="num">${d.count || 0}</td></tr>`).join('')
+        || '<tr><td colspan="3" class="empty">No damage recorded in window</td></tr>';
+
+      const healRows = (dt.healing_by_healer || []).map(h => `
+        <tr><td>${escapeHtml(h.healer)}${h.healer === dt.player ? ' <span style="color:var(--muted)">(self)</span>' : ''}</td>
+        <td class="num">${(h.amount || 0).toLocaleString()}</td>
+        <td class="num">${h.count || 0}</td>
+        <td class="num" style="color:var(--muted)">${(h.overheal || 0).toLocaleString()}</td></tr>`).join('')
+        || '<tr><td colspan="4" class="empty">No heals received in window</td></tr>';
+
+      // Merged chronological timeline (oldest first, ending at death).
+      const merged = [];
+      (dt.damage_events || []).forEach(e => merged.push({ ...e, kind: 'dmg' }));
+      (dt.healing_events || []).forEach(e => merged.push({ ...e, kind: 'heal' }));
+      merged.sort((a, b) => b.dt_ms - a.dt_ms);
+      const timelineRows = merged.map(e => {
+        const secs = '-' + (e.dt_ms / 1000).toFixed(1) + 's';
+        if (e.kind === 'dmg') {
+          return `<tr style="background:rgba(255,99,99,0.06)">
+            <td class="num" style="color:var(--muted)">${secs}</td>
+            <td style="color:var(--wipe)">✦ ${escapeHtml(cleanDamageLabel(e.ability))}</td>
+            <td class="num" style="color:var(--wipe)">-${(e.amount || 0).toLocaleString()}</td>
+            <td class="num">—</td></tr>`;
+        }
+        return `<tr style="background:rgba(68,209,122,0.06)">
+          <td class="num" style="color:var(--muted)">${secs}</td>
+          <td style="color:var(--kill)">＋ ${escapeHtml(e.spell)} <span style="color:var(--muted)">· ${escapeHtml(e.healer)}</span>${e.is_hot ? ' <span style="color:var(--muted)">(hot)</span>' : ''}</td>
+          <td class="num" style="color:var(--kill)">+${(e.amount || 0).toLocaleString()}${e.overheal ? ` <span style="color:var(--muted)">(${(e.overheal).toLocaleString()} oh)</span>` : ''}</td>
+          <td class="num" style="color:${deathHpColor(e.hp_after)};font-weight:bold">${e.hp_after !== null && e.hp_after !== undefined ? e.hp_after + '%' : '—'}</td></tr>`;
+      }).join('');
+
+      const bh = dt.biggest_hit;
+      const bhText = bh ? `${escapeHtml(cleanDamageLabel(bh.ability))} — <strong style="color:var(--wipe)">${(bh.amount || 0).toLocaleString()}</strong>` : '—';
+      const killText = dt.killing_blow ? escapeHtml(dt.killing_blow) : (bh ? escapeHtml(cleanDamageLabel(bh.ability)) : 'Unknown');
+
+      return `
+        <section class="card" style="border-left:3px solid ${color}">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;">
+            <h3 style="margin:0">
+              <span style="color:${color}">${escapeHtml(dt.player)}</span>
+              <span class="tag" style="margin-left:6px">${role}</span>
+            </h3>
+            <span style="font-size:0.82rem;color:var(--muted)">
+              ${escapeHtml(pull.boss_name || state.boss)} · ${pullStatus(pull)} · died at ${formatFightTime(dt.relative_time)}
+            </span>
+          </div>
+          <p style="font-size:0.82rem;color:var(--muted);margin:8px 0 10px;">
+            Killing blow: <strong>${killText}</strong> · Biggest hit: ${bhText}
+            <span style="color:var(--muted)"> (last ${dt.window_sec}s before death)</span>
+          </p>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
+            <div class="metric"><span class="metric-label">Damage Taken</span><span class="metric-value" style="color:var(--wipe)">${(dt.damage_taken_total || 0).toLocaleString()}</span></div>
+            <div class="metric"><span class="metric-label">Healing In</span><span class="metric-value" style="color:var(--kill)">${(dt.healing_received_total || 0).toLocaleString()}</span></div>
+            <div class="metric"><span class="metric-label">Deficit</span><span class="metric-value" style="color:${net > 0 ? 'var(--wipe)' : 'var(--kill)'}">${net.toLocaleString()}</span></div>
+            <div class="metric"><span class="metric-label">Overheal</span><span class="metric-value" style="color:var(--muted)">${(dt.overhealing_total || 0).toLocaleString()}</span></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div>
+              <h4 style="font-size:0.8rem;color:var(--muted);margin:0 0 4px">Damage Taken — by source</h4>
+              <table class="data-table compact">
+                <thead><tr><th>Ability · Source</th><th>Amount</th><th>Hits</th></tr></thead>
+                <tbody>${dmgRows}</tbody>
+              </table>
+            </div>
+            <div>
+              <h4 style="font-size:0.8rem;color:var(--muted);margin:0 0 4px">Healing Received — by healer</h4>
+              <table class="data-table compact">
+                <thead><tr><th>Healer</th><th>Effective</th><th>Casts</th><th>Overheal</th></tr></thead>
+                <tbody>${healRows}</tbody>
+              </table>
+            </div>
+          </div>
+          <details style="margin-top:12px;">
+            <summary style="cursor:pointer;font-size:0.82rem;color:var(--muted)">Event-by-event timeline (${merged.length} events)</summary>
+            <table class="data-table compact" style="margin-top:8px;">
+              <thead><tr><th>Before death</th><th>Event</th><th>Amount</th><th>HP after</th></tr></thead>
+              <tbody>${timelineRows}</tbody>
+              <tbody><tr style="background:rgba(255,99,99,0.15)"><td class="num" style="color:var(--muted)">0.0s</td><td style="color:var(--wipe);font-weight:bold">☠ ${escapeHtml(dt.player)} dies</td><td class="num">—</td><td class="num" style="color:var(--wipe);font-weight:bold">0%</td></tr></tbody>
+            </table>
+          </details>
+        </section>`;
+    }
+
+    function renderDeathsView() {
+      const pulls = getDeathPulls();
+      const rows = [];
+      pulls.forEach(pull => {
+        (pull.death_timelines || []).forEach(dt => rows.push({ dt, pull }));
+      });
+
+      const filter = state.deathFilter || 'All';
+      const roleOrder = { Tank: 0, Healer: 1, DPS: 2 };
+      let filtered = filter === 'All' ? rows : rows.filter(r => getPlayerRole(r.dt.player) === filter);
+      // Tanks first (the primary use-case), then chronological within role.
+      filtered = filtered.slice().sort((a, b) => {
+        const ra = roleOrder[getPlayerRole(a.dt.player)] ?? 3;
+        const rb = roleOrder[getPlayerRole(b.dt.player)] ?? 3;
+        if (ra !== rb) return ra - rb;
+        return a.dt.relative_time - b.dt.relative_time;
+      });
+
+      const counts = { All: rows.length, Tank: 0, Healer: 0, DPS: 0 };
+      rows.forEach(r => { const rl = getPlayerRole(r.dt.player); if (counts[rl] !== undefined) counts[rl]++; });
+      const filterBtns = ['All', 'Tank', 'Healer', 'DPS'].map(r =>
+        `<button class="tab-btn ${filter === r ? 'active' : ''}" onclick="setDeathFilter('${r}')" style="padding:4px 12px;font-size:0.8rem;">${r} (${counts[r] || 0})</button>`
+      ).join('');
+
+      const scope = state.pullIndex === 'summary'
+        ? `all ${pulls.length} pull(s) on ${escapeHtml(state.boss)}`
+        : `this pull`;
+
+      const header = `
+        <section class="card">
+          <h3>Death Analysis</h3>
+          <p style="font-size:0.82rem;color:var(--muted);margin-bottom:10px;">
+            For each death, the damage taken and heals received (and from whom) in the final ${(rows[0]?.dt.window_sec) || 10}s — showing ${scope}. Tank deaths are listed first.
+          </p>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">${filterBtns}</div>
+        </section>`;
+
+      if (!rows.length) {
+        return header + '<div class="card empty">No deaths recorded for this selection — nobody died. 🎉</div>';
+      }
+      if (!filtered.length) {
+        return header + `<div class="card empty">No ${filter} deaths in this selection.</div>`;
+      }
+      return header + filtered.map(r => renderDeathCard(r.dt, r.pull)).join('');
+    }
+
     function renderContent() {
       destroyCharts();
       if (!state.report) {
@@ -7280,6 +7477,8 @@
                     ? renderThreatView()
                     : state.tab === 'positioning'
                       ? renderPositioningView()
+                      : state.tab === 'deaths'
+                        ? renderDeathsView()
                       : state.tab === 'individual'
                         ? renderAllPullsIndividual()
                         : renderProgressionSummary();
@@ -7302,6 +7501,8 @@
                   ? renderThreatView()
                   : state.tab === 'positioning'
                     ? renderPositioningView()
+                    : state.tab === 'deaths'
+                      ? renderDeathsView()
                     : renderIndividual();
 
       els.content.innerHTML = html;
