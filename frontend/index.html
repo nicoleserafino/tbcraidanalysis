@@ -1049,6 +1049,7 @@
       table { min-width: 580px; font-size: 0.82rem; }
       th, td { padding: 8px 6px; }
       .awards-grid { grid-template-columns: 1fr; }
+      .death-tables { grid-template-columns: 1fr !important; }
     }
 
     @media (max-width: 480px) {
@@ -2566,23 +2567,34 @@
         // Shield Block uptime (Warrior) — skip for unblockable bosses (elementals like Hydross, Void Reaver)
         const UNBLOCKABLE_BOSSES = new Set([BOSS_KEYS.HYDROSS, BOSS_KEYS.VOID_REAVER]);
         if (playerClass === 'Warrior' && !UNBLOCKABLE_BOSSES.has(bossKey)) {
-          const sbCasts = spellCasts['Shield Block'] || 0;
-          const sbBuffs = buffEvts.filter(b => b.spell === 'Shield Block');
+          const sbCasts = Object.entries(spellCasts).reduce((n, [k, v]) => /^Shield Block/i.test(k) ? n + v : n, 0);
           const activeTime = deaths.length ? deaths[0].relative_time : pull.duration_sec;
-          // Shield Block lasts 5s or 2 charges, 6s CD. Ideal uptime = cast every 6s
-          const idealSBCasts = Math.floor(activeTime / 6);
-          const sbUptime = idealSBCasts > 0 ? (sbCasts / idealSBCasts * 100) : 100;
-          if (sbCasts < idealSBCasts * 0.4 && activeTime > 30) {
+          // Measure ACTUAL Shield Block buff uptime from apply/refresh/remove
+          // events (the buff drops when its 2 charges are consumed and refreshes
+          // on recast) instead of assuming a fixed duration per cast. The regex
+          // captures every rank of Shield Block (WCL logs them under one name,
+          // but this is defensive against any rank-suffixed variant).
+          const sbUp = computeBuffUptime(buffEvts, /^Shield Block/i, activeTime);
+          const sbPct = Math.round(sbUp.uptimePct);
+          if (activeTime > 30 && sbUp.applications > 0) {
+            if (sbPct < 50) {
+              findings.push({
+                title: `Shield Block uptime critically low: ${sbPct}% up (${sbCasts} casts in ${activeTime.toFixed(0)}s)`,
+                body: `Shield Block prevents crushing blows (150% damage hits). It was only up ${sbPct}% of the fight, leaving long windows where a crushing blow can spike you before healers react. Press it on cooldown (every 6s) to keep uptime as close to 100% as possible. This is likely contributing to your deaths.`,
+                severity: 'critical'
+              });
+            } else if (sbPct < 80) {
+              findings.push({
+                title: `Shield Block uptime has gaps: ${sbPct}% up (${sbCasts} casts)`,
+                body: `You're using Shield Block but it was only up ${sbPct}% of the fight. Every gap is a window for a crushing blow. Consider a WeakAura to track the buff and recast the moment it drops.`,
+                severity: 'warning'
+              });
+            }
+          } else if (activeTime > 30 && sbCasts === 0) {
             findings.push({
-              title: `Shield Block uptime critically low: ${sbCasts} casts in ${activeTime.toFixed(0)}s (expected ~${idealSBCasts})`,
-              body: `Shield Block prevents crushing blows (150% damage hits). Without it up, you take massive spike damage that healers cannot react to. It should be pressed every 6 seconds without fail. This is likely contributing to your deaths.`,
+              title: `No Shield Block used in ${activeTime.toFixed(0)}s`,
+              body: `Shield Block prevents crushing blows (150% damage hits). It was never up this pull, leaving you exposed to unavoidable spike damage. Press it on cooldown (every 6s).`,
               severity: 'critical'
-            });
-          } else if (sbCasts < idealSBCasts * 0.7 && activeTime > 30) {
-            findings.push({
-              title: `Shield Block could be higher: ${sbCasts}/${idealSBCasts} ideal casts`,
-              body: `You're using Shield Block but there are gaps. Every gap is a window for crushing blows. Consider a WeakAura to track the cooldown.`,
-              severity: 'warning'
             });
           }
 
@@ -2614,14 +2626,33 @@
 
         // Holy Shield uptime (Paladin) — skip for unblockable bosses
         if (playerClass === 'Paladin' && !UNBLOCKABLE_BOSSES.has(bossKey)) {
-          const hsCasts = spellCasts['Holy Shield'] || 0;
+          const hsCasts = Object.entries(spellCasts).reduce((n, [k, v]) => /^Holy Shield/i.test(k) ? n + v : n, 0);
           const activeTime = deaths.length ? deaths[0].relative_time : pull.duration_sec;
-          // Holy Shield lasts 10s, 8 charges, 10s CD
-          const idealHSCasts = Math.floor(activeTime / 10);
-          if (hsCasts < idealHSCasts * 0.5 && activeTime > 30) {
+          // Measure ACTUAL Holy Shield buff uptime from apply/refresh/remove
+          // events (8 charges / 10s, refreshes on recast) instead of assuming a
+          // fixed 10s per cast. The regex captures every rank of Holy Shield —
+          // ranks share one name in WCL and you can't have two ranks up at once,
+          // so this counts all ranks as the single buff they are.
+          const hsUp = computeBuffUptime(buffEvts, /^Holy Shield/i, activeTime);
+          const hsPct = Math.round(hsUp.uptimePct);
+          if (activeTime > 30 && hsUp.applications > 0) {
+            if (hsPct < 50) {
+              findings.push({
+                title: `Holy Shield uptime critically low: ${hsPct}% up (${hsCasts} casts in ${activeTime.toFixed(0)}s)`,
+                body: `Holy Shield prevents crushing blows for Paladins. It was only up ${hsPct}% of the fight, so you took 150% damage hits that spike through healer throughput. Press it every 10 seconds — this is your #1 button.`,
+                severity: 'critical'
+              });
+            } else if (hsPct < 80) {
+              findings.push({
+                title: `Holy Shield uptime has gaps: ${hsPct}% up (${hsCasts} casts)`,
+                body: `Holy Shield was only up ${hsPct}% of the fight. Every gap exposes you to crushing blows. Recast it the moment it drops or its charges are consumed.`,
+                severity: 'warning'
+              });
+            }
+          } else if (activeTime > 30 && hsCasts === 0) {
             findings.push({
-              title: `Holy Shield uptime critically low: ${hsCasts} casts in ${activeTime.toFixed(0)}s (expected ~${idealHSCasts})`,
-              body: `Holy Shield prevents crushing blows for Paladins. Without it, you take 150% damage hits that spike through healer throughput. Press it every 10 seconds. This is your #1 button.`,
+              title: `No Holy Shield used in ${activeTime.toFixed(0)}s`,
+              body: `Holy Shield prevents crushing blows for Paladins. It was never up this pull. Press it every 10 seconds — this is your #1 button.`,
               severity: 'critical'
             });
           }
@@ -2777,23 +2808,24 @@
               severity: 'warning'
             });
           }
-          // Slice and Dice uptime (all specs)
+          // Slice and Dice uptime (all specs) — measured from actual buff windows,
+          // including any pre-pull application (combo points built on adds before
+          // the pull, e.g. Hydross), which the raw in-fight cast count misses.
           const snd = spellCasts['Slice and Dice'] || 0;
-          if (snd === 0 && activeTime > 20) {
+          const sndUp = computeBuffUptime(buffEvts, 'Slice and Dice', activeTime);
+          const hasSnd = sndUp.windows.length > 0 || snd > 0;
+          if (!hasSnd && activeTime > 20) {
             findings.push({
               title: 'Zero Slice and Dice casts',
               body: 'Slice and Dice increases attack speed by 30% and should be maintained at all times. Even at 1 combo point to get it rolling early. Without SnD, your DPS drops by ~30%.',
               severity: 'critical'
             });
-          } else if (snd > 0) {
-            const roughUptime = (snd * 15 / activeTime) * 100;
-            if (roughUptime < 60 && activeTime > 40) {
-              findings.push({
-                title: `Slice and Dice uptime low: ~${roughUptime.toFixed(0)}% (${snd} refreshes in ${activeTime.toFixed(0)}s)`,
-                body: 'SnD should have near 100% uptime. Refresh at 5 combo points for maximum duration. If it falls off, your auto-attack damage drops significantly.',
-                severity: 'warning'
-              });
-            }
+          } else if (hasSnd && activeTime > 40 && sndUp.uptimePct < 80) {
+            findings.push({
+              title: `Slice and Dice uptime low: ${sndUp.uptimePct.toFixed(0)}% (${sndUp.applications} cast${sndUp.applications !== 1 ? 's' : ''}${sndUp.preApplied ? ', incl. pre-pull' : ''} over ${activeTime.toFixed(0)}s)`,
+              body: 'SnD should have near 100% uptime. Refresh at 5 combo points for maximum duration. If it falls off, your auto-attack damage drops significantly.',
+              severity: 'warning'
+            });
           }
           // Feint usage for threat
           const feint = spellCasts['Feint'] || 0;
@@ -4497,6 +4529,7 @@
 
       // Build CD timeline from buff events
       const buffEvts = pull.buff_events?.[player] || [];
+      const castTimesMap = pull.spell_cast_times?.[player] || {};
       const cdTimeline = [];
       const usedCDs = new Set();
 
@@ -4542,29 +4575,21 @@
           continue;
         }
 
-        // Find activation windows from buff events
-        const windows = [];
-        let activeStart = null;
-        for (const evt of buffEvts) {
-          if (evt.spell !== cdName) continue;
-          if (evt.type === 'applybuff' || evt.type === 'applydebuff') {
-            activeStart = evt.time;
-          } else if ((evt.type === 'removebuff' || evt.type === 'removedebuff') && activeStart !== null) {
-            windows.push({ start: activeStart, end: evt.time });
-            activeStart = null;
+        // Activation windows from ACTUAL buff events (handles refreshes and
+        // buffs applied pre-pull), rather than assuming a fixed duration per cast.
+        // Talents/glyphs can change durations, so we trust the logged aura.
+        const up = computeBuffUptime(buffEvts, cdName, duration);
+        let windows = up.windows;
+        // If the aura was never logged on this player (e.g. Mana Tide Totem —
+        // the mana return is logged on the healers it buffs, not the caster),
+        // anchor the bar to the ACTUAL cast timestamp(s) and draw the known
+        // duration. Never distribute evenly from 0, which falsely shows the CD
+        // active at the pull start.
+        if (windows.length === 0 && cdInfo.dur > 0 && castCount > 0) {
+          const castTimes = castTimesMap[cdName] || [];
+          for (const t of castTimes) {
+            windows.push({ start: t, end: Math.min(t + cdInfo.dur, duration) });
           }
-        }
-        // If no buff events found, estimate from cast timeline
-        if (windows.length === 0 && cdInfo.dur > 0) {
-          const interval = duration / Math.max(castCount, 1);
-          for (let i = 0; i < castCount; i++) {
-            const start = i * interval;
-            windows.push({ start, end: Math.min(start + cdInfo.dur, duration) });
-          }
-        }
-        // Close any unclosed window
-        if (activeStart !== null) {
-          windows.push({ start: activeStart, end: Math.min(activeStart + cdInfo.dur, duration) });
         }
 
         if (windows.length > 0 || castCount > 0) {
@@ -5775,7 +5800,39 @@
         const wrathDeaths = aggregateDeathsBy(death => /Wrath of the Astromancer/i.test(death.topDamage || ''));
         const voidData = aggregateMechanic(/Void/i);
         const addDeaths = aggregateDeathsBy(death => /Solarian Agent|Solarian Priest/i.test(death.topDamage || ''));
-        if (wrathData.totalHits > pulls.length * 3) actionItems.push({ severity: 'critical', priority: 1, title: 'Run out with Wrath of the Astromancer', description: `${wrathData.totalHits} Wrath hit(s) across ${pulls.length} pulls — the bomb is splashing too many players. Most hit: ${wrathData.worst.map(([name, count]) => `${name} (${count})`).join(', ')}.`, who: 'Whoever gets the debuff + nearby players', fix: 'The targeted player has 6 seconds to run 20+ yards away from the raid. Everyone else should not be in a position where the bomb can reach them. Spread at least 5 yards at all times.' });
+
+        // Name the specific players who carried the Wrath bomb and did NOT run out.
+        // Each Wrath detonation is reconstructed backend-side (wrath_explosions):
+        // if the bombed player runs 20+ yards out, only they take the hit; if they
+        // stay in the raid, the explosion splashes everyone nearby.
+        const wrathOffenders = {};  // name -> {count, damage, maxSplash}
+        let wrathClean = 0, wrathTotal = 0;
+        for (const pull of pulls) {
+          for (const ex of (pull.wrath_explosions || [])) {
+            if (!ex.target) continue;
+            wrathTotal++;
+            if (ex.moved_out) { wrathClean++; continue; }
+            const o = wrathOffenders[ex.target] || { count: 0, damage: 0, maxSplash: 0 };
+            o.count++;
+            o.damage += ex.splash_damage || 0;
+            o.maxSplash = Math.max(o.maxSplash, ex.splash_count || 0);
+            wrathOffenders[ex.target] = o;
+          }
+        }
+        const wrathOffenderList = Object.entries(wrathOffenders).sort((a, b) => b[1].count - a[1].count);
+        if (wrathOffenderList.length > 0) {
+          const names = wrathOffenderList.map(([n, o]) =>
+            `${n} (${o.count}× — splashed up to ${o.maxSplash} teammate${o.maxSplash === 1 ? '' : 's'}, ${o.damage.toLocaleString()} raid damage)`).join('; ');
+          actionItems.push({
+            severity: 'critical', priority: 1,
+            title: 'Wrath of the Astromancer: these players did NOT run out',
+            description: `${wrathOffenderList.length} player${wrathOffenderList.length === 1 ? '' : 's'} detonated their Wrath bomb inside the raid: ${names}. The other ${wrathClean} of ${wrathTotal} Wrath bombs were handled correctly — the target ran out and nobody else was hit.`,
+            who: wrathOffenderList.map(([n]) => n).join(', '),
+            fix: 'When you get the Wrath of the Astromancer debuff you have ~6 seconds to run 20+ yards away from everyone. The players above stayed in the raid and the bomb splashed the group. Set up a WeakAura that flashes the screen when you have the debuff, and have the raid call the target on voice so they move immediately.'
+          });
+        } else if (wrathData.totalHits > pulls.length * 3) {
+          actionItems.push({ severity: 'critical', priority: 1, title: 'Run out with Wrath of the Astromancer', description: `${wrathData.totalHits} Wrath hit(s) across ${pulls.length} pulls — the bomb is splashing too many players. Most hit: ${wrathData.worst.map(([name, count]) => `${name} (${count})`).join(', ')}.`, who: 'Whoever gets the debuff + nearby players', fix: 'The targeted player has 6 seconds to run 20+ yards away from the raid. Everyone else should not be in a position where the bomb can reach them. Spread at least 5 yards at all times.' });
+        }
         if (wrathDeaths.length > 0) actionItems.push({ severity: 'critical', priority: 2, title: 'Wrath of the Astromancer is killing players', description: `${wrathDeaths.length} death(s) were caused by the Wrath explosion.`, who: 'Entire raid', fix: 'Call the Wrath target on voice immediately. The target runs out, everyone else checks spacing. If multiple people die to one Wrath, the raid was too stacked.' });
         if (voidData.totalHits > 0) actionItems.push({ severity: 'warning', priority: 3, title: 'Move from Void Zones in P3', description: `${voidData.totalHits} Void Zone tick(s) hit players.`, who: 'Entire raid', fix: 'In P3 (Voidwalker form), black circles appear on the ground. Move out immediately — ticking damage stacks fast.' });
         if (addDeaths.length > 0) actionItems.push({ severity: 'warning', priority: 4, title: 'Control split-phase adds faster', description: `${addDeaths.length} death(s) occurred during add waves or had add damage as a primary source.`, who: 'DPS + off-tanks', fix: 'Kill Priests first (they heal), then agents. Have the off-tank pick up Priests immediately on spawn.' });
@@ -7164,6 +7221,9 @@
 
       // Show targets if mechanic
       if (snapshot.targets && snapshot.targets.length) {
+        if (snapshot.mechanic_type === 'proximity_aoe') {
+          html += `<p class="note" style="margin-bottom:6px">Conflagged (stood too close to Capernian):</p>`;
+        }
         html += `<div class="snapshot-targets">`;
         snapshot.targets.forEach(t => {
           html += `<span class="target-pill">${escapeHtml(t)}</span>`;
@@ -7184,9 +7244,12 @@
 
       // Proximity issues
       if (snapshot.proximity_issues && snapshot.proximity_issues.length > 0) {
-        html += `<div class="proximity-list"><h4>Proximity Analysis</h4>`;
+        const isAoe = snapshot.mechanic_type === 'proximity_aoe';
+        html += `<div class="proximity-list"><h4>${isAoe ? 'Caught too close together' : 'Proximity Analysis'}</h4>`;
         snapshot.proximity_issues.forEach(issue => {
-          if (issue.type === 'clustered_hit') {
+          if (issue.type === 'caught_together') {
+            html += `<div class="proximity-item" style="color:var(--wipe)">● ${escapeHtml(issue.player)} and ${escapeHtml(issue.near)} were only ${issue.distance} yards apart — both caught by the same Conflagration (stood too close to Capernian)</div>`;
+          } else if (issue.type === 'clustered_hit') {
             html += `<div class="proximity-item" style="color:var(--wipe)">● ${escapeHtml(issue.player)} and ${escapeHtml(issue.near)} were only ${issue.distance} yards apart (both hit)</div>`;
           } else {
             html += `<div class="proximity-item">○ ${escapeHtml(issue.player)} was ${issue.distance} yards from ${escapeHtml(issue.near)} (close call)</div>`;
@@ -7369,20 +7432,24 @@
             <div class="metric"><span class="metric-label">Deficit</span><span class="metric-value" style="color:${net > 0 ? 'var(--wipe)' : 'var(--kill)'}">${net.toLocaleString()}</span></div>
             <div class="metric"><span class="metric-label">Overheal</span><span class="metric-value" style="color:var(--muted)">${(dt.overhealing_total || 0).toLocaleString()}</span></div>
           </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-            <div>
+          <div class="death-tables" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div style="min-width:0;">
               <h4 style="font-size:0.8rem;color:var(--muted);margin:0 0 4px">Damage Taken — by source</h4>
+              <div style="overflow-x:auto;">
               <table class="data-table compact">
                 <thead><tr><th>Ability · Source</th><th>Amount</th><th>Hits</th></tr></thead>
                 <tbody>${dmgRows}</tbody>
               </table>
+              </div>
             </div>
-            <div>
+            <div style="min-width:0;">
               <h4 style="font-size:0.8rem;color:var(--muted);margin:0 0 4px">Healing Received — by healer</h4>
+              <div style="overflow-x:auto;">
               <table class="data-table compact">
                 <thead><tr><th>Healer</th><th>Effective</th><th>Casts</th><th>Overheal</th></tr></thead>
                 <tbody>${healRows}</tbody>
               </table>
+              </div>
             </div>
           </div>
           <details style="margin-top:12px;">
@@ -7710,6 +7777,48 @@
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
+    }
+
+    // Reconstruct active windows for a buff/debuff from apply/refresh/remove events
+    // and return true measured uptime. spellName may be an exact string OR a RegExp
+    // (use a RegExp to catch every rank of an ability, e.g. /^Holy Shield/). Correctly
+    // handles buffs applied BEFORE the fight (pre-pull): rogues build combo points on trash/adds before engaging
+    // (e.g. Hydross), so Slice and Dice is already active at t0. In that case the
+    // first in-fight event is a remove/refresh with no preceding apply, which we
+    // treat as "active from the start of the fight".
+    function computeBuffUptime(buffEvts, spellName, durationSec) {
+      const matches = spellName instanceof RegExp
+        ? (s => spellName.test(s))
+        : (s => s === spellName);
+      const evts = (buffEvts || [])
+        .filter(e => matches(e.spell))
+        .sort((a, b) => a.time - b.time);
+      const result = { uptimePct: 0, activeSec: 0, windows: [], applications: 0, preApplied: false };
+      if (!evts.length || !(durationSec > 0)) return result;
+
+      let activeStart = null;
+      const firstType = evts[0].type;
+      // Buff removed/refreshed before ever being applied in-fight ⇒ pre-pull cast.
+      if (['removebuff', 'removedebuff', 'refreshbuff', 'refreshdebuff'].includes(firstType)) {
+        activeStart = 0;
+        result.preApplied = true;
+        result.applications += 1;
+      }
+      for (const e of evts) {
+        if (e.type === 'applybuff' || e.type === 'applydebuff') {
+          if (activeStart === null) activeStart = e.time;
+          result.applications += 1;
+        } else if (e.type === 'refreshbuff' || e.type === 'refreshdebuff') {
+          if (activeStart === null) { activeStart = 0; result.preApplied = true; }
+          result.applications += 1;
+        } else if (e.type === 'removebuff' || e.type === 'removedebuff') {
+          if (activeStart !== null) { result.windows.push({ start: activeStart, end: e.time }); activeStart = null; }
+        }
+      }
+      if (activeStart !== null) result.windows.push({ start: activeStart, end: durationSec });
+      result.activeSec = result.windows.reduce((s, w) => s + Math.max(0, w.end - w.start), 0);
+      result.uptimePct = Math.min(100, (result.activeSec / durationSec) * 100);
+      return result;
     }
 
     function formatTime(sec) {

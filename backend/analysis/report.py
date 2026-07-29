@@ -583,6 +583,7 @@ def build_pull_data(
     player_damage_taken_amounts = {}  # per-ability damage amounts (not just counts)
     damage_sources = {}
     conflagrations = []
+    wrath_damage = []  # Solarian: timestamped Wrath of the Astromancer hits
 
     # Conflagration spell IDs (Kael'thas - Capernian)
     CONFLAG_IDS = {36965, 37018, 37019}
@@ -622,6 +623,15 @@ def build_pull_data(
             conflagrations.append({
                 "target": player,
                 "relative_time": rel_sec(ev["timestamp"]),
+                "amount": amount,
+            })
+
+        # Track Wrath of the Astromancer hits (Solarian) with timestamps so we can
+        # reconstruct each detonation and see whether the bombed player ran out.
+        if "wrath of the astromancer" in ability.lower():
+            wrath_damage.append({
+                "time": rel_sec(ev["timestamp"]),
+                "player": player,
                 "amount": amount,
             })
 
@@ -816,6 +826,7 @@ def build_pull_data(
 
     # Process buff events
     buff_events = {}
+    wrath_targets = []  # Solarian: (time, player) each time the bomb is applied
     for ev in buffs:
         if ev.get("type") not in ("applybuff", "removebuff", "refreshbuff", "applydebuff", "removedebuff"):
             continue
@@ -823,8 +834,9 @@ def build_pull_data(
         if target_id not in players_by_id:
             continue
         player = players_by_id[target_id]["name"]
+        spell = spell_name(ev, ability_names)
         entry = {
-            "spell": spell_name(ev, ability_names),
+            "spell": spell,
             "type": ev["type"],
             "time": rel_sec(ev["timestamp"]),
         }
@@ -833,6 +845,41 @@ def build_pull_data(
         if source_id and source_id != target_id and source_id in players_by_id:
             entry["source"] = players_by_id[source_id]["name"]
         buff_events.setdefault(player, []).append(entry)
+        if ev["type"] in ("applybuff", "applydebuff") and "wrath of the astromancer" in spell.lower():
+            wrath_targets.append((rel_sec(ev["timestamp"]), player))
+
+    # Reconstruct Wrath of the Astromancer detonations (Solarian). Each bomb is a
+    # debuff on one player that explodes and damages EVERYONE nearby. If the bombed
+    # player runs 20+ yards out, only they take the hit; if they stay in the raid,
+    # many players take splash damage. We group the timestamped Wrath hits into
+    # detonations and attribute each to the player who was carrying the bomb.
+    wrath_explosions = []
+    if wrath_damage:
+        wrath_damage.sort(key=lambda x: x["time"])
+        clusters = []
+        for hit in wrath_damage:
+            if clusters and hit["time"] - clusters[-1]["time"] <= 1.5:
+                clusters[-1]["victims"].append(hit)
+            else:
+                clusters.append({"time": hit["time"], "victims": [hit]})
+        for c in clusters:
+            # Attribute the bomb to the nearest debuff application (<=2.5s).
+            target = None
+            best = 2.5
+            for t, p in wrath_targets:
+                if abs(t - c["time"]) <= best:
+                    best = abs(t - c["time"])
+                    target = p
+            splash = [v for v in c["victims"]
+                      if v["amount"] > 0 and v["player"] != target]
+            wrath_explosions.append({
+                "time": round(c["time"], 1),
+                "target": target,
+                "moved_out": len(splash) == 0,
+                "splash_count": len(splash),
+                "splash_players": [v["player"] for v in splash],
+                "splash_damage": sum(v["amount"] for v in splash),
+            })
 
     # Process threat events (new in v2!)
     threat_events = []
@@ -899,6 +946,7 @@ def build_pull_data(
         "buff_events": buff_events,
         "threat_events": threat_events,
         "conflagrations": conflagrations,
+        "wrath_explosions": wrath_explosions,
         "whirlwind_analysis": whirlwind_analysis,
         "clutch_heals": clutch_heals[:10],
         "biggest_heals": biggest_heals[:5],
