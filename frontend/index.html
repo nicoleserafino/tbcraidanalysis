@@ -540,6 +540,32 @@
       margin-top: 4px;
     }
 
+    /* --- Weapon Sync (Enhancement Shaman) --- */
+    .ws-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+    .ws-head h2 { margin: 0; }
+    .ws-score { font-family: ui-monospace, monospace; font-weight: 700; font-size: 1.05rem; padding: 6px 14px; border-radius: 10px; border: 1px solid var(--border); }
+    .ws-panel { background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; margin-top: 14px; }
+    .ws-panel-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
+    .ws-panel-head .label { font-weight: 600; }
+    .ws-panel-head .val { font-weight: 700; font-family: ui-monospace, monospace; }
+    .ws-bar { height: 10px; border-radius: 6px; background: rgba(255,255,255,0.08); overflow: hidden; }
+    .ws-bar-fill { height: 100%; border-radius: 6px; background: linear-gradient(90deg, var(--accent-3), var(--accent)); }
+    .ws-desc { color: var(--muted); font-size: 0.82rem; line-height: 1.5; margin-top: 10px; }
+    .ws-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 14px; }
+    .ws-stat { background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; }
+    .ws-stat .cap { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+    .ws-stat .big { font-size: 1.7rem; font-weight: 700; font-family: ui-monospace, monospace; margin-top: 6px; }
+    .ws-stat .sub { font-size: 0.78rem; color: var(--muted); margin-top: 6px; }
+    .ws-insight-tag { font-size: 0.68rem; letter-spacing: 0.08em; color: var(--accent); border: 1px solid rgba(143,124,255,0.35); border-radius: 8px; padding: 4px 10px; }
+    .ws-offset-bar { display: flex; height: 12px; border-radius: 6px; overflow: hidden; margin: 12px 0 14px; background: rgba(255,255,255,0.06); }
+    .ws-offset-seg { height: 100%; }
+    .ws-offset-legend { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px 16px; }
+    .ws-leg-item { display: flex; flex-direction: column; }
+    .ws-leg-top { display: flex; align-items: center; gap: 6px; font-size: 0.85rem; }
+    .ws-leg-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+    .ws-leg-pct { color: var(--muted); }
+    .ws-leg-range { font-size: 0.72rem; color: var(--muted); margin-left: 15px; }
+
     .split {
       display: grid;
       grid-template-columns: minmax(280px, 0.95fr) minmax(320px, 1.05fr);
@@ -4124,9 +4150,79 @@
           </div>
         </section>
 
+        ${renderWeaponSyncCard(player)}
+
         ${renderPositionMapCard(player)}
 
         ${renderPlayerPerformanceMetrics(player)}
+      `;
+    }
+
+    function renderWeaponSyncCard(player) {
+      const pull = getPull();
+      const m = pull?.weapon_sync?.[player];
+      if (!m) return '';
+
+      const scoreColor = m.score >= 85 ? 'var(--kill)' : m.score >= 70 ? 'var(--warning)' : 'var(--wipe)';
+      const flurry = m.flurry_uptime;
+      const flurryColor = flurry == null ? 'var(--muted)' : flurry >= 90 ? 'var(--kill)' : flurry >= 75 ? 'var(--warning)' : 'var(--wipe)';
+      const b = m.offset_buckets || {};
+      const segs = [
+        { key: 'together', label: 'Together', range: '<50ms', color: 'var(--accent-3)' },
+        { key: 'tight', label: 'Tight', range: '50-200ms', color: '#7d8aa8' },
+        { key: 'lead', label: 'Lead zone', range: '200-400ms', color: 'var(--accent)' },
+        { key: 'wide', label: 'Wide', range: '400-500ms', color: 'var(--warning)' },
+      ];
+
+      return `
+        <section class="card">
+          <div class="ws-head">
+            <h2>Weapon Sync <span style="font-size:0.8rem; color:var(--muted); font-weight:400;">· Enhancement</span></h2>
+            <span class="ws-score" style="color:${scoreColor}; border-color:${scoreColor}44;">${m.score} / 100</span>
+          </div>
+
+          <div class="ws-panel">
+            <div class="ws-panel-head">
+              <span class="label">% of attacks synced</span>
+              <span class="val" style="color:${scoreColor};">${m.pct_synced}%</span>
+            </div>
+            <div class="ws-bar"><div class="ws-bar-fill" style="width:${Math.max(0, Math.min(100, m.pct_synced))}%;"></div></div>
+            <div class="ws-desc">An attack is synced when it lands within ~500ms of the other hand, so the pair spends a single Flurry charge instead of two. If the hands drift apart the off-hand burns its own charge and Flurry uptime slips. Graded on how often the two swings stayed within 500ms of each other — not how they're spaced.</div>
+          </div>
+
+          <div class="ws-grid2">
+            <div class="ws-stat">
+              <div class="cap">Flurry uptime</div>
+              <div class="big" style="color:${flurryColor};">${flurry == null ? '—' : flurry + '%'}</div>
+              <div class="sub">${m.swings} swings · ${m.synced_pairs} synced pairs</div>
+            </div>
+            <div class="ws-stat">
+              <div class="cap">Windfury procs</div>
+              <div class="big">${m.wf_per_min}/min</div>
+              <div class="sub">${m.wf_gap_sec != null ? '~' + m.wf_gap_sec + 's apart · 3s ideal' : m.wf_procs + ' total'}</div>
+            </div>
+          </div>
+
+          <div class="ws-panel">
+            <div class="ws-panel-head">
+              <span class="label">Offset shape</span>
+              <span class="ws-insight-tag">INSIGHT · NOT GRADED</span>
+            </div>
+            <div class="ws-desc" style="margin-top:0;">Inside the 500ms window the exact gap doesn't matter for Flurry. Some players stagger the pair so the main hand leads by 200-400ms, biasing Windfury onto the bigger main-hand hit. Median offset ${m.median_offset_ms}ms.</div>
+            <div class="ws-offset-bar">
+              ${segs.map(s => `<div class="ws-offset-seg" style="width:${b[s.key] || 0}%; background:${s.color};" title="${s.label} ${b[s.key] || 0}%"></div>`).join('')}
+            </div>
+            <div class="ws-offset-legend">
+              ${segs.map(s => `
+                <div class="ws-leg-item">
+                  <div class="ws-leg-top"><span class="ws-leg-dot" style="background:${s.color};"></span>${s.label} <span class="ws-leg-pct">${b[s.key] || 0}%</span></div>
+                  <div class="ws-leg-range">${s.range}</div>
+                </div>
+              `).join('')}
+            </div>
+            <div class="ws-desc">Main hand appears to lead in ~${m.mh_leads_pct}% of pairs (inferred from hit size, so a rough read). A deliberate stagger aims for ~60% or higher. WCL does not label main vs off hand, so this read is reconstructed, not measured.</div>
+          </div>
+        </section>
       `;
     }
 

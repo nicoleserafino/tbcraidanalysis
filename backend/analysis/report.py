@@ -8,6 +8,7 @@ from collections import defaultdict
 from backend.analysis.utils import actor_name, infer_role, spell_name
 from backend.analysis.death_cause import build_death_context, classify_deaths
 from backend.analysis.death_timeline import build_death_timelines
+from backend.analysis.weapon_sync import compute_weapon_sync
 from backend.wcl.client import graphql_query
 from backend.wcl.queries import REPORT_FIGHTS, REPORT_EVENTS, REPORT_EVENTS_ENEMY_DEATHS, REPORT_TABLE, REPORT_EVENTS_WITH_RESOURCES
 
@@ -902,6 +903,11 @@ def build_pull_data(
         deaths, damage_taken, healing,
     )
 
+    # Enhancement Shaman weapon-sync (main/off-hand swing timing → Flurry/Windfury).
+    weapon_sync = compute_weapon_sync(
+        fight, players_by_id, ability_names, damage_done_events, buffs,
+    )
+
     return {
         "fight_id": fight["id"],
         "encounter_id": fight.get("encounterID"),
@@ -936,4 +942,5 @@ def build_pull_data(
         "players": participants,
         "death_context": death_context,
         "death_timelines": death_timelines,
+        "weapon_sync": weapon_sync,
     }
