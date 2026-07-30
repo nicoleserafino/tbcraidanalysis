@@ -24,6 +24,11 @@ from typing import Any
 # window, so the pair consumes one Flurry charge instead of two.
 SYNC_WINDOW_MS = 500
 
+# A single Windfury proc grants two extra attacks that land within a few ms of
+# each other. Attacks closer than this are collapsed into one proc so we count
+# procs, not individual extra swings.
+WF_PROC_WINDOW_MS = 200
+
 # Minimum melee auto-attack activity for a shaman to be treated as Enhancement.
 # Resto/Elemental shamans essentially never melee; enhancement swings ~50+/min.
 _MIN_SWINGS = 15
@@ -96,6 +101,25 @@ def _pair_swings(swings: list[tuple[int, int]]) -> tuple[list[tuple], int]:
     return pairs, lone
 
 
+def _count_wf_procs(timestamps: list[int]) -> int:
+    """Collapse paired Windfury extra-attacks into distinct procs.
+
+    A Windfury proc grants two extra attacks logged a few ms apart, so raw event
+    counts double the real proc count. Attacks within WF_PROC_WINDOW_MS of the
+    previous one belong to the same proc.
+    """
+    if not timestamps:
+        return 0
+    ordered = sorted(timestamps)
+    procs = 1
+    prev = ordered[0]
+    for t in ordered[1:]:
+        if t - prev > WF_PROC_WINDOW_MS:
+            procs += 1
+        prev = t
+    return procs
+
+
 def compute_weapon_sync(
     fight: dict,
     players_by_id: dict,
@@ -115,9 +139,9 @@ def compute_weapon_sync(
         return {}
     duration_min = duration_sec / 60
 
-    # Collect per-player melee swings (ability 1) and Windfury Attack events.
+    # Collect per-player melee swings (ability 1) and Windfury Attack timestamps.
     swings_by_player: dict[int, list[tuple[int, int]]] = {}
-    wf_by_player: dict[int, int] = {}
+    wf_ts_by_player: dict[int, list[int]] = {}
     for ev in damage_done_events:
         if ev.get("type") != "damage":
             continue
@@ -132,7 +156,7 @@ def compute_weapon_sync(
                 (ev["timestamp"], ev.get("amount", 0) or 0)
             )
         elif ability_names.get(gid) == "Windfury Attack":
-            wf_by_player[sid] = wf_by_player.get(sid, 0) + 1
+            wf_ts_by_player.setdefault(sid, []).append(ev["timestamp"])
 
     # Collect per-player Flurry buff events.
     flurry_by_player: dict[int, list[dict]] = {}
@@ -181,7 +205,7 @@ def compute_weapon_sync(
             start,
             end,
         )
-        wf_count = wf_by_player.get(sid, 0)
+        wf_count = _count_wf_procs(wf_ts_by_player.get(sid, []))
         wf_per_min = round(wf_count / duration_min, 1) if duration_min else 0.0
         wf_gap_sec = round(duration_sec / wf_count, 1) if wf_count else None
 
