@@ -5,6 +5,7 @@ Quick-reference guides for **Lower City Discotek** (Dreamscythe). Marks, tanks, 
 ## Guides
 - **[The Eye (TK)](./TK_Guide.md)** — trash by wing + Al'ar, Void Reaver, Solarian, Kael'thas
 - **[Serpentshrine Cavern (SSC)](./SSC_Guide.md)** — trash by pack type + Hydross, Lurker, Leotheras, Karathress, Morogrim, Vashj
+- **[MRT Automarking type-in lists](./MRT_Automark.md)** — exact mob → icon rows for `/mrt → Automarking`
 
 ## Mark legend
 | Mark | Icon | Use |
