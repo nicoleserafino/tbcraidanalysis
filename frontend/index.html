@@ -414,6 +414,7 @@
     .severity-badge.critical { background: rgba(255,99,99,0.2); color: #ff6b6b; }
     .severity-badge.warning { background: rgba(255,209,102,0.2); color: #ffd166; }
     .severity-badge.info { background: rgba(87,166,255,0.15); color: #57a6ff; }
+    .severity-badge.good { background: rgba(68,209,122,0.16); color: var(--kill); }
 
     .action-item { padding: 14px 16px; margin-bottom: 10px; border-radius: 8px; border-left: 4px solid var(--accent); background: rgba(255,255,255,0.03); }
     .action-item.critical { border-left-color: #ff6b6b; background: rgba(255,107,107,0.08); }
@@ -1278,7 +1279,7 @@
     <div class="topbar">
       <section class="hero">
         <h1>TBC Classic Raid Analysis</h1>
-        <div class="subtitle">Fast pull-by-pull review for raid leaders: deaths, mechanics, role performance, and action items across SSC/TK encounters.</div>
+        <div class="subtitle">Fast pull-by-pull review for raid leaders: deaths, mechanics, role performance, and action items across every encounter.</div>
         <div class="hero-stats" id="heroStats"></div>
       </section>
       <section class="controls" style="flex-wrap:wrap;gap:0.5rem;">
@@ -1332,6 +1333,7 @@
       { id: 'dps', label: 'DPS' },
       { id: '_separator' },
       { id: 'strategy', label: 'Strategy' },
+      { id: 'debuffs', label: 'Boss Debuffs' },
       { id: 'threat', label: 'Threat' },
       { id: 'positioning', label: 'Positioning' },
       { id: 'deaths', label: 'Deaths' },
@@ -5676,6 +5678,135 @@
       `;
     }
 
+    function renderBossDebuffs() {
+      const bossData = state.report?.bosses?.[state.boss];
+      const pulls = bossData?.pulls || [];
+      const selectedPulls = state.pullIndex === 'summary'
+        ? pulls.map((pull, index) => ({ pull, pullNum: index + 1 }))
+        : [{ pull: getPull(), pullNum: Number(state.pullIndex) + 1 }].filter(entry => entry.pull);
+      const rows = selectedPulls.flatMap(({ pull, pullNum }) =>
+        (pull.boss_debuffs || []).map(row => ({ ...row, pullNum }))
+      );
+
+      if (!rows.length) {
+        return `
+          <section class="card">
+            <h2>Boss Debuff Uptime</h2>
+            <p class="mini-note">Tracks maintained raid-utility debuffs while the boss target is damageable. Rotational DoTs are excluded.</p>
+          </section>
+          <div class="card empty">No tracked boss debuffs were recorded for this selection.</div>
+        `;
+      }
+
+      const statusFor = (uptime, goal, initialDelay = 0) => (
+        uptime >= goal && initialDelay <= 5
+          ? ['good', 'Good']
+          : uptime >= Math.max(goal - 15, 70)
+            ? ['warning', 'Needs work']
+            : ['critical', 'Poor']
+      );
+
+      if (state.pullIndex === 'summary') {
+        const grouped = {};
+        rows.forEach(row => {
+          const label = row.category || row.spell;
+          const key = `${label}|||${row.target}`;
+          if (!grouped[key]) grouped[key] = { label, target: row.target, rows: [], spells: new Set(), sources: new Set() };
+          grouped[key].rows.push(row);
+          (row.spells || [row.spell]).forEach(spell => grouped[key].spells.add(spell));
+          (row.sources || []).forEach(source => grouped[key].sources.add(source));
+        });
+        const summaryRows = Object.values(grouped).map(entry => {
+          const eligible = pulls.filter(pull => (pull.boss_debuff_targets || []).includes(entry.target)).length;
+          const goal = entry.rows[0].target_uptime_pct ?? 95;
+          const uptimes = entry.rows.map(row => row.effective_uptime_pct ?? row.uptime_pct);
+          return {
+            ...entry,
+            goal,
+            average: uptimes.reduce((sum, value) => sum + value, 0) / uptimes.length,
+            worst: Math.min(...uptimes),
+            missing: Math.max(eligible - entry.rows.length, 0),
+            lapses: entry.rows.reduce((sum, row) => sum + (row.lapse_count || 0), 0),
+            longest: Math.max(...entry.rows.map(row => row.longest_gap_sec || 0)),
+            maxInitialDelay: Math.max(...entry.rows.map(row => row.initial_delay_sec || 0)),
+          };
+        }).sort((a, b) => a.worst - b.worst || a.label.localeCompare(b.label));
+
+        return `
+          <section class="card">
+            <h2>Boss Debuff Uptime — All Pulls</h2>
+            <p class="mini-note">Effective uptime accounts for full stacks where required and excludes long periods when the target was not taking raid damage.</p>
+            <div class="table-wrap" style="margin-top:12px;">
+              <table class="data-table">
+                <thead><tr><th>Debuff</th><th>Target</th><th>Status</th><th>Average</th><th>Worst</th><th>Goal</th><th>Missing Pulls</th><th>Lapses</th><th>Longest Gap</th><th>Maintained By</th></tr></thead>
+                <tbody>${summaryRows.map(row => {
+                  const status = row.missing
+                    ? [row.missing > 1 ? 'critical' : 'warning', 'Missing']
+                    : statusFor(row.worst, row.goal, row.maxInitialDelay);
+                  const detail = [...row.spells].sort().join(' / ');
+                  return `<tr>
+                    <td><strong>${escapeHtml(row.label)}</strong>${detail !== row.label ? `<div class="mini-note">${escapeHtml(detail)}</div>` : ''}</td>
+                    <td>${escapeHtml(row.target)}</td>
+                    <td><span class="severity-badge ${status[0]}">${status[1]}</span></td>
+                    <td>${row.average.toFixed(1)}%</td><td><strong>${row.worst.toFixed(1)}%</strong></td><td>${row.goal}%</td>
+                    <td>${row.missing}</td><td>${row.lapses}</td><td>${row.longest.toFixed(1)}s</td>
+                    <td>${escapeHtml([...row.sources].sort().join(', ') || 'Unknown')}</td>
+                  </tr>`;
+                }).join('')}</tbody>
+              </table>
+            </div>
+          </section>
+        `;
+      }
+
+      const rowHtml = rows.map(row => {
+        const effectiveUptime = row.effective_uptime_pct ?? row.uptime_pct;
+        const goal = row.target_uptime_pct ?? 95;
+        const status = statusFor(effectiveUptime, goal, row.initial_delay_sec);
+        const dropText = row.drops?.length
+          ? row.drops.map(drop => `${drop.at_sec.toFixed(1)}s for ${drop.duration_sec.toFixed(1)}s`).join(', ')
+          : 'None';
+        return `
+          <tr>
+            ${state.pullIndex === 'summary' ? `<td>Pull ${row.pullNum}</td>` : ''}
+            <td><strong>${escapeHtml(row.category || row.spell)}</strong>${
+              row.category && (row.spells || []).length > 1
+                ? `<div class="mini-note">${escapeHtml(row.spells.join(' / '))}</div>`
+                : row.required_stacks
+                  ? `<div class="mini-note">Full strength: ${row.required_stacks} stacks</div>`
+                  : ''
+            }</td>
+            <td>${escapeHtml(row.target)}</td>
+            <td><span class="severity-badge ${status[0]}">${status[1]}</span></td>
+            <td><strong>${effectiveUptime.toFixed(1)}%</strong></td>
+            <td>${row.uptime_pct.toFixed(1)}%</td>
+            <td>${goal}%</td>
+            <td>${row.initial_delay_sec.toFixed(1)}s</td>
+            <td>${row.longest_gap_sec.toFixed(1)}s</td>
+            <td>${escapeHtml((row.sources || []).join(', ') || 'Unknown')}</td>
+            <td>${escapeHtml(dropText)}</td>
+          </tr>
+        `;
+      }).join('');
+
+      return `
+        <section class="card">
+          <h2>Boss Debuff Uptime${state.pullIndex === 'summary' ? ' — All Pulls' : ''}</h2>
+          <p class="mini-note">Effective uptime uses full-stack coverage where required. Long periods without raid damage are treated as inactive boss windows rather than debuff failures.</p>
+          <div class="table-wrap" style="margin-top:12px;">
+            <table class="data-table">
+              <thead><tr>
+                ${state.pullIndex === 'summary' ? '<th>Pull</th>' : ''}
+                <th>Debuff</th><th>Target</th><th>Status</th><th>Effective</th><th>Any Stack</th><th>Goal</th>
+                <th>Initial Delay</th><th>Longest Gap</th><th>Maintained By</th><th>Lapses</th>
+              </tr></thead>
+              <tbody>${rowHtml}</tbody>
+            </table>
+          </div>
+        </section>
+      `;
+    }
+
     function renderActionItems() {
       const bossData = state.report?.bosses?.[state.boss];
       if (!bossData) return '<div class="card empty">No data available.</div>';
@@ -5683,6 +5814,45 @@
       const bossKey = getBossKey(state.boss);
       const isKael = bossKey === BOSS_KEYS.KAEL;
       const actionItems = [];
+
+      const debuffPulls = {};
+      pulls.forEach((pull, pullIdx) => {
+        (pull.boss_debuffs || []).forEach(row => {
+          const label = row.category || row.spell;
+          const key = `${label}|||${row.target}`;
+          if (!debuffPulls[key]) debuffPulls[key] = { spell: label, target: row.target, rows: [] };
+          debuffPulls[key].rows.push({ ...row, pullNum: pullIdx + 1 });
+        });
+      });
+      Object.values(debuffPulls).forEach(entry => {
+        const goal = entry.rows[0].target_uptime_pct ?? 95;
+        const lowUptime = entry.rows.filter(row => (row.effective_uptime_pct ?? row.uptime_pct) < goal);
+        const lateApplications = entry.rows.filter(row => row.initial_delay_sec > 5);
+        const eligiblePulls = pulls.filter(pull => (pull.boss_debuff_targets || []).includes(entry.target));
+        const pullsWithDebuff = new Set(entry.rows.map(row => row.pullNum));
+        const missingPulls = eligiblePulls.filter(pull => {
+          const pullNum = pulls.indexOf(pull) + 1;
+          return !pullsWithDebuff.has(pullNum);
+        }).length;
+        if (!lowUptime.length && !lateApplications.length && !missingPulls) return;
+        const worst = entry.rows.slice().sort(
+          (a, b) => (a.effective_uptime_pct ?? a.uptime_pct) - (b.effective_uptime_pct ?? b.uptime_pct)
+        )[0];
+        const worstUptime = worst ? (worst.effective_uptime_pct ?? worst.uptime_pct) : 0;
+        const targetLabel = entry.target === state.boss ? '' : ` on ${entry.target}`;
+        const details = [];
+        if (missingPulls) details.push(`missing entirely on ${missingPulls} pull${missingPulls === 1 ? '' : 's'}`);
+        if (lowUptime.length) details.push(`below the ${goal}% goal on ${lowUptime.length} pull${lowUptime.length === 1 ? '' : 's'}`);
+        if (lateApplications.length) details.push(`applied more than 5s late on ${lateApplications.length} pull${lateApplications.length === 1 ? '' : 's'}`);
+        actionItems.push({
+          severity: worstUptime < Math.max(goal - 20, 60) || missingPulls > 1 ? 'critical' : 'warning',
+          priority: 12,
+          title: `Keep ${entry.spell}${targetLabel} active`,
+          description: `${details.join(' and ')}. Worst effective uptime: ${worstUptime}%${worst ? ` on pull ${worst.pullNum}` : ''}; longest gap: ${worst?.longest_gap_sec ?? 0}s.`,
+          who: entry.rows.flatMap(row => row.sources || []).filter((name, index, names) => names.indexOf(name) === index).join(', ') || 'Assigned debuff provider',
+          fix: `Assign one primary owner and one backup for ${entry.spell}. Reapply before expiration and call immediately if it is resisted or drops.`
+        });
+      });
 
       const allInterrupts = [];
       const allConflags = [];
@@ -7854,6 +8024,8 @@
                   ? renderAllPullsRoleSummary('DPS')
                   : state.tab === 'threat'
                     ? renderThreatView()
+                    : state.tab === 'debuffs'
+                      ? renderBossDebuffs()
                     : state.tab === 'positioning'
                       ? renderPositioningView()
                       : state.tab === 'deaths'
@@ -7878,6 +8050,8 @@
                 ? renderRoleSummary('DPS') + renderRoleTable('DPS')
                 : state.tab === 'threat'
                   ? renderThreatView()
+                  : state.tab === 'debuffs'
+                    ? renderBossDebuffs()
                   : state.tab === 'positioning'
                     ? renderPositioningView()
                     : state.tab === 'deaths'

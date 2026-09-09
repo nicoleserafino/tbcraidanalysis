@@ -40,6 +40,17 @@ Boss-specific context including:
 - Conflagration tracking (Kael'thas specific)
 - Key mechanic events mapped to the pull timeline
 
+## Boss Debuffs
+
+Raid-utility debuff coverage on the encounter boss:
+
+- Effective uptime, including full-stack coverage where required
+- Delay before the first application
+- Mid-fight and terminal drops and how long they stayed off
+- The player or players who maintained each debuff
+- Cross-pull averages, worst pulls, missing pulls, and consistency
+- Inactive boss intermissions excluded from downtime
+
 ## Tanks
 
 Tank-focused metrics per pull:
@@ -89,4 +100,3 @@ Per-player deep dive available for any player in the raid:
 - **Pull selector** — pick a specific attempt or view "All Pulls" summary
 - **Player filter** — available in some tabs to focus on a specific player
 - **Back button** — return to the report URL input to load a different log
-

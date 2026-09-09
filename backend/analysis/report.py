@@ -6,6 +6,7 @@ import asyncio
 from collections import defaultdict
 
 from backend.analysis.utils import actor_name, infer_role, spell_name
+from backend.analysis.boss_debuffs import compute_boss_debuffs
 from backend.analysis.death_cause import build_death_context, classify_deaths
 from backend.analysis.death_timeline import build_death_timelines
 from backend.analysis.weapon_sync import compute_weapon_sync
@@ -29,6 +30,7 @@ async def fetch_events_paginated(
     filter_expression: str | None = None,
     source_id: int | None = None,
     target_id: int | None = None,
+    hostility_type: str | None = None,
     include_resources: bool = False,
 ) -> list[dict]:
     """Fetch all pages of events for a fight."""
@@ -53,6 +55,8 @@ async def fetch_events_paginated(
             variables["sourceID"] = source_id
         if target_id is not None:
             variables["targetID"] = target_id
+        if hostility_type is not None:
+            variables["hostilityType"] = hostility_type
 
         data = await graphql_query(query_template, variables)
         events_data = data["reportData"]["report"]["events"]
@@ -204,6 +208,7 @@ async def fetch_full_report(report_code: str) -> dict:
                 damage_taken,
                 damage_done,
                 buffs,
+                debuffs,
                 dmg_table,
                 threat_table,
             ) = await asyncio.gather(
@@ -216,6 +221,10 @@ async def fetch_full_report(report_code: str) -> dict:
                 fetch_events_paginated(report_code, [fight_id], "DamageTaken", start, end),
                 fetch_events_paginated(report_code, [fight_id], "DamageDone", start, end),
                 fetch_events_paginated(report_code, [fight_id], "Buffs", start, end),
+                fetch_events_paginated(
+                    report_code, [fight_id], "Debuffs", start, end,
+                    hostility_type="Enemies",
+                ),
                 fetch_table(report_code, [fight_id], "DamageDone", start, end),
                 fetch_table(report_code, [fight_id], "Threat", start, end),
             )
@@ -237,7 +246,7 @@ async def fetch_full_report(report_code: str) -> dict:
             pull = build_pull_data(
                 fight, actors_by_id, players_by_id, ability_names,
                 deaths, enemy_deaths, interrupts, dispels, healing, casts,
-                damage_taken, damage_done, buffs,
+                damage_taken, damage_done, buffs, debuffs,
                 dmg_table, ww_position_events, all_player_positions,
                 threat_table,
             )
@@ -387,6 +396,7 @@ def build_pull_data(
     damage_taken: list,
     damage_done_events: list,
     buffs: list,
+    debuffs: list,
     dmg_table: dict | None = None,
     ww_position_events: list | None = None,
     all_player_positions: list | None = None,
@@ -965,6 +975,9 @@ def build_pull_data(
     weapon_sync = compute_weapon_sync(
         fight, players_by_id, ability_names, damage_done_events, buffs,
     )
+    boss_debuffs, boss_debuff_targets = compute_boss_debuffs(
+        fight, actors_by_id, players_by_id, ability_names, debuffs, damage_done_events,
+    )
 
     return {
         "fight_id": fight["id"],
@@ -991,6 +1004,8 @@ def build_pull_data(
         "player_damage_taken_total": player_damage_taken_total,
         "enemy_casts_completed": enemy_casts_completed,
         "buff_events": buff_events,
+        "boss_debuffs": boss_debuffs,
+        "boss_debuff_targets": boss_debuff_targets,
         "conflagrations": conflagrations,
         "wrath_explosions": wrath_explosions,
         "whirlwind_analysis": whirlwind_analysis,

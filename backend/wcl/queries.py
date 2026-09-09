@@ -40,7 +40,7 @@ query ReportFights($code: String!, $killType: KillType) {
 """
 
 REPORT_EVENTS = """
-query ReportEvents($code: String!, $fightIDs: [Int]!, $dataType: EventDataType!, $startTime: Float!, $endTime: Float!, $filterExpression: String, $sourceID: Int, $targetID: Int) {
+query ReportEvents($code: String!, $fightIDs: [Int]!, $dataType: EventDataType!, $startTime: Float!, $endTime: Float!, $filterExpression: String, $sourceID: Int, $targetID: Int, $hostilityType: HostilityType) {
   reportData {
     report(code: $code) {
       events(
@@ -51,6 +51,7 @@ query ReportEvents($code: String!, $fightIDs: [Int]!, $dataType: EventDataType!,
         filterExpression: $filterExpression
         sourceID: $sourceID
         targetID: $targetID
+        hostilityType: $hostilityType
       ) {
         data
         nextPageTimestamp

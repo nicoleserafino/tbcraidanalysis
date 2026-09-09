@@ -1170,7 +1170,7 @@
         <div class="detail-panel-header">
           <div>
             <h2 id="detailTitle">Attendance Overview</h2>
-            <div id="detailSubtitle" class="mini-note">Per-lockout attendance across SSC and TK each week.</div>
+            <div id="detailSubtitle" class="mini-note">Per-lockout attendance across recent guild raids.</div>
           </div>
           <div class="detail-view-tabs" aria-label="Dashboard views">
             <button type="button" class="detail-tab view-active" data-view-target="attendance">Attendance</button>
@@ -1337,7 +1337,7 @@
     const DETAIL_VIEW_META = {
       attendance: {
         title: 'Attendance',
-        subtitle: 'Per-lockout attendance across SSC and TK each week.'
+        subtitle: 'Per-lockout attendance across recent guild raids.'
       },
       progress: {
         title: 'Boss Progress',
@@ -1475,10 +1475,10 @@
     }
 
     async function loadAttendance() {
-      els.attendanceMeta.textContent = 'Loading attendance (checking each report for SSC/TK)…';
+      els.attendanceMeta.textContent = 'Loading attendance across recent reports…';
       try {
         state.attendance = await fetchJson('/api/guild/attendance');
-        els.attendanceMeta.textContent = `${state.attendance.total_weeks || 0} lockout weeks tracked · SSC + TK per week`;
+        els.attendanceMeta.textContent = `${state.attendance.total_weeks || 0} lockout weeks tracked`;
         renderAttendance();
         populatePlayerPrepSelect();
       } catch (error) {
@@ -1513,6 +1513,8 @@
       }
       const players = sortedAttendancePlayers();
       const weeks = state.attendance.weeks || [];
+      const instances = state.attendance.instances || [];
+      const weekInstances = state.attendance.week_instances || {};
       if (!players.length) {
         els.attendanceContainer.innerHTML = '<div class="empty">No players match the current minimum weeks filter.</div>';
         return;
@@ -1529,21 +1531,20 @@
 
       els.attendanceContainer.innerHTML = `
         <div style="overflow-x:auto; border-radius:12px; border:1px solid var(--border);">
-        <table style="min-width:${400 + weeks.length * 60}px;">
+        <table style="min-width:${400 + weeks.length * Math.max(instances.length, 1) * 42}px;">
           <thead>
             <tr>
               <th data-sort-key="name" style="position:sticky;left:0;background:var(--panel);z-index:2;">Player${sortIndicator('name')}</th>
               <th data-sort-key="class">Class${sortIndicator('class')}</th>
-              ${weeks.map(w => `<th colspan="2" style="text-align:center;font-size:0.78rem;border-bottom:none;">${weekLabel(w)}</th>`).join('')}
-              <th data-sort-key="ssc_weeks">SSC${sortIndicator('ssc_weeks')}</th>
-              <th data-sort-key="tk_weeks">TK${sortIndicator('tk_weeks')}</th>
+              ${weeks.map(w => `<th colspan="${Math.max(instances.length, 1)}" style="text-align:center;font-size:0.78rem;border-bottom:none;">${weekLabel(w)}</th>`).join('')}
+              ${instances.map(instance => `<th title="${escapeHtml(instance.name)}">${escapeHtml(instance.code)}</th>`).join('')}
               <th data-sort-key="attendance_pct">%${sortIndicator('attendance_pct')}</th>
             </tr>
             <tr>
               <th style="position:sticky;left:0;background:var(--panel);z-index:2;"></th>
               <th></th>
-              ${weeks.map(() => `<th style="font-size:0.7rem;color:var(--muted);text-align:center;">S</th><th style="font-size:0.7rem;color:var(--muted);text-align:center;">T</th>`).join('')}
-              <th></th><th></th><th></th>
+              ${weeks.map(() => instances.map(instance => `<th title="${escapeHtml(instance.name)}" style="font-size:0.7rem;color:var(--muted);text-align:center;">${escapeHtml(instance.code)}</th>`).join('')).join('')}
+              ${instances.map(() => '<th></th>').join('')}<th></th>
             </tr>
           </thead>
           <tbody>
@@ -1554,11 +1555,20 @@
                 <td style="position:sticky;left:0;background:var(--panel);z-index:1;">${escapeHtml(player.name)}</td>
                 <td>${classBadge(player.class)}</td>
                 ${weeks.map(w => {
-                  const att = weekly[w] || { SSC: false, TK: false };
-                  return `<td class="attendance-cell ${att.SSC ? 'attended' : 'missed'}" style="text-align:center;">${attendIcon(att.SSC)}</td><td class="attendance-cell ${att.TK ? 'attended' : 'missed'}" style="text-align:center;">${attendIcon(att.TK)}</td>`;
+                  const attended = weekly[w] || {};
+                  return instances.map(instance => {
+                    const wasScheduled = (weekInstances[w] || []).includes(instance.code);
+                    if (!wasScheduled) {
+                      return '<td class="attendance-cell" title="This raid was not tracked during this lockout" style="text-align:center;color:var(--muted);opacity:0.35;">—</td>';
+                    }
+                    if (player.first_seen_week && w < player.first_seen_week) {
+                      return '<td class="attendance-cell" title="Before this player’s first tracked raid" style="text-align:center;color:var(--muted);opacity:0.35;">—</td>';
+                    }
+                    const wasThere = Boolean(attended[instance.code]);
+                    return `<td class="attendance-cell ${wasThere ? 'attended' : 'missed'}" style="text-align:center;">${attendIcon(wasThere)}</td>`;
+                  }).join('');
                 }).join('')}
-                <td style="text-align:center;">${player.ssc_weeks}</td>
-                <td style="text-align:center;">${player.tk_weeks}</td>
+                ${instances.map(instance => `<td style="text-align:center;">${player.instance_weeks?.[instance.code] || 0}</td>`).join('')}
                 <td class="${attendanceClass(player.attendance_pct || 0)}" style="text-align:center;">${(player.attendance_pct || 0).toFixed(0)}%</td>
               </tr>`;
             }).join('')}
@@ -2056,11 +2066,15 @@
       }
 
       const RAID_GROUPS = {
-        5: [
+        3: [
+          { label: 'Mount Hyjal', bosses: ['Rage Winterchill', 'Anetheron', "Kaz'rogal", 'Azgalor', 'Archimonde'] },
+          { label: 'Black Temple', bosses: ["High Warlord Naj'entus", 'Supremus', 'Shade of Akama', 'Teron Gorefiend', 'Gurtogg Bloodboil', 'Reliquary of Souls', 'Mother Shahraz', 'The Illidari Council', 'Illidan Stormrage'] },
+        ],
+        2: [
           { label: 'Serpentshrine Cavern', bosses: ['Hydross the Unstable', 'The Lurker Below', 'Leotheras the Blind', 'Fathom-Lord Karathress', 'Morogrim Tidewalker', 'Lady Vashj'] },
           { label: 'Tempest Keep', bosses: ["Al'ar", 'Void Reaver', 'High Astromancer Solarian', 'Kael\'thas Sunstrider'] },
         ],
-        4: [
+        1: [
           { label: 'Karazhan', bosses: ['Attumen the Huntsman', 'Moroes', 'Maiden of Virtue', 'Opera Event', 'The Curator', 'Shade of Aran', 'Terestian Illhoof', 'Netherspite', 'Chess Event', 'Prince Malchezaar', 'Nightbane'] },
           { label: 'Gruul\'s Lair', bosses: ['High King Maulgar', 'Gruul the Dragonkiller'] },
           { label: 'Magtheridon\'s Lair', bosses: ['Magtheridon'] },
@@ -2070,7 +2084,7 @@
       const bossByName = {};
       data.progress.forEach(b => { bossByName[b.boss] = b; });
 
-      let activePhase = 5;
+      let activePhase = 3;
 
       function buildTable(bossList) {
         const filtered = bossList.filter(name => bossByName[name]);
@@ -2114,8 +2128,9 @@
 
         container.innerHTML = `
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
-            <button class="progress-phase-btn${activePhase === 5 ? ' active' : ''}" data-phase="5">Phase 5 (SSC/TK)</button>
-            <button class="progress-phase-btn${activePhase === 4 ? ' active' : ''}" data-phase="4">Phase 4 (Kara/Gruul/Mag)</button>
+            <button class="progress-phase-btn${activePhase === 3 ? ' active' : ''}" data-phase="3">Current Raids</button>
+            <button class="progress-phase-btn${activePhase === 2 ? ' active' : ''}" data-phase="2">Previous Raids</button>
+            <button class="progress-phase-btn${activePhase === 1 ? ' active' : ''}" data-phase="1">Earlier Raids</button>
             <span style="margin-left:auto;font-size:0.82rem;color:var(--muted);">${data.raids_analyzed} raids analyzed</span>
           </div>
           ${sections}`;

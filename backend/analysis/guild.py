@@ -10,7 +10,10 @@ from backend.wcl.client import graphql_query
 from backend.wcl.queries import GUILD_ATTENDANCE, REPORT_EVENTS, REPORT_FIGHTS, REPORT_TABLE
 from backend.analysis.report import fetch_report_metadata, fetch_events_paginated, fetch_table
 from backend.analysis.utils import spell_name
-from backend.analysis.instances import boss_order as canonical_boss_order, classify_instances
+from backend.analysis.instances import INSTANCES, boss_order as canonical_boss_order, classify_instances
+
+
+_REPORT_INSTANCE_CACHE: dict[str, set[str]] = {}
 
 # Enchantable gear slots (index in CombatantInfo gear array)
 # 0=Head, 2=Shoulder, 4=Chest, 6=Legs, 7=Feet, 8=Wrist, 9=Hands,
@@ -263,20 +266,20 @@ def _detect_instance(fights: list[dict]) -> set[str]:
 
 async def _fetch_report_instances(report_code: str) -> set[str]:
     """Fetch fights for a report and determine which instances were run."""
+    if report_code in _REPORT_INSTANCE_CACHE:
+        return set(_REPORT_INSTANCE_CACHE[report_code])
     data = await graphql_query(REPORT_FIGHTS, {"code": report_code, "killType": "Encounters"})
     report = data.get("reportData", {}).get("report", {})
     fights = report.get("fights", [])
-    return _detect_instance(fights)
+    instances = _detect_instance(fights)
+    _REPORT_INSTANCE_CACHE[report_code] = set(instances)
+    return instances
 
 
 async def compute_attendance(
     guild_id: int, max_pages: int = 4
 ) -> dict[str, Any]:
-    """Compute attendance per lockout week per instance (SSC / TK).
-
-    Returns weekly attendance showing whether each character attended
-    SSC and/or TK during each Tuesday-to-Tuesday lockout period.
-    """
+    """Compute attendance per lockout week for every detected raid instance."""
     # 1. Gather all reports from guild attendance
     all_reports: list[dict] = []
     page = 1
@@ -288,7 +291,13 @@ async def compute_attendance(
         page += 1
 
     # 2. Determine which instance each report covers (parallel)
-    instance_tasks = [_fetch_report_instances(r["code"]) for r in all_reports]
+    instance_semaphore = asyncio.Semaphore(8)
+
+    async def fetch_instances(report_code: str) -> set[str]:
+        async with instance_semaphore:
+            return await _fetch_report_instances(report_code)
+
+    instance_tasks = [fetch_instances(r["code"]) for r in all_reports]
     instance_results = await asyncio.gather(*instance_tasks, return_exceptions=True)
 
     # 3. Build weekly attendance: week -> instance -> set of player names
@@ -298,18 +307,18 @@ async def compute_attendance(
     for report, instances in zip(all_reports, instance_results):
         if isinstance(instances, Exception):
             continue
-        # Skip non-SSC/TK raids (Gruul/Mag, Kara, etc.)
         if not instances:
             continue
 
         week = _lockout_week(report["date"])
         if week not in weeks:
-            weeks[week] = {"SSC": set(), "TK": set()}
+            weeks[week] = {}
 
         present_players = [p["name"] for p in report["players"] if p["present"]]
         for inst in instances:
-            if inst in weeks[week]:
-                weeks[week][inst].update(present_players)
+            if inst not in INSTANCES:
+                continue
+            weeks[week].setdefault(inst, set()).update(present_players)
 
         for p in report["players"]:
             if p["name"] not in player_info:
@@ -317,38 +326,50 @@ async def compute_attendance(
 
     # 4. Sort weeks newest first
     sorted_weeks = sorted(weeks.keys(), reverse=True)
+    detected_instances = sorted(
+        (
+            code for code in INSTANCES
+            if any(code in week_instances for week_instances in weeks.values())
+        ),
+        key=lambda code: next(
+            index for index, week in enumerate(sorted_weeks) if code in weeks[week]
+        ),
+    )
 
     # 5. Build per-player summary
     player_summary: dict[str, dict[str, Any]] = {}
     for week in sorted_weeks:
-        for inst in ("SSC", "TK"):
+        for inst in weeks[week]:
             for name in weeks[week].get(inst, set()):
                 if name not in player_summary:
                     player_summary[name] = {
                         "name": name,
                         "class": player_info.get(name, "Unknown"),
-                        "ssc_weeks": 0,
-                        "tk_weeks": 0,
+                        "instance_weeks": {code: 0 for code in detected_instances},
                         "total_weeks": 0,
                         "weekly": {},
                     }
                 if week not in player_summary[name]["weekly"]:
-                    player_summary[name]["weekly"][week] = {"SSC": False, "TK": False}
+                    player_summary[name]["weekly"][week] = {
+                        code: False for code in weeks[week]
+                    }
 
         # Mark attendance
-        for name in weeks[week].get("SSC", set()):
-            player_summary[name]["weekly"][week]["SSC"] = True
-            player_summary[name]["ssc_weeks"] += 1
-        for name in weeks[week].get("TK", set()):
-            player_summary[name]["weekly"][week]["TK"] = True
-            player_summary[name]["tk_weeks"] += 1
+        for inst, names in weeks[week].items():
+            for name in names:
+                player_summary[name]["weekly"][week][inst] = True
+                player_summary[name]["instance_weeks"][inst] += 1
 
     # Count total weeks each player appeared in
     for info in player_summary.values():
         info["total_weeks"] = len(info["weekly"])
-        pct_weeks = len(sorted_weeks) if sorted_weeks else 1
+        first_seen_week = min(info["weekly"])
+        info["first_seen_week"] = first_seen_week
+        eligible_weeks = [week for week in sorted_weeks if week >= first_seen_week]
+        eligible_lockouts = sum(len(weeks[week]) for week in eligible_weeks) or 1
+        info["eligible_lockouts"] = eligible_lockouts
         info["attendance_pct"] = round(
-            (info["ssc_weeks"] + info["tk_weeks"]) / (pct_weeks * 2) * 100, 1
+            sum(info["instance_weeks"].values()) / eligible_lockouts * 100, 1
         )
 
     players = sorted(
@@ -359,6 +380,14 @@ async def compute_attendance(
     return {
         "weeks": sorted_weeks,
         "total_weeks": len(sorted_weeks),
+        "week_instances": {
+            week: sorted(weeks[week], key=detected_instances.index)
+            for week in sorted_weeks
+        },
+        "instances": [
+            {"code": code, "name": INSTANCES[code].display}
+            for code in detected_instances
+        ],
         "players": players,
     }
 

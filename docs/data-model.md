@@ -102,6 +102,29 @@ Each pull contains the full breakdown of a single boss attempt:
     ]
   },
 
+  "boss_debuffs": [
+    {
+      "spell": "Sunder Armor",
+      "spells": ["Sunder Armor"],
+      "category": "Major Armor Reduction",
+      "target": "Boss Name",
+      "sources": ["Tank1"],
+      "uptime_pct": 97.4,
+      "effective_uptime_pct": 94.1,
+      "full_uptime_pct": 94.1,
+      "max_stacks": 5,
+      "required_stacks": 5,
+      "target_uptime_pct": 90,
+      "active_sec": 253.7,
+      "downtime_sec": 6.8,
+      "initial_delay_sec": 3.2,
+      "longest_gap_sec": 3.6,
+      "lapse_count": 1,
+      "drops": [{ "at_sec": 120.4, "duration_sec": 3.6 }]
+    }
+  ],
+  "boss_debuff_targets": ["Boss Name"],
+
   "consumables": {},
 
   "clutch_heals": [
@@ -135,6 +158,20 @@ Per-healer, per-spell breakdown. `total` is effective healing, `overheal` is was
 ### buff_events
 
 Chronological list of buff applications, removals, and refreshes. Types: `applybuff`, `removebuff`, `refreshbuff`, `applydebuff`, `removedebuff`.
+
+### boss_debuffs
+
+Uptime for maintained raid-utility debuffs applied by players to the encounter
+boss. Rotational damage-over-time and charge-consumed effects are excluded.
+Long periods without player damage are excluded as inactive target windows.
+For stacking effects, `effective_uptime_pct` measures full-stack coverage while
+`uptime_pct` measures coverage at any stack count. Equivalent effects such as
+Sunder Armor and Expose Armor are combined into one category. Initial
+application delay, later lapses, and the longest uncovered gap are reported
+separately.
+`boss_debuff_targets` lists the damageable boss targets present in the pull and
+allows progression views to distinguish a missing debuff from a phase the raid
+did not reach.
 
 ### clutch_heals
 
