@@ -44,12 +44,14 @@ Boss-specific context including:
 
 Raid-utility debuff coverage on the encounter boss:
 
+- Required assigned debuffs shown at 0% when completely missing
 - Effective uptime, including full-stack coverage where required
 - Delay before the first application
 - Mid-fight and terminal drops and how long they stayed off
 - The player or players who maintained each debuff
 - Cross-pull averages, worst pulls, missing pulls, and consistency
 - Inactive boss intermissions excluded from downtime
+- Passive/proc effects excluded so the review stays assignment-focused
 
 ## Tanks
 

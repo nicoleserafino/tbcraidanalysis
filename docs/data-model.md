@@ -162,7 +162,10 @@ Chronological list of buff applications, removals, and refreshes. Types: `applyb
 ### boss_debuffs
 
 Uptime for maintained raid-utility debuffs applied by players to the encounter
-boss. Rotational damage-over-time and charge-consumed effects are excluded.
+boss. Assigned maintenance effects are included; passive/proc effects,
+rotational damage-over-time, and charge-consumed effects are excluded.
+Required coverage such as Attack Power Reduction is emitted as a `missing`
+0%-uptime row even when it never appeared in the log.
 Long periods without player damage are excluded as inactive target windows.
 For stacking effects, `effective_uptime_pct` measures full-stack coverage while
 `uptime_pct` measures coverage at any stack count. Equivalent effects such as

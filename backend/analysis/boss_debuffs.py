@@ -9,7 +9,6 @@ from backend.analysis.utils import actor_name, spell_name
 
 TRACKED_DEBUFFS = {
     "Annihilator",
-    "Blood Frenzy",
     "Curse of Elements",
     "Curse of Recklessness",
     "Curse of Shadows",
@@ -18,7 +17,6 @@ TRACKED_DEBUFFS = {
     "Demoralizing Roar",
     "Demoralizing Shout",
     "Expose Armor",
-    "Expose Weakness",
     "Fire Vulnerability",
     "Faerie Fire",
     "Faerie Fire (Feral)",
@@ -29,26 +27,15 @@ TRACKED_DEBUFFS = {
     "Judgement of Light",
     "Judgement of the Crusader",
     "Judgement of Wisdom",
-    "Mangle (Bear)",
-    "Mangle (Cat)",
-    "Mangle",
-    "Misery",
     "Scorpid Sting",
     "Screech",
-    "Shadow Embrace",
-    "Shadow Vulnerability",
-    "Shadow Weaving",
     "Sunder Armor",
     "Thunder Clap",
-    "Winter's Chill",
 }
 
 FULL_STACKS = {
     "Fire Vulnerability": 5,
-    "Shadow Embrace": 3,
-    "Shadow Weaving": 5,
     "Sunder Armor": 5,
-    "Winter's Chill": 5,
 }
 
 DEBUFF_CATEGORIES = {
@@ -59,17 +46,18 @@ DEBUFF_CATEGORIES = {
     "Sunder Armor": "Major Armor Reduction",
     "Faerie Fire": "Faerie Fire",
     "Faerie Fire (Feral)": "Faerie Fire",
-    "Mangle": "Bleed Vulnerability",
-    "Mangle (Bear)": "Bleed Vulnerability",
-    "Mangle (Cat)": "Bleed Vulnerability",
 }
 
 TARGET_UPTIME = {
     "Annihilator": 80,
-    "Expose Weakness": 80,
     "Major Armor Reduction": 90,
-    "Shadow Weaving": 90,
-    "Winter's Chill": 90,
+}
+
+REQUIRED_CATEGORIES = {
+    "Attack Power Reduction": {
+        "spells": ["Demoralizing Roar", "Demoralizing Shout", "Screech"],
+        "target_uptime_pct": 95,
+    },
 }
 
 # Encounters whose report name is not the name of an attackable boss unit.
@@ -296,6 +284,43 @@ def compute_boss_debuffs(
         })
 
     results = _combine_category_rows(results, start)
+    observed_keys = {
+        (row["target"], row.get("category") or row["spell"])
+        for row in results
+    }
+    for target in target_windows:
+        for category, policy in REQUIRED_CATEGORIES.items():
+            if (target, category) in observed_keys:
+                continue
+            results.append({
+                "spell": " / ".join(policy["spells"]),
+                "spells": list(policy["spells"]),
+                "category": category,
+                "target": target,
+                "sources": [],
+                "target_uptime_pct": policy["target_uptime_pct"],
+                "uptime_pct": 0.0,
+                "effective_uptime_pct": 0.0,
+                "full_uptime_pct": None,
+                "max_stacks": None,
+                "required_stacks": None,
+                "active_sec": 0.0,
+                "downtime_sec": round(sum(
+                    (window_end - window_start) / 1000
+                    for window_start, window_end in target_windows[target]
+                ), 1),
+                "initial_delay_sec": round(
+                    (target_windows[target][-1][1] - target_windows[target][0][0]) / 1000,
+                    1,
+                ),
+                "longest_gap_sec": round(max(
+                    (window_end - window_start) / 1000
+                    for window_start, window_end in target_windows[target]
+                ), 1),
+                "lapse_count": 0,
+                "drops": [],
+                "missing": True,
+            })
     return (
         sorted(results, key=lambda row: (row["effective_uptime_pct"], row["spell"], row["target"])),
         sorted(target_windows),

@@ -5777,7 +5777,7 @@
                   : ''
             }</td>
             <td>${escapeHtml(row.target)}</td>
-            <td><span class="severity-badge ${status[0]}">${status[1]}</span></td>
+            <td><span class="severity-badge ${row.missing ? 'critical' : status[0]}">${row.missing ? 'Missing' : status[1]}</span></td>
             <td><strong>${effectiveUptime.toFixed(1)}%</strong></td>
             <td>${row.uptime_pct.toFixed(1)}%</td>
             <td>${goal}%</td>
